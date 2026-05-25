@@ -5,8 +5,14 @@
 export function generateTree(count = 10000) {
   const nodes = [{ id: 'root', label: 'Operations Theater', type: 'root', tags: ['root', 'ops'] }];
   const systems = ['Command', 'Air Defense', 'ISR', 'Logistics', 'Mission Planning'];
-  const platforms = ['Falcon', 'Hawk', 'Sentinel', 'Atlas', 'Orion', 'Viper'];
-  const sensors = ['Radar', 'EO Camera', 'SIGINT', 'IFF', 'Telemetry'];
+  const platforms = [
+    { label: 'air', type: 'air', tags: ['air', 'platform'] },
+    { label: 'ground', type: 'ground', tags: ['ground', 'platform'] },
+    { label: 'surface', type: 'surface', tags: ['surface', 'platform'] },
+    { label: 'sub', type: 'subsurface', tags: ['subsurface', 'platform'] },
+    { label: 'space', type: 'space', tags: ['space', 'platform'] },
+  ];
+  const sensors = ['Radar', 'Emitter Beam', 'EO Camera', 'SIGINT', 'IFF', 'Telemetry'];
   const tasks = ['Patrol', 'Track', 'Inspect', 'Relay', 'Intercept'];
 
   for (const [index, label] of systems.entries()) {
@@ -20,15 +26,18 @@ export function generateTree(count = 10000) {
   }
 
   let i = nodes.length;
+  let platformCursor = 0;
   while (i < count) {
     const system = nodes[1 + (i % systems.length)];
     const platformId = `platform-${i}`;
+    const platform = platforms[platformCursor % platforms.length];
+    platformCursor++;
     nodes.push({
       id: platformId,
       parentId: system.id,
-      label: `${platforms[i % platforms.length]}-${100 + (i % 900)}`,
-      type: 'platform',
-      tags: ['platform', i % 5 === 0 ? 'priority' : 'normal'],
+      label: `${platform.label}-${100 + (i % 900)}`,
+      type: platform.type,
+      tags: ['platform', ...platform.tags, i % 5 === 0 ? 'priority' : 'normal'],
       data: { ordinal: i },
     });
     i++;
@@ -47,23 +56,27 @@ export function generateTree(count = 10000) {
 
     for (let t = 0; t < 4 && i < count; t++, i++) {
       const isWarning = i % 23 === 0;
+      const isMunition = !isWarning && i % 17 === 0;
+      const isGeometry = !isWarning && !isMunition && i % 13 === 0;
       nodes.push({
-        id: `${isWarning ? 'warning' : 'track'}-${i}`,
+        id: `${isWarning ? 'warning' : isMunition ? 'munition' : isGeometry ? 'point' : 'track'}-${i}`,
         parentId: platformId,
-        label: `${isWarning ? 'Warning' : 'Track'} ${String(i).padStart(5, '0')}`,
-        type: isWarning ? 'warning' : 'track',
-        tags: [isWarning ? 'warning' : 'track', i % 11 === 0 ? 'hot' : 'stable'],
+        label: `${isWarning ? 'Warning' : isMunition ? 'Mini Missile' : isGeometry ? 'Pointer' : 'Track'} ${String(i).padStart(5, '0')}`,
+        type: isWarning ? 'warning' : isMunition ? 'munition' : isGeometry ? 'geometry' : 'track',
+        tags: [isWarning ? 'warning' : isMunition ? 'munition' : isGeometry ? 'geometry' : 'track', i % 11 === 0 ? 'hot' : 'stable'],
         data: { ordinal: i },
       });
     }
 
     for (let task = 0; task < 2 && i < count; task++, i++) {
+      const isControl = i % 29 === 0;
+      const isSituation = !isControl && i % 37 === 0;
       nodes.push({
-        id: `task-${i}`,
+        id: `${isControl ? 'control' : isSituation ? 'situation' : 'task'}-${i}`,
         parentId: platformId,
-        label: `${tasks[i % tasks.length]} Task ${i}`,
-        type: i % 31 === 0 ? 'error' : 'task',
-        tags: ['task', tasks[i % tasks.length].toLowerCase()],
+        label: `${isControl ? 'Control' : isSituation ? 'Situation' : `${tasks[i % tasks.length]} Task`} ${i}`,
+        type: i % 31 === 0 ? 'error' : isControl ? 'control' : isSituation ? 'situation' : 'task',
+        tags: [isControl ? 'control' : isSituation ? 'situation' : 'task', tasks[i % tasks.length].toLowerCase()],
         data: { ordinal: i },
       });
     }
@@ -71,4 +84,3 @@ export function generateTree(count = 10000) {
 
   return nodes.slice(0, count);
 }
-

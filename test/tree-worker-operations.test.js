@@ -31,6 +31,20 @@ test('worker row rebuild applies expansion and filter without requiring expanded
   assert.equal(result.contentHeight, 60);
 });
 
+test('worker row rebuild respects collapsed filter branches', () => {
+  const state = createWorkerTreeState(nodes);
+  const result = rebuildWorkerRows(state, {
+    expandedIds: [],
+    filterCollapsedIds: ['root'],
+    rowHeight: 20,
+    indentWidth: 18,
+    filterQuery: 'radar',
+  });
+
+  assert.deepEqual(result.rows.map((row) => row.nodeId), ['root']);
+  assert.equal(result.rows[0].expanded, false);
+});
+
 test('worker row rebuild sorts siblings', () => {
   const state = createWorkerTreeState(nodes);
   const result = rebuildWorkerRows(state, {

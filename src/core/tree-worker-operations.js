@@ -59,6 +59,7 @@ export function rebuildWorkerRows(state, options = {}) {
   const rowHeight = options.rowHeight ?? 28;
   const indentWidth = options.indentWidth ?? 18;
   const expanded = new Set(options.expandedIds ?? []);
+  const filterCollapsed = new Set(options.filterCollapsedIds ?? []);
   const query = normalize(options.filterQuery ?? '');
   const sort = options.sort ?? { columnId: null, direction: null };
   const sortValues = options.sortValues ? new Map(options.sortValues) : null;
@@ -81,7 +82,8 @@ export function rebuildWorkerRows(state, options = {}) {
     if (!isIncluded(id)) return;
     const nodeIndex = state.idToIndex.get(id);
     if (nodeIndex === undefined) return;
-    const expandedRow = expanded.has(id);
+    const children = sortIds(state.childrenByParent.get(id) ?? []);
+    const expandedRow = (expanded.has(id) || Boolean(query && children.length > 0)) && !filterCollapsed.has(id);
     const rowIndex = rows.length;
     rows.push({
       nodeId: id,
@@ -94,8 +96,8 @@ export function rebuildWorkerRows(state, options = {}) {
       hasChildren: hasChildren(id),
     });
     maxDepth = Math.max(maxDepth, depth);
-    if (!expandedRow && !query) return;
-    for (const childId of sortIds(state.childrenByParent.get(id) ?? [])) visit(childId, depth + 1);
+    if (!expandedRow) return;
+    for (const childId of children) visit(childId, depth + 1);
   };
 
   for (const rootId of sortIds(state.roots)) visit(rootId, 0);

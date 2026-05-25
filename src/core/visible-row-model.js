@@ -33,6 +33,7 @@ export class VisibleRowModel extends EventTarget {
     this.contentHeight = 0;
     this.sortComparator = null;
     this.filterPredicate = null;
+    this.filterCollapsed = new Set();
   }
 
   setSortComparator(comparator) {
@@ -41,6 +42,15 @@ export class VisibleRowModel extends EventTarget {
 
   setFilterPredicate(predicate) {
     this.filterPredicate = predicate;
+    this.filterCollapsed.clear();
+  }
+
+  collapseFilterBranch(id) {
+    this.filterCollapsed.add(id);
+  }
+
+  expandFilterBranch(id) {
+    return this.filterCollapsed.delete(id);
   }
 
   applyRows({ rows, contentHeight, contentWidth }) {
@@ -84,8 +94,10 @@ export class VisibleRowModel extends EventTarget {
       if (!subtreeIncluded(id)) return;
       const nodeIndex = this.model.index.idToIndex.get(id);
       if (nodeIndex === undefined) return;
+      const children = sortedChildren(id);
       const hasChildren = this.expansion.hasChildren(id);
-      const expanded = this.expansion.isExpanded(id);
+      const autoExpanded = Boolean(this.filterPredicate && children.length > 0);
+      const expanded = (this.expansion.isExpanded(id) || autoExpanded) && !this.filterCollapsed.has(id);
       const rowIndex = this.rows.length;
       this.rows.push({
         nodeId: id,
@@ -99,8 +111,8 @@ export class VisibleRowModel extends EventTarget {
       });
       this.rowIndexById.set(id, rowIndex);
       maxDepth = Math.max(maxDepth, depth);
-      if (!expanded && !this.filterPredicate) return;
-      for (const childId of sortedChildren(id)) visit(childId, depth + 1);
+      if (!expanded) return;
+      for (const childId of children) visit(childId, depth + 1);
     };
 
     const roots = this.model.index.roots.filter((rootId) => subtreeIncluded(rootId));

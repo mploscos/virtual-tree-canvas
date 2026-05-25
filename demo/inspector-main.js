@@ -6,6 +6,9 @@ const json = document.querySelector('#json');
 const message = document.querySelector('#message');
 const focusRange = document.querySelector('#focus-range');
 const modeSelect = document.querySelector('#mode');
+const filterInput = document.querySelector('#filter');
+const tooltip = document.querySelector('#tooltip');
+const canvasHost = document.querySelector('.inspector-canvas-host');
 
 const model = {
   sensor: {
@@ -46,7 +49,7 @@ renderer.initialize(canvas);
 const controller = new TreeViewController({ renderer, initialExpandDepth: 3 });
 controller.canvas = canvas;
 controller.setTheme(themes.dark);
-controller.setModel(model, meta, { presentation: modeSelect.value, flatRoot: true, enforceMeta: true, filter: true });
+setInspectorModel();
 
 const cellEditor = new CellEditorManager({ controller, canvas });
 new TreeViewInputController({
@@ -69,9 +72,13 @@ controller.on('action', (event) => {
 
 focusRange.addEventListener('click', () => controller.focusNode('model:sensor.range', { align: 'center', select: true }));
 modeSelect.addEventListener('change', () => {
-  controller.setModel(model, meta, { presentation: modeSelect.value, flatRoot: true, enforceMeta: true, filter: true });
+  setInspectorModel();
   updateJson();
 });
+filterInput.addEventListener('input', () => controller.setFilter(filterInput.value));
+canvas.addEventListener('mousemove', handleTooltipMove);
+canvas.addEventListener('mouseleave', hideTooltip);
+canvas.addEventListener('wheel', hideTooltip, { passive: true });
 
 function animate(now) {
   controller.render(now);
@@ -80,6 +87,34 @@ function animate(now) {
 
 function updateJson() {
   json.textContent = JSON.stringify(model, null, 2);
+}
+
+function setInspectorModel() {
+  controller.viewport.headerHeight = modeSelect.value === 'pane' ? 0 : 28;
+  controller.setModel(model, meta, { presentation: modeSelect.value, flatRoot: true, enforceMeta: true, filter: false });
+  if (filterInput.value) controller.setFilter(filterInput.value);
+}
+
+function handleTooltipMove(event) {
+  const rect = canvas.getBoundingClientRect();
+  const hit = controller.hitTest(event.clientX - rect.left, event.clientY - rect.top);
+  const info = controller.getTooltipForHit(hit);
+  if (!info?.text) return hideTooltip();
+  const hostRect = canvasHost.getBoundingClientRect();
+  tooltip.textContent = info.text;
+  tooltip.style.display = 'block';
+  const width = Math.min(tooltip.offsetWidth || 0, hostRect.width - 16);
+  const height = tooltip.offsetHeight || 0;
+  let x = event.clientX - hostRect.left + 12;
+  let y = event.clientY - hostRect.top + 14;
+  x = Math.max(8, Math.min(x, hostRect.width - width - 8));
+  y = Math.max(8, Math.min(y, hostRect.height - height - 8));
+  tooltip.style.left = `${x}px`;
+  tooltip.style.top = `${y}px`;
+}
+
+function hideTooltip() {
+  tooltip.style.display = 'none';
 }
 
 updateJson();

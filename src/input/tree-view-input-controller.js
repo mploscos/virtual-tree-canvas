@@ -43,6 +43,7 @@ export class TreeViewInputController {
 
   #onWheel = (event) => {
     event.preventDefault();
+    this.cellEditor?.close?.();
     if (this.controller) {
       this.controller.scrollBy(event.shiftKey ? event.deltaY : event.deltaX, event.deltaY);
       return;

@@ -15,11 +15,18 @@ export class CellEditorManager {
     window.removeEventListener('mouseup', this.onMouseUp);
   }
 
+  close() {
+    this.#removeOverlay();
+    this.rangeDrag = null;
+    window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mouseup', this.onMouseUp);
+  }
+
   handlePointerDown(event, hit) {
     if (!this.#isEditableHit(hit)) return false;
     const data = hit.row ? this.controller.model.nodes[hit.row.nodeIndex]?.data : null;
     if (!data || data.readonly || data.disabled) return false;
-    if (data.editorType === 'range' && hit.part !== 'number') {
+    if (data.editorType === 'range' && hit.part === 'range') {
       this.rangeDrag = { hit, data };
       this.#updateRangeFromEvent(event);
       window.addEventListener('mousemove', this.onMouseMove);
@@ -47,7 +54,13 @@ export class CellEditorManager {
       this.controller.updateInspectorValue(node.id, !data.value, 'checkbox');
       return true;
     }
-    if (data.editorType === 'range' && hit.part !== 'number') return true;
+    if (data.editorType === 'range') {
+      if (hit.part === 'range') return true;
+      if (hit.part !== 'number') {
+        this.#toggleRangeMinMax(node, data);
+        return true;
+      }
+    }
     if (this.overlay) return true;
     this.#showOverlay(node, hit);
     return true;
@@ -62,7 +75,7 @@ export class CellEditorManager {
   #showOverlay(node, hit, options = {}) {
     this.#removeOverlay();
     const data = node.data;
-    const rect = this.#overlayRect(hit);
+    const rect = this.#clampRectToHost(this.#overlayRect(hit), 4);
     const hostRect = this.host.getBoundingClientRect();
     const element = createEditorElement(data);
     Object.assign(element.style, {
@@ -98,7 +111,7 @@ export class CellEditorManager {
     ensureOverlayHost(this.host);
     this.host.append(element);
     this.overlay = element;
-    element.focus();
+    element.focus({ preventScroll: true });
     element.select?.();
     if (options.showPicker && element.showPicker) {
       requestAnimationFrame(() => {
@@ -113,7 +126,13 @@ export class CellEditorManager {
 
   #showHeaderFilterOverlay(hit) {
     this.#removeOverlay();
-    const rect = this.controller.getHeaderClientRect(hit);
+    const headerRect = this.controller.getHeaderClientRect(hit);
+    const rect = this.#clampRectToHost({
+      x: headerRect.x + 8,
+      y: headerRect.y + 5,
+      width: Math.max(24, Math.min(headerRect.width, this.controller.viewport.viewportWidth) - 16),
+      height: Math.max(20, headerRect.height - 10),
+    }, 0);
     const hostRect = this.host.getBoundingClientRect();
     const element = document.createElement('input');
     element.type = 'search';
@@ -121,12 +140,12 @@ export class CellEditorManager {
     element.placeholder = 'Filter inspector';
     Object.assign(element.style, {
       position: 'absolute',
-      left: `${rect.x - hostRect.left + 8}px`,
-      top: `${rect.y - hostRect.top + 5}px`,
-      width: `${Math.max(24, rect.width - 16)}px`,
-      height: `${Math.max(20, rect.height - 10)}px`,
+      left: `${rect.x - hostRect.left}px`,
+      top: `${rect.y - hostRect.top}px`,
+      width: `${Math.max(24, rect.width)}px`,
+      height: `${Math.max(20, rect.height)}px`,
       minWidth: '0',
-      maxWidth: `${Math.max(24, rect.width - 16)}px`,
+      maxWidth: `${Math.max(24, rect.width)}px`,
       zIndex: 20,
       boxSizing: 'border-box',
       margin: '0',
@@ -147,7 +166,7 @@ export class CellEditorManager {
     ensureOverlayHost(this.host);
     this.host.append(element);
     this.overlay = element;
-    element.focus();
+    element.focus({ preventScroll: true });
     element.select();
   }
 
@@ -184,8 +203,9 @@ export class CellEditorManager {
   #overlayRect(hit) {
     if (hit.column?.kind !== 'inspectorPane') return this.controller.getCellClientRect(hit);
     const rect = this.controller.getCellClientRect(hit);
-    const editorLeft = Math.min(Math.max(210, rect.width * 0.42), rect.width - 180);
-    const editorWidth = Math.max(80, rect.width - editorLeft - 14);
+    const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.viewportWidth));
+    const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
+    const { editorLeft, editorWidth } = this.controller.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
     if (hit.part === 'number') {
       const valueWidth = Math.min(64, Math.max(42, (editorWidth - 20) * 0.28));
       return { x: rect.x + editorLeft + editorWidth - valueWidth - 10, y: rect.y + 4, width: valueWidth, height: rect.height - 8 };
@@ -196,8 +216,9 @@ export class CellEditorManager {
   #rangeBarRect(hit) {
     const rect = this.controller.getCellClientRect(hit);
     if (hit.column?.kind === 'inspectorPane') {
-      const editorLeft = Math.min(Math.max(210, rect.width * 0.42), rect.width - 180);
-      const editorWidth = Math.max(80, rect.width - editorLeft - 14);
+      const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.viewportWidth));
+      const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
+      const { editorLeft, editorWidth } = this.controller.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
       const valueWidth = Math.min(64, Math.max(42, (editorWidth - 20) * 0.28));
       const barWidth = Math.max(24, editorWidth - 20 - valueWidth - 8);
       return { x: rect.x + editorLeft + 10, y: rect.y + rect.height / 2 - 4, width: barWidth, height: 8 };
@@ -206,9 +227,30 @@ export class CellEditorManager {
     return { x: rect.x + 10, y: rect.y + rect.height / 2 - 4, width: Math.max(24, rect.width - 20 - valueWidth - 8), height: 8 };
   }
 
+  #clampRectToHost(rect, inset = 0) {
+    const hostRect = this.host.getBoundingClientRect();
+    const minX = hostRect.left + inset;
+    const minY = hostRect.top + inset;
+    const maxX = hostRect.right - inset;
+    const maxY = hostRect.bottom - inset;
+    const width = Math.max(24, Math.min(rect.width, maxX - minX));
+    const height = Math.max(18, Math.min(rect.height, maxY - minY));
+    const x = Math.max(minX, Math.min(rect.x, maxX - width));
+    const y = Math.max(minY, Math.min(rect.y, maxY - height));
+    return { x, y, width, height };
+  }
+
   #removeOverlay() {
     this.overlay?.remove();
     this.overlay = null;
+  }
+
+  #toggleRangeMinMax(node, data) {
+    const meta = data.meta ?? {};
+    const min = Number.isFinite(meta.min) ? meta.min : 0;
+    const max = Number.isFinite(meta.max) ? meta.max : 100;
+    const current = typeof data.value === 'number' && Number.isFinite(data.value) ? data.value : min;
+    this.controller.updateInspectorValue(node.id, current <= min ? max : min, 'range');
   }
 }
 

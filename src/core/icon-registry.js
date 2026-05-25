@@ -74,6 +74,16 @@ export class IconRegistry {
     this.register('error', drawError);
     this.register('task', drawTask);
     this.register('track', drawTrack);
+    this.register('point', drawPoint);
+    this.register('munition', drawMunition);
+    this.register('air', drawAircraft);
+    this.register('ground', drawGroundVehicle);
+    this.register('surface', drawSurfaceVehicle);
+    this.register('subsurface', drawSubsurfaceVehicle);
+    this.register('space', drawSpaceVehicle);
+    this.register('control', drawControl);
+    this.register('situation', drawSituation);
+    this.register('damage', drawDamage);
   }
 }
 
@@ -170,4 +180,232 @@ function drawTrack(ctx, x, y, size, color) {
   ctx.moveTo(x + 1, y + size / 2);
   ctx.lineTo(x + size - 1, y + size / 2);
   ctx.stroke();
+}
+
+function drawPoint(ctx, x, y, size, color) {
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.42, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, y + 1);
+  ctx.lineTo(cx, y + size * 0.22);
+  ctx.moveTo(cx, y + size * 0.78);
+  ctx.lineTo(cx, y + size - 1);
+  ctx.moveTo(x + 1, cy);
+  ctx.lineTo(x + size * 0.22, cy);
+  ctx.moveTo(x + size * 0.78, cy);
+  ctx.lineTo(x + size - 1, cy);
+  ctx.stroke();
+}
+
+function drawMunition(ctx, x, y, size, color) {
+  const cx = x + size * 0.5;
+  const bodyTop = y + size * 0.25;
+  const bodyBottom = y + size * 0.76;
+  ctx.fillStyle = color;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, y + 1);
+  ctx.lineTo(cx + size * 0.17, bodyTop);
+  ctx.lineTo(cx - size * 0.17, bodyTop);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillRect(cx - size * 0.11, bodyTop, size * 0.22, bodyBottom - bodyTop);
+
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.11, y + size * 0.63);
+  ctx.lineTo(x + 1, y + size - 2);
+  ctx.lineTo(cx - size * 0.11, y + size * 0.82);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + size * 0.11, y + size * 0.63);
+  ctx.lineTo(x + size - 1, y + size - 2);
+  ctx.lineTo(cx + size * 0.11, y + size * 0.82);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, bodyTop + 1);
+  ctx.lineTo(cx, bodyBottom - 1);
+  ctx.stroke();
+
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.12, bodyBottom);
+  ctx.lineTo(cx, y + size - 1);
+  ctx.lineTo(cx + size * 0.12, bodyBottom);
+  ctx.stroke();
+}
+
+function drawGroundVehicle(ctx, x, y, size, color) {
+  ctx.fillStyle = color;
+  const bodyY = y + size * 0.42;
+  ctx.fillRect(x + size * 0.16, bodyY, size * 0.68, size * 0.26);
+  ctx.fillRect(x + size * 0.34, y + size * 0.26, size * 0.28, size * 0.2);
+  ctx.fillRect(x + size * 0.62, y + size * 0.34, size * 0.3, size * 0.06);
+  ctx.beginPath();
+  ctx.arc(x + size * 0.28, y + size * 0.76, size * 0.09, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.5, y + size * 0.76, size * 0.09, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.72, y + size * 0.76, size * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSurfaceVehicle(ctx, x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + 1, y + size * 0.58);
+  ctx.lineTo(x + size * 0.82, y + size * 0.58);
+  ctx.lineTo(x + size - 1, y + size * 0.72);
+  ctx.lineTo(x + size * 0.18, y + size * 0.82);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillRect(x + size * 0.34, y + size * 0.34, size * 0.24, size * 0.2);
+  ctx.fillRect(x + size * 0.46, y + size * 0.18, size * 0.08, size * 0.18);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.18, y + size * 0.88);
+  ctx.quadraticCurveTo(x + size * 0.34, y + size * 0.78, x + size * 0.5, y + size * 0.88);
+  ctx.quadraticCurveTo(x + size * 0.66, y + size * 0.98, x + size * 0.82, y + size * 0.88);
+  ctx.stroke();
+}
+
+function drawSubsurfaceVehicle(ctx, x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(x + size * 0.5, y + size * 0.58, size * 0.38, size * 0.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(x + size * 0.44, y + size * 0.28, size * 0.12, size * 0.18);
+  ctx.fillRect(x + size * 0.38, y + size * 0.26, size * 0.24, size * 0.06);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.16, y + size * 0.86);
+  ctx.quadraticCurveTo(x + size * 0.32, y + size * 0.78, x + size * 0.5, y + size * 0.86);
+  ctx.quadraticCurveTo(x + size * 0.68, y + size * 0.94, x + size * 0.84, y + size * 0.86);
+  ctx.stroke();
+}
+
+function drawSpaceVehicle(ctx, x, y, size, color) {
+  const cx = x + size * 0.5;
+  const cy = y + size * 0.5;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeRect(x + size * 0.12, y + size * 0.32, size * 0.24, size * 0.36);
+  ctx.strokeRect(x + size * 0.64, y + size * 0.32, size * 0.24, size * 0.36);
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.36, cy);
+  ctx.lineTo(x + size * 0.64, cy);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, size * 0.42, size * 0.18, -0.45, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawControl(ctx, x, y, size, color) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.3;
+  const cx = x + size * 0.5;
+  const baseY = y + size * 0.68;
+
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.22, baseY);
+  ctx.lineTo(x + size * 0.78, baseY);
+  ctx.lineTo(x + size * 0.88, y + size * 0.88);
+  ctx.lineTo(x + size * 0.12, y + size * 0.88);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx, baseY);
+  ctx.lineTo(x + size * 0.42, y + size * 0.32);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x + size * 0.4, y + size * 0.28, size * 0.13, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(x + size * 0.66, y + size * 0.78, size * 0.055, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.78, y + size * 0.78, size * 0.055, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSituation(ctx, x, y, size, color) {
+  const cx = x + size * 0.5;
+  const cy = y + size * 0.5;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.25;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.42, 0, Math.PI * 2);
+  ctx.moveTo(cx - size * 0.42, cy);
+  ctx.lineTo(cx + size * 0.42, cy);
+  ctx.moveTo(cx, cy - size * 0.42);
+  ctx.lineTo(cx, cy + size * 0.42);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.25, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(x + size * 0.82, y + size * 0.26);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x + size * 0.68, y + size * 0.38, size * 0.055, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.36, y + size * 0.62, size * 0.045, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawDamage(ctx, x, y, size, color) {
+  const cx = x + size * 0.5;
+  const cy = y + size * 0.52;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.4;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, y + 1);
+  ctx.lineTo(x + size * 0.9, y + size * 0.34);
+  ctx.lineTo(x + size * 0.68, y + size * 0.42);
+  ctx.lineTo(x + size - 1, y + size * 0.64);
+  ctx.lineTo(x + size * 0.62, y + size * 0.6);
+  ctx.lineTo(x + size * 0.72, y + size - 1);
+  ctx.lineTo(cx, y + size * 0.72);
+  ctx.lineTo(x + size * 0.28, y + size - 1);
+  ctx.lineTo(x + size * 0.38, y + size * 0.6);
+  ctx.lineTo(x + 1, y + size * 0.64);
+  ctx.lineTo(x + size * 0.32, y + size * 0.42);
+  ctx.lineTo(x + size * 0.1, y + size * 0.34);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
+  ctx.fill();
 }

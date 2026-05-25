@@ -47,11 +47,13 @@ export class TreeRowRenderer {
     ctx.translate(viewport.renderInsetX ?? 0, viewport.renderInsetY ?? 0);
     this.#drawHeader(ctx);
     this.#drawRows(ctx);
+    this.#drawScrollIndicator(ctx);
     ctx.restore();
   }
 
   #drawHeader(ctx) {
     const { viewport, columns, theme, sort, headerFilter, filterQuery } = this.scene;
+    if (viewport.headerHeight <= 0) return;
     const colors = theme.colors;
     ctx.save();
     ctx.fillStyle = colors.row;
@@ -65,10 +67,10 @@ export class TreeRowRenderer {
         this.#drawHeaderFilter(ctx, column, viewport, theme, filterQuery);
       } else {
         ctx.fillStyle = colors.textMuted;
-        ctx.fillText(column.label, column.x + 10, viewport.headerHeight / 2, column.width - 20);
+        drawTruncatedText(ctx, column.label, column.x + 10, viewport.headerHeight / 2, column.width - 20);
       }
       if (sort?.columnId === column.id && sort.direction) {
-        ctx.fillText(sort.direction === 'asc' ? '^' : 'v', column.x + column.width - 16, viewport.headerHeight / 2, 12);
+        drawTruncatedText(ctx, sort.direction === 'asc' ? '^' : 'v', column.x + column.width - 16, viewport.headerHeight / 2, 12);
       }
       ctx.strokeStyle = colors.border;
       ctx.beginPath();
@@ -89,7 +91,9 @@ export class TreeRowRenderer {
     const colors = theme.colors;
     const x = column.x + 8;
     const y = 5;
-    const width = Math.max(40, column.width - 16);
+    const visibleRight = viewport.scrollX + viewport.viewportWidth;
+    const visibleWidth = Math.max(1, Math.min(column.x + column.width, visibleRight) - column.x);
+    const width = Math.max(40, visibleWidth - 16);
     const height = Math.max(18, viewport.headerHeight - 10);
     ctx.fillStyle = colors.progressTrack;
     roundRect(ctx, x, y, width, height, 4);
@@ -97,18 +101,51 @@ export class TreeRowRenderer {
     ctx.strokeStyle = colors.border;
     ctx.stroke();
     ctx.fillStyle = filterQuery ? colors.text : colors.textMuted;
-    ctx.fillText(filterQuery || 'Filter inspector', x + 8, viewport.headerHeight / 2, width - 16);
+    drawTruncatedText(ctx, filterQuery || 'Filter inspector', x + 8, viewport.headerHeight / 2, width - 16);
   }
 
   #drawRows(ctx) {
     const { rows, visibleRange, viewport } = this.scene;
     this.renderedRows = visibleRange.count;
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, viewport.headerHeight, viewport.viewportWidth, viewport.rowViewportHeight);
+    ctx.clip();
     ctx.translate(-viewport.scrollX, viewport.headerHeight - viewport.scrollY);
     for (let i = visibleRange.first; i <= visibleRange.last; i++) {
       const row = rows[i];
       if (row) this.#drawRow(ctx, row);
     }
+    ctx.restore();
+  }
+
+  #drawScrollIndicator(ctx) {
+    const { viewport, theme } = this.scene;
+    const maxY = Math.max(0, viewport.contentHeight - viewport.rowViewportHeight);
+    if (maxY <= 0 || viewport.viewportHeight <= viewport.headerHeight + 12) return;
+
+    const trackTop = viewport.headerHeight + 4;
+    const trackHeight = Math.max(1, viewport.viewportHeight - viewport.headerHeight - 8);
+    const thumbHeight = Math.max(18, Math.min(trackHeight, trackHeight * (viewport.rowViewportHeight / viewport.contentHeight)));
+    const thumbY = trackTop + (trackHeight - thumbHeight) * (viewport.scrollY / maxY);
+    const x = Math.max(2, viewport.viewportWidth - 4);
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = theme.colors.guide;
+    ctx.beginPath();
+    ctx.moveTo(x, trackTop);
+    ctx.lineTo(x, trackTop + trackHeight);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = theme.colors.focus;
+    ctx.beginPath();
+    ctx.moveTo(x, thumbY);
+    ctx.lineTo(x, thumbY + thumbHeight);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -123,10 +160,11 @@ export class TreeRowRenderer {
     const hovered = hoverNodeId === row.nodeId;
     const focused = focusNodeId === row.nodeId;
     const y = row.y;
-    const rowWidth = Math.max(viewport.contentWidth, viewport.scrollX + viewport.viewportWidth);
+    const visibleX = viewport.scrollX;
+    const visibleWidth = viewport.viewportWidth;
 
     ctx.fillStyle = selected ? colors.rowSelected : highlighted ? colors.rowHighlighted : hovered ? colors.rowHover : colors.row;
-    ctx.fillRect(0, y, rowWidth, row.height);
+    ctx.fillRect(visibleX, y, visibleWidth, row.height);
 
     this.#drawIndentGuides(ctx, row, colors);
 
@@ -142,20 +180,15 @@ export class TreeRowRenderer {
 
     ctx.strokeStyle = colors.border;
     ctx.beginPath();
-    ctx.moveTo(0, y + row.height + 0.5);
-    ctx.lineTo(rowWidth, y + row.height + 0.5);
+    ctx.moveTo(visibleX, y + row.height + 0.5);
+    ctx.lineTo(visibleX + visibleWidth, y + row.height + 0.5);
     ctx.stroke();
 
-    if (state.updated && node.data?.inspector) {
-      ctx.fillStyle = theme.colors.focus;
-      ctx.beginPath();
-      ctx.arc(rowWidth - 10, y + row.height / 2, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    if (state.updated && node.data?.inspector) this.#drawUpdatedMarker(ctx, row, theme);
 
     if (focused) {
       ctx.strokeStyle = colors.focus;
-      ctx.strokeRect(1.5, y + 2.5, rowWidth - 3, row.height - 5);
+      ctx.strokeRect(visibleX + 1.5, y + 2.5, visibleWidth - 3, row.height - 5);
     }
   }
 
@@ -174,25 +207,35 @@ export class TreeRowRenderer {
     else this.#drawTextCell(ctx, cell);
   }
 
-  #drawInspectorPaneCell(ctx, { node, row, rect, theme }) {
+  #drawInspectorPaneCell(ctx, { node, row, rect, theme, style }) {
+    const visibleRight = this.scene.viewport.scrollX + this.scene.viewport.viewportWidth;
+    rect = { ...rect, width: Math.max(1, Math.min(rect.x + rect.width, visibleRight) - rect.x) };
     const data = node.data ?? {};
     const colors = theme.colors;
     const indentX = rect.x + row.depth * theme.indentWidth;
-    const labelX = indentX + 28;
     const cy = rect.y + rect.height / 2;
-    this.#drawChevron(ctx, indentX + 10, cy, row, colors);
+    let labelX = indentX + 28;
+    if (!row.hasChildren && node.icon) {
+      this.iconRegistry.draw(ctx, style.icon, indentX + 3, rect.y + 6, 15, style.color);
+      labelX = indentX + 24;
+    } else if (!row.hasChildren) {
+      labelX = indentX + 24;
+    } else {
+      this.#drawChevron(ctx, indentX + 10, cy, row, colors);
+    }
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.globalAlpha = data.disabled ? 0.45 : 1;
     ctx.fillStyle = data.valueType === 'object' || data.valueType === 'array' ? colors.text : colors.textMuted;
-    ctx.fillText(node.label ?? node.id, labelX, cy, 180);
+    const layout = inspectorPaneLayout(rect.width, row.depth, theme.indentWidth, data.editorType, this.scene.inspectorPaneLabelEnd);
+    drawTruncatedText(ctx, node.label ?? node.id, labelX, cy, Math.max(20, rect.x + layout.editorLeft - labelX - 8));
 
-    const editorX = rect.x + Math.min(Math.max(210, rect.width * 0.42), rect.width - 180);
-    const editorWidth = Math.max(80, rect.x + rect.width - editorX - 14);
+    const editorX = rect.x + layout.editorLeft;
+    const editorWidth = layout.editorWidth;
     if (data.valueType === 'array') {
       ctx.fillStyle = colors.textMuted;
-      ctx.fillText(data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
+      drawTruncatedText(ctx, data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
       this.#drawSmallButton(ctx, rect.x + rect.width - 54, rect.y + 5, 22, rect.height - 10, '+', theme);
       this.#drawSmallButton(ctx, rect.x + rect.width - 28, rect.y + 5, 22, rect.height - 10, '-', theme);
     } else if (data.valueType === 'object') {
@@ -202,12 +245,14 @@ export class TreeRowRenderer {
         node,
         rect: { x: editorX, y: rect.y, width: editorWidth, height: rect.height },
         theme,
+        suppressUpdatedMarker: true,
       });
     }
+    if (data.meta?.updated) this.#drawUpdatedMarker(ctx, row, theme);
     ctx.globalAlpha = 1;
   }
 
-  #drawInspectorValueCell(ctx, { node, rect, theme }) {
+  #drawInspectorValueCell(ctx, { node, rect, theme, suppressUpdatedMarker = false }) {
     const data = node.data ?? {};
     const meta = data.meta ?? {};
     const disabled = data.disabled;
@@ -237,7 +282,7 @@ export class TreeRowRenderer {
       ctx.fill();
       ctx.fillStyle = theme.colors.text;
       ctx.textAlign = 'center';
-      ctx.fillText(meta.button ?? node.label, x + (meta.fullWidthButton ? width : Math.min(width, 140)) / 2, rect.y + rect.height / 2);
+      drawTruncatedText(ctx, meta.button ?? node.label, x + (meta.fullWidthButton ? width : Math.min(width, 140)) / 2, rect.y + rect.height / 2, Math.max(10, (meta.fullWidthButton ? width : Math.min(width, 140)) - 12));
       ctx.textAlign = 'left';
     } else if (data.editorType === 'select') {
       ctx.fillStyle = theme.colors.rowHover;
@@ -245,18 +290,27 @@ export class TreeRowRenderer {
       ctx.fill();
       this.#drawMutedText(ctx, data.valueText, x + 8, rect.y + rect.height / 2, Math.min(width, 180) - 22, theme);
       ctx.fillStyle = theme.colors.chevron;
-      ctx.fillText('v', x + Math.min(width, 180) - 14, rect.y + rect.height / 2);
+      drawTruncatedText(ctx, 'v', x + Math.min(width, 180) - 14, rect.y + rect.height / 2, 10);
     } else {
       this.#drawMutedText(ctx, data.valueText, x, rect.y + rect.height / 2, width, theme, readonly);
     }
 
-    if (meta.updated) {
+    if (meta.updated && !suppressUpdatedMarker) {
       ctx.fillStyle = theme.colors.focus;
       ctx.beginPath();
       ctx.arc(rect.x + rect.width - 10, rect.y + rect.height / 2, 3, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+  }
+
+  #drawUpdatedMarker(ctx, row, theme) {
+    const x = Math.max(6, row.depth * theme.indentWidth - 8);
+    const y = row.y + row.height / 2;
+    ctx.fillStyle = theme.colors.focus;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   #drawInspectorTypeCell(ctx, { node, rect, theme }) {
@@ -299,7 +353,7 @@ export class TreeRowRenderer {
     ctx.fill();
     ctx.fillStyle = theme.colors.text;
     ctx.textAlign = 'right';
-    ctx.fillText(String(data.valueText ?? ''), x + barWidth + gap + valueWidth - 6, y + 4, valueWidth - 10);
+    drawTruncatedText(ctx, String(data.valueText ?? ''), x + barWidth + gap + valueWidth - 6, y + 4, valueWidth - 10);
     ctx.textAlign = 'left';
   }
 
@@ -310,7 +364,7 @@ export class TreeRowRenderer {
     ctx.fillStyle = theme.colors.text;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, x + width / 2, y + height / 2, width - 4);
+    drawTruncatedText(ctx, label, x + width / 2, y + height / 2, width - 4);
     ctx.textAlign = 'left';
   }
 
@@ -319,7 +373,7 @@ export class TreeRowRenderer {
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillText(String(text ?? ''), x, y, Math.max(10, width));
+    drawTruncatedText(ctx, String(text ?? ''), x, y, Math.max(10, width));
   }
 
   #drawTreeCell(ctx, { node, row, rect, theme, style }) {
@@ -332,7 +386,7 @@ export class TreeRowRenderer {
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillText(node.label ?? node.id, x + 50, cy, Math.max(40, rect.x + rect.width - x - 56));
+    drawTruncatedText(ctx, node.label ?? node.id, x + 50, cy, Math.max(40, rect.x + rect.width - x - 56));
   }
 
   #drawStatusCell(ctx, { rect, style, theme }) {
@@ -346,7 +400,7 @@ export class TreeRowRenderer {
     ctx.font = '10px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(style.status.label, x + badgeWidth / 2, y + 8, badgeWidth - 8);
+    drawTruncatedText(ctx, style.status.label, x + badgeWidth / 2, y + 8, badgeWidth - 8);
     ctx.textAlign = 'left';
   }
 
@@ -370,7 +424,7 @@ export class TreeRowRenderer {
     ctx.textBaseline = 'middle';
     ctx.textAlign = column.align;
     const x = column.align === 'right' ? rect.x + rect.width - 10 : column.align === 'center' ? rect.x + rect.width / 2 : rect.x + 10;
-    ctx.fillText(String(value ?? ''), x, rect.y + rect.height / 2, rect.width - 20);
+    drawTruncatedText(ctx, String(value ?? ''), x, rect.y + rect.height / 2, rect.width - 20);
     ctx.textAlign = 'left';
   }
 
@@ -421,6 +475,22 @@ function resolveNodeStyle(theme, node, state = {}) {
   };
 }
 
+function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
+  const safeWidth = Math.max(1, width);
+  const rightPadding = 14;
+  if (editorType === 'checkbox') {
+    const editorWidth = 34;
+    return { editorLeft: Math.max(64, safeWidth - rightPadding - editorWidth), editorWidth };
+  }
+  const minEditor = Math.min(170, Math.max(96, safeWidth * 0.45));
+  const minLabelEnd = Math.max(88, depth * indentWidth + 104);
+  const preferredLeft = Math.max(minLabelEnd, labelEnd, safeWidth * 0.32);
+  const maxLeft = Math.max(64, safeWidth - rightPadding - minEditor);
+  const editorLeft = Math.max(64, Math.min(preferredLeft, maxLeft));
+  const editorWidth = Math.max(56, safeWidth - rightPadding - editorLeft);
+  return { editorLeft, editorWidth };
+}
+
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
 }
@@ -436,6 +506,29 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
+}
+
+function drawTruncatedText(ctx, text, x, y, maxWidth) {
+  const value = String(text ?? '');
+  const width = Math.max(0, maxWidth);
+  if (!value || width <= 0) return;
+  ctx.fillText(fitText(ctx, value, width), x, y);
+}
+
+function fitText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  const ellipsis = '...';
+  const ellipsisWidth = ctx.measureText(ellipsis).width;
+  if (ellipsisWidth > maxWidth) return '';
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = text.slice(0, mid);
+    if (ctx.measureText(candidate).width + ellipsisWidth <= maxWidth) low = mid;
+    else high = mid - 1;
+  }
+  return `${text.slice(0, low)}${ellipsis}`;
 }
 
 function formatTime(value) {

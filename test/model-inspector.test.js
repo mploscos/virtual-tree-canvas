@@ -46,6 +46,16 @@ test('model inspector builder can enforce explicit metadata for editable fields'
   assert.equal(sensor.data.disabled, false);
 });
 
+test('model inspector builder applies type and icon metadata', () => {
+  const nodes = new ModelInspectorBuilder().build({ classname: 'rpr.Aircraft' }, {
+    classname: { type: 'platform', icon: 'aircraft' },
+  }, { flatRoot: true });
+  const classname = nodes.find((node) => node.data.path === 'classname');
+
+  assert.equal(classname.type, 'platform');
+  assert.equal(classname.icon, 'aircraft');
+});
+
 test('model path get/set updates nested values', () => {
   const model = { tracks: [{ speed: 5 }] };
 
@@ -76,6 +86,17 @@ test('setModel pane presentation does not inject redundant tree column', () => {
   assert.deepEqual(controller.columnModel.columns.map((column) => column.kind), ['inspectorPane']);
 });
 
+test('pane inspector column fits the canvas width after resize', () => {
+  const controller = new TreeViewController();
+  controller.setModel({ sensor: { range: 10 } }, {}, { presentation: 'pane' });
+  controller.canvas = { clientWidth: 320, clientHeight: 200 };
+
+  controller.renderMeasured();
+
+  assert.equal(controller.columnModel.columns[0].width, 320);
+  assert.equal(controller.viewport.contentWidth, 320);
+});
+
 test('setModel supports flatRoot and enforceMeta inspector options', () => {
   const controller = new TreeViewController();
   controller.setModel({ sensor: { range: 10, gain: 0.5 } }, {
@@ -86,6 +107,19 @@ test('setModel supports flatRoot and enforceMeta inspector options', () => {
   assert.equal(controller.model.index.getNode('model:sensor').parentId, null);
   assert.equal(controller.updateInspectorValue('model:sensor.range', 12, 'number'), true);
   assert.equal(controller.updateInspectorValue('model:sensor.gain', 0.8, 'number'), false);
+});
+
+test('setModel preserves expansion after inspector refreshes', () => {
+  const controller = new TreeViewController();
+  controller.setModel({ sensor: { range: 10, gain: 1 } }, {}, { presentation: 'pane', flatRoot: true });
+
+  assert.equal(controller.expansion.isExpanded('model:sensor'), true);
+  controller.collapse('model:sensor');
+  assert.equal(controller.expansion.isExpanded('model:sensor'), false);
+
+  controller.setModel({ sensor: { range: 12, gain: 2 } }, {}, { presentation: 'pane', flatRoot: true });
+
+  assert.equal(controller.expansion.isExpanded('model:sensor'), false);
 });
 
 test('setModel can expose a header filter for pane inspector mode', () => {
@@ -129,6 +163,15 @@ test('inspector edits mark updated without search highlight background', () => {
   const state = controller.model.dynamicState.get('model:sensor.range');
   assert.equal(state.updated, true);
   assert.equal(state.highlighted, undefined);
+});
+
+test('inspector can disable edit updated markers', () => {
+  const controller = new TreeViewController();
+  controller.setModel({ sensor: { range: 10 } }, {}, { markUpdated: false });
+
+  assert.equal(controller.updateInspectorValue('model:sensor.range', 12, 'number'), true);
+
+  assert.equal(controller.model.dynamicState.get('model:sensor.range')?.updated, undefined);
 });
 
 test('inspector can add and remove array items', () => {

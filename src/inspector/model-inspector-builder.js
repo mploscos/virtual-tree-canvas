@@ -30,7 +30,8 @@ export class ModelInspectorBuilder {
       id,
       parentId,
       label,
-      type: inspectorNodeType(valueType, editorType),
+      type: rule.type ?? inspectorNodeType(valueType, editorType),
+      icon: rule.icon,
       data: {
         inspector: true,
         path,

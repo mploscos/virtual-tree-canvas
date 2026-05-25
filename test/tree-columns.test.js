@@ -163,6 +163,27 @@ test('setFilter shows matches and ancestors without changing expansion state', (
   assert.equal(controller.expansion.isExpanded('root'), false);
 });
 
+test('filtered branches can be collapsed without clearing the filter', () => {
+  const controller = new TreeViewController({ initialExpandDepth: 0 });
+  controller.setData([
+    { id: 'root', label: 'Root', type: 'root' },
+    { id: 'a', parentId: 'root', label: 'Alpha', type: 'sensor' },
+    { id: 'a1', parentId: 'a', label: 'Deep Match', type: 'sensor' },
+    { id: 'b', parentId: 'root', label: 'Bravo', type: 'platform' },
+  ]);
+
+  controller.setFilter('deep');
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'a', 'a1']);
+  assert.equal(controller.rowModel.getRowById('root').expanded, true);
+
+  controller.collapse('root');
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root']);
+  assert.equal(controller.expansion.isExpanded('root'), false);
+
+  controller.expand('root');
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'a', 'a1']);
+});
+
 test('hit testing detects header resize handles', () => {
   const controller = new TreeViewController({ initialExpandDepth: 1, headerHeight: 24 });
   controller.resize(500, 160);

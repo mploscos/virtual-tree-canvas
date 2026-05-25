@@ -86,17 +86,21 @@ export class TreeViewController {
   setModel(model, meta = {}, options = {}) {
     const builder = new ModelInspectorBuilder();
     const presentation = options.presentation ?? options.mode ?? 'table';
+    const previousExpanded = new Set(this.model.expanded);
+    const shouldPreserveExpansion = Boolean(this.inspector);
     const inspectorOptions = {
       presentation,
       flatRoot: Boolean(options.flatRoot),
       enforceMeta: Boolean(options.enforceMeta),
       filter: Boolean(options.filter),
+      markUpdated: options.markUpdated !== false,
     };
     const nodes = builder.build(model, meta, inspectorOptions);
     this.inspector = { model, meta, builder, presentation, options: inspectorOptions };
     this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
     this.model.setTree(nodes);
-    this.expansion.expandToDepth(this.initialExpandDepth);
+    if (shouldPreserveExpansion) this.#restoreExpansion(previousExpanded);
+    else this.expansion.expandToDepth(this.initialExpandDepth);
     this.searchIndex.rebuild(this.model);
     this.#rebuildRows();
     this.events.emit('modelchange', { model, meta, structural: true });
@@ -113,7 +117,9 @@ export class TreeViewController {
     data.value = newValue;
     data.valueType = Array.isArray(newValue) ? 'array' : newValue === null ? 'null' : typeof newValue === 'object' ? 'object' : typeof newValue;
     data.valueText = formatInspectorValue(newValue, data.meta);
-    this.setDynamicState([{ id: nodeId, state: { updated: true } }]);
+    if (this.inspector.options.markUpdated !== false) {
+      this.setDynamicState([{ id: nodeId, state: { updated: true } }]);
+    }
     const detail = { path: data.path, oldValue, newValue, nodeId, editorType };
     this.events.emit('valuechange', detail);
     this.events.emit('modelchange', { model: this.inspector.model, path: data.path, oldValue, newValue, nodeId });
@@ -275,6 +281,11 @@ export class TreeViewController {
   }
 
   expand(nodeId) {
+    if (this.filterQuery && this.rowModel.expandFilterBranch(nodeId)) {
+      this.#rebuildRows();
+      this.events.emit('expand', { nodeId, filter: true });
+      return true;
+    }
     if (!this.expansion.expand(nodeId)) return false;
     this.#rebuildRows();
     this.events.emit('expand', { nodeId });
@@ -282,14 +293,19 @@ export class TreeViewController {
   }
 
   collapse(nodeId) {
-    if (!this.expansion.collapse(nodeId)) return false;
+    const row = this.rowModel.getRowById(nodeId);
+    const shouldCollapseFilterBranch = Boolean(this.filterQuery && row?.expanded);
+    const changed = this.expansion.collapse(nodeId);
+    if (shouldCollapseFilterBranch) this.rowModel.collapseFilterBranch(nodeId);
+    if (!changed && !shouldCollapseFilterBranch) return false;
     this.#rebuildRows();
-    this.events.emit('collapse', { nodeId });
+    this.events.emit('collapse', { nodeId, filter: shouldCollapseFilterBranch });
     return true;
   }
 
   toggle(nodeId) {
-    return this.expansion.isExpanded(nodeId) ? this.collapse(nodeId) : this.expand(nodeId);
+    const row = this.rowModel.getRowById(nodeId);
+    return (row?.expanded ?? this.expansion.isExpanded(nodeId)) ? this.collapse(nodeId) : this.expand(nodeId);
   }
 
   expandAll() {
@@ -573,10 +589,15 @@ export class TreeViewController {
       searchMatches: this.searchHighlights,
       sort: this.columnModel.sort,
       sortValues: this.sortValueSnapshot ? Array.from(this.sortValueSnapshot) : null,
+      inspectorPaneLabelEnd: this.#computeInspectorPaneLabelEnd(visibleRange),
       filterQuery: this.filterQuery,
       headerFilter: Boolean(this.inspector?.options?.filter),
       stats: this.getStats(),
     };
+  }
+
+  closeEditor() {
+    this.events.emit('editorclose', {});
   }
 
   hitTest(clientX, clientY) {
@@ -609,7 +630,7 @@ export class TreeViewController {
         if (localX >= column.width - 54 && localX <= column.width - 32) part = 'arrayAdd';
         else if (localX >= column.width - 28 && localX <= column.width - 6) part = 'arrayRemove';
         else {
-          const editorLeft = Math.min(Math.max(210, column.width * 0.42), column.width - 180);
+          const editorLeft = this.getInspectorPaneLayout(this.#visibleInspectorPaneWidth(column), row, node?.data?.editorType).editorLeft;
           if (localX >= editorLeft) part = 'editor';
           else {
             const treeX = row.depth * this.rowModel.indentWidth;
@@ -618,8 +639,8 @@ export class TreeViewController {
         }
         return { area: 'row', part, row, column, x, y: rowY };
       }
-      const editorLeft = Math.min(Math.max(210, column.width * 0.42), column.width - 180);
-      if (localX >= editorLeft) part = this.#inspectorEditorPart(row, localX - editorLeft, column.width - editorLeft);
+      const layout = this.getInspectorPaneLayout(this.#visibleInspectorPaneWidth(column), row, node?.data?.editorType);
+      if (localX >= layout.editorLeft) part = this.#inspectorEditorPart(row, localX - layout.editorLeft, layout.editorWidth);
       else {
         const treeX = row.depth * this.rowModel.indentWidth;
         if (localX >= treeX + 4 && localX <= treeX + 22) part = 'chevron';
@@ -642,11 +663,21 @@ export class TreeViewController {
     if (!data?.inspector) return 'cell';
     if (data.editorType === 'checkbox') return 'checkbox';
     if (data.editorType === 'range') {
-      const numberLeft = Math.max(50, editorWidth - 64);
+      const width = Math.max(24, editorWidth - 20);
+      const valueWidth = Math.min(64, Math.max(42, width * 0.28));
+      const numberLeft = editorWidth - valueWidth - 10;
       return localEditorX >= numberLeft ? 'number' : 'range';
     }
     if (data.editorType === 'button') return 'button';
     return 'editor';
+  }
+
+  #visibleInspectorPaneWidth(column) {
+    return Math.max(1, Math.min(column.width, this.viewport.scrollX + this.viewport.viewportWidth - column.x));
+  }
+
+  getInspectorPaneLayout(width, row = null, editorType = '') {
+    return inspectorPaneLayout(width, row?.depth ?? 0, this.rowModel.indentWidth, editorType, this.#computeInspectorPaneLabelEnd(this.rowModel.getVisibleRange(this.viewport, 4)));
   }
 
   getCellClientRect(hit) {
@@ -671,8 +702,57 @@ export class TreeViewController {
     };
   }
 
+  getTooltipForHit(hit) {
+    if (!hit?.row || !hit.column) return null;
+    const node = this.model.nodes[hit.row.nodeIndex];
+    if (!node) return null;
+    const state = this.model.dynamicState.get(hit.row.nodeId) ?? {};
+    const rect = this.getCellClientRect(hit);
+    let text = '';
+    let width = rect.width;
+
+    if (hit.column.kind === 'inspectorPane') {
+      const data = node.data ?? {};
+      const visibleWidth = this.#visibleInspectorPaneWidth(hit.column);
+      const layout = this.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
+      if (hit.part === 'label' || hit.part === 'chevron') {
+        const labelX = hit.row.depth * this.rowModel.indentWidth + (hit.row.hasChildren ? 28 : 24);
+        text = node.label ?? node.id;
+        width = Math.max(0, layout.editorLeft - labelX - 8);
+      } else if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove') {
+        return null;
+      } else {
+        text = inspectorTooltipValue(node);
+        width = Math.max(0, layout.editorWidth - 20);
+      }
+    } else if (hit.column.kind === 'tree') {
+      const labelX = hit.row.depth * this.rowModel.indentWidth + 50;
+      text = node.label ?? node.id;
+      width = Math.max(0, hit.column.width - labelX - 6);
+    } else if (hit.column.kind === 'inspectorValue') {
+      text = inspectorTooltipValue(node);
+      width = Math.max(0, hit.column.width - 20);
+    } else if (hit.column.kind === 'inspectorType') {
+      text = node.data?.valueType ?? '';
+      width = Math.max(0, hit.column.width - 20);
+    } else if (hit.column.kind === 'inspectorDescription') {
+      text = node.data?.meta?.description ?? '';
+      width = Math.max(0, hit.column.width - 20);
+    } else if (typeof hit.column.value === 'function') {
+      const value = hit.column.value(node, state);
+      text = value == null ? '' : String(value);
+      width = Math.max(0, hit.column.width - 20);
+    }
+
+    text = String(text ?? '');
+    if (!text || !isProbablyTruncated(text, width)) return null;
+    return { text, rect, nodeId: node.id, part: hit.part, columnId: hit.column.id };
+  }
+
   resize(width, height) {
     this.viewport.resize(width, height);
+    this.#fitInspectorPaneColumn(width);
+    this.#syncContentSize();
     this.events.emit('viewportchange', this.getViewportState());
   }
 
@@ -726,6 +806,13 @@ export class TreeViewController {
     this.setDynamicState(this.patchBatcher.flush());
   }
 
+  #restoreExpansion(expandedIds) {
+    this.model.expanded.clear();
+    for (const id of expandedIds) {
+      if (this.model.index.getNode(id) && this.expansion.hasChildren(id)) this.model.expanded.add(id);
+    }
+  }
+
   #focusedRowIndex() {
     if (this.focusedId) {
       const row = this.rowModel.getRowById(this.focusedId);
@@ -740,12 +827,41 @@ export class TreeViewController {
     const height = this.canvas.clientHeight;
     if (width > 0 && height > 0 && (this.viewport.viewportWidth !== width || this.viewport.viewportHeight !== height)) {
       this.viewport.resize(width, height);
+      this.#fitInspectorPaneColumn(width);
+      this.#syncContentSize();
     }
+  }
+
+  #computeInspectorPaneLabelEnd(visibleRange) {
+    const column = this.columnModel.columns.find((item) => item.kind === 'inspectorPane');
+    if (!column) return 0;
+    let labelEnd = 0;
+    for (let i = visibleRange.first; i <= visibleRange.last; i++) {
+      const row = this.rowModel.rows[i];
+      if (!row) continue;
+      const node = this.model.nodes[row.nodeIndex];
+      if (!node) continue;
+      const indentX = row.depth * this.rowModel.indentWidth;
+      const labelX = indentX + (row.hasChildren ? 28 : 24);
+      const labelWidth = String(node.label ?? node.id ?? '').length * 6.4;
+      labelEnd = Math.max(labelEnd, labelX + labelWidth + 12);
+    }
+    return Math.min(labelEnd, Math.max(90, this.#visibleInspectorPaneWidth(column) - 72));
+  }
+
+  #fitInspectorPaneColumn(width) {
+    const column = this.columnModel.columns.length === 1 ? this.columnModel.columns[0] : null;
+    if (column?.kind !== 'inspectorPane' && column?.kind !== 'tree') return;
+    if (column.kind === 'inspectorPane' && this.inspector?.options?.presentation !== 'pane') return;
+    const nextWidth = Math.max(column.minWidth, Math.floor(width));
+    if (Math.abs(column.width - nextWidth) < 1) return;
+    this.columnModel.resizeColumn(column.id, nextWidth);
   }
 
   #workerRowOptions(overrides = {}) {
     return {
       expandedIds: Array.from(this.expansion.model.expanded),
+      filterCollapsedIds: Array.from(this.rowModel.filterCollapsed ?? []),
       rowHeight: this.rowModel.rowHeight,
       indentWidth: this.rowModel.indentWidth,
       sort: this.columnModel.sort,
@@ -775,6 +891,22 @@ export class TreeViewController {
     this.#rebuildRows();
     if (focusId) this.focusedId = focusId;
   }
+}
+
+function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
+  const safeWidth = Math.max(1, width);
+  const rightPadding = 14;
+  if (editorType === 'checkbox') {
+    const editorWidth = 34;
+    return { editorLeft: Math.max(64, safeWidth - rightPadding - editorWidth), editorWidth };
+  }
+  const minEditor = Math.min(170, Math.max(96, safeWidth * 0.45));
+  const minLabelEnd = Math.max(88, depth * indentWidth + 104);
+  const preferredLeft = Math.max(minLabelEnd, labelEnd, safeWidth * 0.32);
+  const maxLeft = Math.max(64, safeWidth - rightPadding - minEditor);
+  const editorLeft = Math.max(64, Math.min(preferredLeft, maxLeft));
+  const editorWidth = Math.max(56, safeWidth - rightPadding - editorLeft);
+  return { editorLeft, editorWidth };
 }
 
 function createDefaultArrayItem(meta = {}) {
@@ -818,6 +950,19 @@ function matchesFilter(node, state, path, query) {
         state.value,
       ];
   return values.some((value) => String(value ?? '').toLowerCase().includes(query));
+}
+
+function inspectorTooltipValue(node) {
+  const data = node.data ?? {};
+  if (data.editorType === 'checkbox') return '';
+  if (data.editorType === 'button') return data.meta?.button ?? node.label ?? '';
+  if (data.valueType === 'object') return '';
+  return data.valueText ?? data.value ?? '';
+}
+
+function isProbablyTruncated(text, width) {
+  if (width <= 0) return Boolean(text);
+  return String(text).length * 6.4 > width;
 }
 
 function now() {
