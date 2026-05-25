@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>virtual-tree-canvas demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <strong>virtual-tree-canvas</strong>
+      <input id="search" type="search" placeholder="Search id, label, path, tag or type" />
+      <input id="filter" type="search" placeholder="Filter visible rows" />
+      <button id="search-prev" type="button">Prev</button>
+      <button id="search-next" type="button">Next</button>
+      <select id="theme">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="tactical">Tactical</option>
+      </select>
+      <select id="dataset-size">
+        <option value="10000">10k</option>
+        <option value="50000">50k</option>
+        <option value="100000">100k</option>
+      </select>
+      <select id="scenario">
+        <option value="normal">Normal</option>
+        <option value="collapsed">All collapsed</option>
+        <option value="expanded">All expanded</option>
+        <option value="heavy">Heavy updates</option>
+        <option value="scroll">Fast scrolling</option>
+      </select>
+      <select id="update-rate">
+        <option value="260">260/frame</option>
+        <option value="1000">1000/frame</option>
+        <option value="3000">3000/frame</option>
+      </select>
+      <label class="toggle"><input id="multi-mode" type="checkbox" /> Multi</label>
+      <button id="expand-all" type="button">Expand all</button>
+      <button id="collapse-all" type="button">Collapse all</button>
+      <button id="focus-random" type="button">Focus random</button>
+      <button id="copy-results" type="button">Copy JSON</button>
+      <span id="stats"></span>
+      <span id="message"></span>
+    </header>
+    <main class="tree-shell">
+      <canvas id="tree"></canvas>
+      <aside id="benchmark-panel"></aside>
+    </main>
+    <dialog id="json-dialog">
+      <form method="dialog">
+        <header>
+          <strong>Benchmark JSON</strong>
+          <button type="submit">Close</button>
+        </header>
+        <textarea id="json-output" readonly></textarea>
+      </form>
+    </dialog>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

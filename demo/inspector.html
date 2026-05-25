@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>virtual-tree-canvas inspector demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .inspector-demo {
+        position: fixed;
+        inset: 44px 0 0 0;
+        display: grid;
+        grid-template-columns: minmax(420px, 1fr) minmax(320px, 42vw);
+        background: #0f1419;
+      }
+      .inspector-canvas-host {
+        position: relative;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .inspector-demo #tree {
+        height: 100%;
+      }
+      .json-preview {
+        margin: 0;
+        border-left: 1px solid #2a343d;
+        background: #0b1020;
+        color: #dbeafe;
+        padding: 12px;
+        overflow: auto;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="toolbar">
+      <strong>virtual-tree-canvas inspector</strong>
+      <select id="mode">
+        <option value="pane">Pane</option>
+        <option value="table">Table</option>
+      </select>
+      <button id="focus-range" type="button">Focus range</button>
+      <span id="message"></span>
+    </header>
+    <main class="inspector-demo">
+      <div class="inspector-canvas-host">
+        <canvas id="tree"></canvas>
+      </div>
+      <pre id="json" class="json-preview"></pre>
+    </main>
+    <script type="module" src="./inspector-main.js"></script>
+  </body>
+</html>

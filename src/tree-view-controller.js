@@ -1,0 +1,825 @@
+import {
+  EventEmitter,
+  IconRegistry,
+  PatchBatcher,
+  ThemeManager,
+  TreeColumnModel,
+  TreeExpansionManager,
+  TreeModel,
+  TreeSearchIndex,
+  TreeSelectionManager,
+  TreeWorkerClient,
+  TreeViewViewport,
+  VisibleRowModel,
+} from './core/index.js';
+import { formatInspectorValue, getAtPath, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath } from './inspector/index.js';
+import { TreeRowRenderer } from './renderers/index.js';
+
+export class TreeViewController {
+  constructor(options = {}) {
+    this.events = new EventEmitter();
+    this.model = new TreeModel();
+    this.expansion = new TreeExpansionManager(this.model);
+    this.rowModel = new VisibleRowModel({
+      model: this.model,
+      expansion: this.expansion,
+      rowHeight: options.rowHeight ?? 28,
+      indentWidth: options.indentWidth ?? 18,
+    });
+    this.viewport = new TreeViewViewport({
+      rowHeight: this.rowModel.rowHeight,
+      indentWidth: this.rowModel.indentWidth,
+      headerHeight: options.headerHeight ?? 28,
+    });
+    this.viewport.renderInsetX = options.renderInsetX ?? 0;
+    this.viewport.renderInsetY = options.renderInsetY ?? 0;
+    this.columnModel = new TreeColumnModel(options.columns);
+    this.searchIndex = new TreeSearchIndex();
+    this.selection = new TreeSelectionManager();
+    this.patchBatcher = new PatchBatcher();
+    this.themeManager = options.themeManager ?? new ThemeManager();
+    this.iconRegistry = options.iconRegistry ?? new IconRegistry();
+    this.renderer = options.renderer ?? new TreeRowRenderer({ themeManager: this.themeManager, iconRegistry: this.iconRegistry });
+    this.initialExpandDepth = options.initialExpandDepth ?? 1;
+    this.searchHighlights = new Set();
+    this.filterQuery = '';
+    this.hoverId = null;
+    this.focusedId = null;
+    this.anchorRowIndex = null;
+    this.lastPatchCount = 0;
+    this.lastDirtyNodeCount = 0;
+    this.lastRenderedRows = 0;
+    this.rebuildCount = 0;
+    this.workerClient = null;
+    this.workerRevision = 0;
+    this.sortValueSnapshot = null;
+    this.inspector = null;
+    this.scene = this.createRenderScene();
+
+    if (options.canvas) this.initialize(options.canvas);
+  }
+
+  initialize(canvas) {
+    this.canvas = canvas;
+    this.renderer.initialize(canvas);
+    this.renderer.setScene(this.scene);
+    return this;
+  }
+
+  on(type, listener) {
+    return this.events.on(type, listener);
+  }
+
+  off(type, listener) {
+    this.events.off(type, listener);
+  }
+
+  setData(nodes) {
+    this.inspector = null;
+    this.model.setTree(nodes);
+    this.expansion.expandToDepth(this.initialExpandDepth);
+    this.searchIndex.rebuild(this.model);
+    this.workerClient?.setData(this.model.nodes);
+    this.#rebuildRows();
+  }
+
+  setModel(model, meta = {}, options = {}) {
+    const builder = new ModelInspectorBuilder();
+    const presentation = options.presentation ?? options.mode ?? 'table';
+    const inspectorOptions = {
+      presentation,
+      flatRoot: Boolean(options.flatRoot),
+      enforceMeta: Boolean(options.enforceMeta),
+      filter: Boolean(options.filter),
+    };
+    const nodes = builder.build(model, meta, inspectorOptions);
+    this.inspector = { model, meta, builder, presentation, options: inspectorOptions };
+    this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
+    this.model.setTree(nodes);
+    this.expansion.expandToDepth(this.initialExpandDepth);
+    this.searchIndex.rebuild(this.model);
+    this.#rebuildRows();
+    this.events.emit('modelchange', { model, meta, structural: true });
+  }
+
+  updateInspectorValue(nodeId, newValue, editorType = 'unknown') {
+    const node = this.model.index.getNode(nodeId);
+    if (!node?.data?.inspector || !this.inspector) return false;
+    const data = node.data;
+    if (data.readonly || data.disabled) return false;
+    const oldValue = data.value;
+    if (Object.is(oldValue, newValue)) return true;
+    setAtPath(this.inspector.model, data.path, newValue);
+    data.value = newValue;
+    data.valueType = Array.isArray(newValue) ? 'array' : newValue === null ? 'null' : typeof newValue === 'object' ? 'object' : typeof newValue;
+    data.valueText = formatInspectorValue(newValue, data.meta);
+    this.setDynamicState([{ id: nodeId, state: { updated: true } }]);
+    const detail = { path: data.path, oldValue, newValue, nodeId, editorType };
+    this.events.emit('valuechange', detail);
+    this.events.emit('modelchange', { model: this.inspector.model, path: data.path, oldValue, newValue, nodeId });
+    return true;
+  }
+
+  triggerInspectorAction(nodeId) {
+    const node = this.model.index.getNode(nodeId);
+    if (!node?.data?.inspector) return false;
+    const label = node.data.meta?.button ?? node.label;
+    this.events.emit('action', { path: node.data.path, label, nodeId });
+    return true;
+  }
+
+  addInspectorArrayItem(nodeId) {
+    const node = this.model.index.getNode(nodeId);
+    if (!node?.data?.inspector || node.data.valueType !== 'array' || !this.inspector) return false;
+    const array = getAtPath(this.inspector.model, node.data.path);
+    if (!Array.isArray(array)) return false;
+    const item = createDefaultArrayItem(node.data.meta);
+    array.push(item);
+    this.#rebuildInspectorModel(node.data.path);
+    this.events.emit('modelchange', { model: this.inspector.model, path: node.data.path, structural: true, action: 'array-add', value: item });
+    return true;
+  }
+
+  removeInspectorArrayItem(nodeId) {
+    const node = this.model.index.getNode(nodeId);
+    if (!node?.data?.inspector || node.data.valueType !== 'array' || !this.inspector) return false;
+    const array = getAtPath(this.inspector.model, node.data.path);
+    if (!Array.isArray(array) || !array.length) return false;
+    const value = array.pop();
+    this.#rebuildInspectorModel(node.data.path);
+    this.events.emit('modelchange', { model: this.inspector.model, path: node.data.path, structural: true, action: 'array-remove', value });
+    return true;
+  }
+
+  enableWorkers(workerUrl) {
+    if (this.workerClient) return Promise.resolve(this);
+    this.workerClient = new TreeWorkerClient(workerUrl);
+    return this.workerClient.setData(this.model.nodes).then(() => this);
+  }
+
+  disableWorkers() {
+    this.workerClient?.destroy();
+    this.workerClient = null;
+  }
+
+  setColumns(columns) {
+    this.columnModel.setColumns(columns);
+    this.#syncContentSize();
+    this.events.emit('columnschange', { columns: this.columnModel.columns });
+  }
+
+  resizeColumn(columnId, width) {
+    if (!this.columnModel.resizeColumn(columnId, width)) return false;
+    this.#syncContentSize();
+    this.events.emit('columnschange', { columns: this.columnModel.columns });
+    return true;
+  }
+
+  moveColumn(columnId, targetIndex) {
+    if (!this.columnModel.moveColumn(columnId, targetIndex)) return false;
+    this.#syncContentSize();
+    this.events.emit('columnschange', { columns: this.columnModel.columns });
+    return true;
+  }
+
+  sortBy(columnId, direction = 'toggle') {
+    const column = this.columnModel.getColumn(columnId);
+    if (!column || column.sortable === false) return false;
+    const current = this.columnModel.sort;
+    let nextDirection = direction;
+    if (direction === 'toggle') {
+      if (current.columnId !== columnId) nextDirection = 'asc';
+      else if (current.direction === 'asc') nextDirection = 'desc';
+      else if (current.direction === 'desc') nextDirection = null;
+      else nextDirection = 'asc';
+    }
+    if (nextDirection !== 'asc' && nextDirection !== 'desc') {
+      this.clearSort();
+      return true;
+    }
+    this.columnModel.setSort(columnId, nextDirection);
+    this.sortValueSnapshot = createSortValueSnapshot(column, this.model.nodes, this.model.dynamicState);
+    this.rowModel.setSortComparator((a, b) => compareColumnValues(column, a, b, this.model.dynamicState, this.sortValueSnapshot) * (nextDirection === 'desc' ? -1 : 1));
+    this.#rebuildRows();
+    this.events.emit('sortchange', { columnId, direction: nextDirection });
+    return true;
+  }
+
+  clearSort() {
+    this.columnModel.setSort(null, null);
+    this.sortValueSnapshot = null;
+    this.rowModel.setSortComparator(null);
+    this.#rebuildRows();
+    this.events.emit('sortchange', { columnId: null, direction: null });
+  }
+
+  setFilter(queryOrPredicate = '') {
+    this.filterQuery = typeof queryOrPredicate === 'string' ? queryOrPredicate : '';
+    if (typeof queryOrPredicate === 'function') {
+      this.rowModel.setFilterPredicate(queryOrPredicate);
+    } else {
+      const query = queryOrPredicate.trim().toLowerCase();
+      this.rowModel.setFilterPredicate(query ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', query) : null);
+    }
+    this.#rebuildRows();
+    this.events.emit('filterchange', { query: this.filterQuery, visibleRows: this.rowModel.rows.length });
+  }
+
+  clearFilter() {
+    this.setFilter('');
+  }
+
+  async setFilterAsync(query = '') {
+    if (!this.workerClient || typeof query !== 'string') {
+      this.setFilter(query);
+      return this.rowModel.rows;
+    }
+    const totalStart = now();
+    const revision = ++this.workerRevision;
+    this.filterQuery = query;
+    const normalized = query.trim().toLowerCase();
+    this.rowModel.setFilterPredicate(normalized ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', normalized) : null);
+    const workerStart = now();
+    const result = await this.workerClient.rebuildRows(this.#workerRowOptions({ filterQuery: query }));
+    const workerMs = now() - workerStart;
+    if (revision !== this.workerRevision) return this.rowModel.rows;
+    this.#applyWorkerRows(result);
+    this.events.emit('filterchange', { query: this.filterQuery, visibleRows: this.rowModel.rows.length, worker: true, workerMs, totalMs: now() - totalStart });
+    return this.rowModel.rows;
+  }
+
+  setDynamicState(patches) {
+    this.lastPatchCount = patches.length;
+    this.lastDirtyNodeCount = new Set(patches.map((patch) => patch.id)).size;
+    this.model.applyDynamicPatches(patches);
+    this.renderer.updateDynamicState(patches);
+  }
+
+  setTheme(theme) {
+    const beforeRowHeight = this.rowModel.rowHeight;
+    const beforeIndentWidth = this.rowModel.indentWidth;
+    this.themeManager.setTheme(theme);
+    const nextTheme = this.themeManager.get();
+    this.rowModel.rowHeight = nextTheme.rowHeight;
+    this.rowModel.indentWidth = nextTheme.indentWidth;
+    this.viewport.rowHeight = nextTheme.rowHeight;
+    this.viewport.indentWidth = nextTheme.indentWidth;
+    if (beforeRowHeight !== nextTheme.rowHeight || beforeIndentWidth !== nextTheme.indentWidth) {
+      this.#rebuildRows();
+    }
+    this.events.emit('themechange', { theme: nextTheme });
+  }
+
+  registerIcon(name, imageOrUrl) {
+    return this.iconRegistry.register(name, imageOrUrl);
+  }
+
+  expand(nodeId) {
+    if (!this.expansion.expand(nodeId)) return false;
+    this.#rebuildRows();
+    this.events.emit('expand', { nodeId });
+    return true;
+  }
+
+  collapse(nodeId) {
+    if (!this.expansion.collapse(nodeId)) return false;
+    this.#rebuildRows();
+    this.events.emit('collapse', { nodeId });
+    return true;
+  }
+
+  toggle(nodeId) {
+    return this.expansion.isExpanded(nodeId) ? this.collapse(nodeId) : this.expand(nodeId);
+  }
+
+  expandAll() {
+    this.expansion.expandAll();
+    this.#rebuildRows();
+    this.events.emit('expand', { nodeId: null, all: true });
+  }
+
+  collapseAll() {
+    this.expansion.collapseAll();
+    this.#rebuildRows();
+    this.events.emit('collapse', { nodeId: null, all: true });
+  }
+
+  search(query, options = {}) {
+    for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
+    const results = this.searchIndex.search(query, { limit: options.limit ?? 500, fields: options.fields });
+    this.searchHighlights = new Set(results);
+    const expandedSizeBefore = this.expansion.model.expanded.size;
+    for (const id of results) {
+      if (options.expand !== false) this.expansion.expandAncestors(id);
+      this.patchBatcher.set(id, { highlighted: true });
+    }
+    if (options.expand !== false && this.expansion.model.expanded.size !== expandedSizeBefore) this.#rebuildRows();
+    this.setDynamicState(this.patchBatcher.flush());
+    if (results[0] && options.focus !== false) {
+      this.scrollToNode(results[0], options.align ?? 'nearest');
+      this.focusedId = results[0];
+      this.selection.focused = results[0];
+      if (options.select) this.setSelection([results[0]]);
+      this.events.emit('focuschange', { nodeId: results[0] });
+    }
+    this.events.emit('searchchange', { query, results, cursor: this.searchIndex.cursor, current: this.searchIndex.currentSearchResult() });
+    return results;
+  }
+
+  async searchAsync(query, options = {}) {
+    if (!this.workerClient) return this.search(query, options);
+    const totalStart = now();
+    const revision = ++this.workerRevision;
+    for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
+    const searchStart = now();
+    const results = await this.workerClient.search(query, { limit: options.limit ?? 500, fields: options.fields });
+    const searchMs = now() - searchStart;
+    if (revision !== this.workerRevision) return this.searchIndex.results;
+    this.searchIndex.lastQuery = query;
+    this.searchIndex.results = results;
+    this.searchIndex.cursor = results.length ? 0 : -1;
+    this.searchHighlights = new Set(results);
+    const expandedSizeBefore = this.expansion.model.expanded.size;
+    for (const id of results) {
+      if (options.expand !== false) this.expansion.expandAncestors(id);
+      this.patchBatcher.set(id, { highlighted: true });
+    }
+    let rowMs = 0;
+    const expansionChanged = options.expand !== false && this.expansion.model.expanded.size !== expandedSizeBefore;
+    if (expansionChanged || this.filterQuery) {
+      const rowStart = now();
+      const rowResult = await this.workerClient.rebuildRows(this.#workerRowOptions({ filterQuery: this.filterQuery }));
+      rowMs = now() - rowStart;
+      if (revision !== this.workerRevision) return this.searchIndex.results;
+      this.#applyWorkerRows(rowResult);
+    }
+    this.setDynamicState(this.patchBatcher.flush());
+    if (results[0] && options.focus !== false) {
+      this.scrollToNode(results[0], options.align ?? 'nearest');
+      this.focusedId = results[0];
+      this.selection.focused = results[0];
+      if (options.select) this.setSelection([results[0]]);
+      this.events.emit('focuschange', { nodeId: results[0] });
+    }
+    this.events.emit('searchchange', {
+      query,
+      results,
+      cursor: this.searchIndex.cursor,
+      current: this.searchIndex.currentSearchResult(),
+      worker: true,
+      searchMs,
+      rowMs,
+      workerMs: searchMs + rowMs,
+      totalMs: now() - totalStart,
+    });
+    return results;
+  }
+
+  clearSearch() {
+    this.workerRevision++;
+    for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
+    this.searchHighlights.clear();
+    this.searchIndex.clear();
+    this.setDynamicState(this.patchBatcher.flush());
+    this.events.emit('searchchange', { query: '', results: [], cursor: -1, current: null });
+  }
+
+  getSearchState() {
+    return {
+      query: this.searchIndex.lastQuery,
+      results: this.searchIndex.results.slice(),
+      cursor: this.searchIndex.cursor,
+      current: this.searchIndex.currentSearchResult(),
+      count: this.searchIndex.results.length,
+    };
+  }
+
+  nextSearchResult() {
+    const id = this.searchIndex.nextSearchResult();
+    if (id) this.focusNode(id, { select: false });
+    this.events.emit('searchchange', { query: this.searchIndex.lastQuery, results: this.searchIndex.results.slice(), cursor: this.searchIndex.cursor, current: id });
+    return id;
+  }
+
+  previousSearchResult() {
+    const id = this.searchIndex.previousSearchResult();
+    if (id) this.focusNode(id, { select: false });
+    this.events.emit('searchchange', { query: this.searchIndex.lastQuery, results: this.searchIndex.results.slice(), cursor: this.searchIndex.cursor, current: id });
+    return id;
+  }
+
+  focusNode(nodeId, options = {}) {
+    if (!nodeId) return false;
+    this.expansion.expandAncestors(nodeId);
+    this.#rebuildRows();
+    if (!this.scrollToNode(nodeId, options.align ?? 'nearest')) return false;
+    this.focusedId = nodeId;
+    this.selection.focused = nodeId;
+    if (options.select) this.setSelection([nodeId]);
+    this.events.emit('focuschange', { nodeId });
+    return true;
+  }
+
+  scrollToNode(nodeId, align = 'nearest') {
+    const row = this.rowModel.getRowById(nodeId);
+    if (!row) return false;
+    this.viewport.scrollRowIntoView(row.rowIndex, align);
+    this.events.emit('viewportchange', this.getViewportState());
+    return true;
+  }
+
+  getSelection() {
+    return Array.from(this.selection.selected);
+  }
+
+  setSelection(ids) {
+    this.selection.selected.clear();
+    for (const id of ids) this.selection.selected.add(id);
+    this.selection.focused = ids[ids.length - 1] ?? null;
+    this.focusedId = this.selection.focused;
+    this.anchorRowIndex = this.focusedId ? this.rowModel.getRowById(this.focusedId)?.rowIndex ?? null : null;
+    this.#syncSelectionState();
+    this.events.emit('selectionchange', { selection: this.getSelection(), focusedId: this.focusedId });
+  }
+
+  clearSelection() {
+    this.setSelection([]);
+  }
+
+  setHover(nodeId) {
+    if (this.hoverId === nodeId) return;
+    this.hoverId = nodeId;
+    this.events.emit('nodehover', { nodeId });
+  }
+
+  clickNode(nodeId, event = {}) {
+    const row = this.rowModel.getRowById(nodeId);
+    if (!row) return;
+    this.selectRow(row.rowIndex, event);
+    this.events.emit('nodeclick', { nodeId, row, originalEvent: event });
+  }
+
+  doubleClickNode(nodeId, event = {}) {
+    const row = this.rowModel.getRowById(nodeId);
+    if (!row) return;
+    if (row.hasChildren) this.toggle(nodeId);
+    this.events.emit('nodedblclick', { nodeId, row, originalEvent: event });
+  }
+
+  selectRow(rowIndex, event = {}) {
+    const row = this.rowModel.getRow(rowIndex);
+    if (!row) return false;
+    if (event.shiftKey && this.anchorRowIndex !== null) {
+      this.selection.selected.clear();
+      const start = Math.min(this.anchorRowIndex, rowIndex);
+      const end = Math.max(this.anchorRowIndex, rowIndex);
+      for (let i = start; i <= end; i++) this.selection.selected.add(this.rowModel.rows[i].nodeId);
+    } else if (event.ctrlKey || event.metaKey || event.multi) {
+      if (this.selection.selected.has(row.nodeId)) this.selection.selected.delete(row.nodeId);
+      else this.selection.selected.add(row.nodeId);
+      this.anchorRowIndex = rowIndex;
+    } else {
+      this.selection.selected.clear();
+      this.selection.selected.add(row.nodeId);
+      this.anchorRowIndex = rowIndex;
+    }
+    this.focusedId = row.nodeId;
+    this.selection.focused = row.nodeId;
+    this.#syncSelectionState();
+    this.events.emit('selectionchange', { selection: this.getSelection(), focusedId: this.focusedId });
+    this.events.emit('focuschange', { nodeId: this.focusedId });
+    return true;
+  }
+
+  handleKey(event) {
+    if (!this.rowModel.rows.length) return false;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      this.selection.selected.clear();
+      for (const row of this.rowModel.rows) this.selection.selected.add(row.nodeId);
+      const focusedRow = this.rowModel.getRow(this.#focusedRowIndex());
+      this.focusedId = focusedRow?.nodeId ?? this.focusedId;
+      this.selection.focused = this.focusedId;
+      this.#syncSelectionState();
+      this.events.emit('selectionchange', { selection: this.getSelection(), focusedId: this.focusedId });
+      return true;
+    }
+    const currentRow = this.#focusedRowIndex();
+    let target = currentRow;
+    if (event.key === 'ArrowDown') target = Math.min(this.rowModel.rows.length - 1, currentRow + 1);
+    else if (event.key === 'ArrowUp') target = Math.max(0, currentRow - 1);
+    else if (event.key === 'PageDown') target = Math.min(this.rowModel.rows.length - 1, currentRow + Math.max(1, Math.floor(this.viewport.rowViewportHeight / this.rowModel.rowHeight) - 1));
+    else if (event.key === 'PageUp') target = Math.max(0, currentRow - Math.max(1, Math.floor(this.viewport.rowViewportHeight / this.rowModel.rowHeight) - 1));
+    else if (event.key === 'Home') target = 0;
+    else if (event.key === 'End') target = this.rowModel.rows.length - 1;
+    else if (event.key === 'ArrowRight') {
+      const row = this.rowModel.getRow(currentRow);
+      if (row?.hasChildren && !row.expanded) return this.expand(row.nodeId);
+      if (row?.expanded) target = Math.min(this.rowModel.rows.length - 1, currentRow + 1);
+    } else if (event.key === 'ArrowLeft') {
+      const row = this.rowModel.getRow(currentRow);
+      if (row?.expanded) return this.collapse(row.nodeId);
+      const node = row ? this.model.index.getNode(row.nodeId) : null;
+      const parentRow = node?.parentId ? this.rowModel.getRowById(node.parentId) : null;
+      if (parentRow) target = parentRow.rowIndex;
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      const row = this.rowModel.getRow(currentRow);
+      if (row) this.selectRow(row.rowIndex, { ctrlKey: true });
+      return true;
+    } else return false;
+
+    const row = this.rowModel.getRow(target);
+    if (!row) return false;
+    this.selectRow(target, { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey });
+    this.viewport.scrollRowIntoView(target, 'nearest');
+    this.events.emit('viewportchange', this.getViewportState());
+    return true;
+  }
+
+  scrollBy(dx, dy) {
+    this.viewport.scrollBy(dx, dy);
+    this.events.emit('viewportchange', this.getViewportState());
+  }
+
+  render(time = performance.now()) {
+    this.renderMeasured(time);
+  }
+
+  renderMeasured(time = performance.now()) {
+    this.#syncViewportFromCanvas();
+    const sceneStart = performance.now();
+    this.scene = this.createRenderScene();
+    const sceneMs = performance.now() - sceneStart;
+    this.renderer.setScene(this.scene);
+    const renderStart = performance.now();
+    this.renderer.render(this.scene, time);
+    const renderMs = performance.now() - renderStart;
+    this.lastRenderedRows = this.renderer.renderedRows ?? 0;
+    return { scene: this.scene, sceneMs, renderMs, renderedRows: this.lastRenderedRows };
+  }
+
+  createRenderScene() {
+    const visibleRange = this.rowModel.getVisibleRange(this.viewport, 4);
+    return {
+      rows: this.rowModel.rows,
+      visibleRange,
+      viewport: this.viewport,
+      columns: this.columnModel.columns,
+      theme: this.themeManager.get(),
+      nodes: this.model.nodes,
+      dynamicState: this.model.dynamicState,
+      selection: this.selection.selected,
+      hoverNodeId: this.hoverId,
+      focusNodeId: this.focusedId,
+      searchMatches: this.searchHighlights,
+      sort: this.columnModel.sort,
+      sortValues: this.sortValueSnapshot ? Array.from(this.sortValueSnapshot) : null,
+      filterQuery: this.filterQuery,
+      headerFilter: Boolean(this.inspector?.options?.filter),
+      stats: this.getStats(),
+    };
+  }
+
+  hitTest(clientX, clientY) {
+    const localX = clientX - (this.viewport.renderInsetX ?? 0);
+    const localY = clientY - (this.viewport.renderInsetY ?? 0);
+    if (localX < 0 || localY < 0) return null;
+    const x = localX + this.viewport.scrollX;
+    if (localY < this.viewport.headerHeight) {
+      const resizeColumn = this.columnModel.getResizeHandleAt(x);
+      if (resizeColumn) return { area: 'header', part: 'resize', column: resizeColumn, x, y: localY };
+      const column = this.columnModel.getColumnAt(x);
+      if (column?.kind === 'inspectorPane' && this.inspector?.options?.filter) {
+        return { area: 'header', part: 'filter', column, x, y: localY };
+      }
+      return column ? { area: 'header', part: 'label', column, x, y: localY } : { area: 'header', part: 'header', column: null, x, y: localY };
+    }
+
+    const rowY = localY - this.viewport.headerHeight + this.viewport.scrollY;
+    const rowIndex = Math.floor(rowY / this.rowModel.rowHeight);
+    const row = this.rowModel.getRow(rowIndex);
+    if (!row) return null;
+    const column = this.columnModel.getColumnAt(x);
+    if (!column) return { area: 'row', part: 'row', row, column: null, x, y: rowY };
+
+    let part = 'cell';
+    if (column.kind === 'inspectorPane') {
+      const localX = x - column.x;
+      const node = this.model.nodes[row.nodeIndex];
+      if (node?.data?.valueType === 'array') {
+        if (localX >= column.width - 54 && localX <= column.width - 32) part = 'arrayAdd';
+        else if (localX >= column.width - 28 && localX <= column.width - 6) part = 'arrayRemove';
+        else {
+          const editorLeft = Math.min(Math.max(210, column.width * 0.42), column.width - 180);
+          if (localX >= editorLeft) part = 'editor';
+          else {
+            const treeX = row.depth * this.rowModel.indentWidth;
+            part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
+          }
+        }
+        return { area: 'row', part, row, column, x, y: rowY };
+      }
+      const editorLeft = Math.min(Math.max(210, column.width * 0.42), column.width - 180);
+      if (localX >= editorLeft) part = this.#inspectorEditorPart(row, localX - editorLeft, column.width - editorLeft);
+      else {
+        const treeX = row.depth * this.rowModel.indentWidth;
+        if (localX >= treeX + 4 && localX <= treeX + 22) part = 'chevron';
+        else part = 'label';
+      }
+    } else if (column.kind === 'tree') {
+      const localX = x - column.x;
+      const treeX = row.depth * this.rowModel.indentWidth;
+      if (localX >= treeX + 4 && localX <= treeX + 22) part = 'chevron';
+      else if (localX >= treeX + 26 && localX <= treeX + 44) part = 'icon';
+      else if (localX >= treeX + 48) part = 'label';
+      else part = 'cell';
+    }
+    return { area: 'row', part, row, column, x, y: rowY };
+  }
+
+  #inspectorEditorPart(row, localEditorX, editorWidth) {
+    const node = this.model.nodes[row.nodeIndex];
+    const data = node?.data;
+    if (!data?.inspector) return 'cell';
+    if (data.editorType === 'checkbox') return 'checkbox';
+    if (data.editorType === 'range') {
+      const numberLeft = Math.max(50, editorWidth - 64);
+      return localEditorX >= numberLeft ? 'number' : 'range';
+    }
+    if (data.editorType === 'button') return 'button';
+    return 'editor';
+  }
+
+  getCellClientRect(hit) {
+    if (!hit?.row || !hit.column || !this.canvas) return { x: 0, y: 0, width: 0, height: 0 };
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: rect.left + (this.viewport.renderInsetX ?? 0) + hit.column.x - this.viewport.scrollX,
+      y: rect.top + (this.viewport.renderInsetY ?? 0) + this.viewport.headerHeight + hit.row.y - this.viewport.scrollY,
+      width: hit.column.width,
+      height: hit.row.height,
+    };
+  }
+
+  getHeaderClientRect(hit) {
+    if (!hit?.column || !this.canvas) return { x: 0, y: 0, width: 0, height: 0 };
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: rect.left + (this.viewport.renderInsetX ?? 0) + hit.column.x - this.viewport.scrollX,
+      y: rect.top + (this.viewport.renderInsetY ?? 0),
+      width: hit.column.width,
+      height: this.viewport.headerHeight,
+    };
+  }
+
+  resize(width, height) {
+    this.viewport.resize(width, height);
+    this.events.emit('viewportchange', this.getViewportState());
+  }
+
+  getStats() {
+    return {
+      totalNodes: this.model.nodes.length,
+      visibleRows: this.rowModel.rows.length,
+      renderedRows: this.lastRenderedRows,
+      patchesFrame: this.lastPatchCount,
+      dirtyNodes: this.lastDirtyNodeCount,
+      selectedCount: this.selection.selected.size,
+      rebuildCount: this.rebuildCount,
+    };
+  }
+
+  getViewportState() {
+    return {
+      rowHeight: this.viewport.rowHeight,
+      indentWidth: this.viewport.indentWidth,
+      headerHeight: this.viewport.headerHeight,
+      renderInsetX: this.viewport.renderInsetX,
+      renderInsetY: this.viewport.renderInsetY,
+      scrollX: this.viewport.scrollX,
+      scrollY: this.viewport.scrollY,
+      viewportWidth: this.viewport.viewportWidth,
+      viewportHeight: this.viewport.viewportHeight,
+      contentWidth: this.viewport.contentWidth,
+      contentHeight: this.viewport.contentHeight,
+      zoom: this.viewport.zoom,
+    };
+  }
+
+  #rebuildRows() {
+    const scrollX = this.viewport.scrollX;
+    const scrollY = this.viewport.scrollY;
+    this.rowModel.rebuild();
+    this.#syncContentSize();
+    this.viewport.scrollTo(scrollX, scrollY);
+    this.rebuildCount++;
+  }
+
+  #syncContentSize() {
+    this.viewport.setContentSize(this.columnModel.contentWidth, this.rowModel.contentHeight);
+  }
+
+  #syncSelectionState() {
+    for (const [id, state] of this.model.dynamicState) {
+      if (state.selected) this.patchBatcher.set(id, { selected: false });
+    }
+    for (const id of this.selection.selected) this.patchBatcher.set(id, { selected: true });
+    this.setDynamicState(this.patchBatcher.flush());
+  }
+
+  #focusedRowIndex() {
+    if (this.focusedId) {
+      const row = this.rowModel.getRowById(this.focusedId);
+      if (row) return row.rowIndex;
+    }
+    return Math.max(0, Math.floor(this.viewport.scrollY / this.rowModel.rowHeight));
+  }
+
+  #syncViewportFromCanvas() {
+    if (!this.canvas) return;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    if (width > 0 && height > 0 && (this.viewport.viewportWidth !== width || this.viewport.viewportHeight !== height)) {
+      this.viewport.resize(width, height);
+    }
+  }
+
+  #workerRowOptions(overrides = {}) {
+    return {
+      expandedIds: Array.from(this.expansion.model.expanded),
+      rowHeight: this.rowModel.rowHeight,
+      indentWidth: this.rowModel.indentWidth,
+      sort: this.columnModel.sort,
+      filterQuery: this.filterQuery,
+      ...overrides,
+    };
+  }
+
+  #applyWorkerRows(result) {
+    const scrollX = this.viewport.scrollX;
+    const scrollY = this.viewport.scrollY;
+    this.rowModel.applyRows(result);
+    this.#syncContentSize();
+    this.viewport.scrollTo(scrollX, scrollY);
+    this.rebuildCount++;
+  }
+
+  #rebuildInspectorModel(focusPath = '') {
+    if (!this.inspector) return;
+    const expanded = new Set(this.expansion.model.expanded);
+    const focusId = focusPath ? `model:${focusPath}` : this.focusedId;
+    const nodes = this.inspector.builder.build(this.inspector.model, this.inspector.meta, this.inspector.options);
+    this.model.setTree(nodes);
+    this.expansion.model.expanded = expanded;
+    if (focusId) this.expansion.expandAncestors(focusId);
+    this.searchIndex.rebuild(this.model);
+    this.#rebuildRows();
+    if (focusId) this.focusedId = focusId;
+  }
+}
+
+function createDefaultArrayItem(meta = {}) {
+  if (meta.itemFactory) return meta.itemFactory();
+  if (meta.itemType === 'number') return 0;
+  if (meta.itemType === 'boolean') return false;
+  if (meta.itemType === 'object') return {};
+  return '';
+}
+
+function createSortValueSnapshot(column, nodes, dynamicState) {
+  return new Map(nodes.map((node) => [node.id, column.value(node, dynamicState.get(node.id) ?? {})]));
+}
+
+function compareColumnValues(column, a, b, dynamicState, snapshot = null) {
+  const aValue = snapshot ? snapshot.get(a.id) : column.value(a, dynamicState.get(a.id) ?? {});
+  const bValue = snapshot ? snapshot.get(b.id) : column.value(b, dynamicState.get(b.id) ?? {});
+  if (typeof aValue === 'number' && typeof bValue === 'number') return aValue - bValue;
+  return String(aValue ?? '').localeCompare(String(bValue ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function matchesFilter(node, state, path, query) {
+  const inspector = node.data?.inspector;
+  const values = inspector
+    ? [
+        node.label,
+        node.type,
+        node.data?.path,
+        node.data?.key,
+        node.data?.valueText,
+        node.data?.meta?.description,
+        ...Object.keys(node.data?.meta?.options ?? {}),
+      ]
+    : [
+        node.id,
+        node.label,
+        node.type,
+        path,
+        ...(node.tags ?? []),
+        state.status,
+        state.value,
+      ];
+  return values.some((value) => String(value ?? '').toLowerCase().includes(query));
+}
+
+function now() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}

@@ -1,0 +1,40 @@
+{
+  "name": "virtual-tree-canvas",
+  "version": "0.1.0",
+  "description": "High-performance Canvas2D virtual tree/table widget for very large hierarchical datasets.",
+  "type": "module",
+  "main": "./src/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.js",
+    "./core": "./src/core/index.js",
+    "./inspector": "./src/inspector/index.js",
+    "./renderers": "./src/renderers/index.js",
+    "./input": "./src/input/index.js",
+    "./benchmark": "./src/benchmark/index.js",
+    "./workers/tree-worker.js": "./src/workers/tree-worker.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "demo": "python3 -m http.server 4173 --bind localhost",
+    "test": "node --test test/tree-view-controller.test.js test/theme-icons.test.js test/tree-columns.test.js test/benchmark.test.js test/tree-worker-operations.test.js test/model-inspector.test.js"
+  },
+  "keywords": [
+    "tree",
+    "visualization",
+    "canvas",
+    "canvas2d",
+    "virtual-list",
+    "tree-table",
+    "hierarchy"
+  ],
+  "license": "MIT"
+}
