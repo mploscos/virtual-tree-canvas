@@ -76,6 +76,9 @@ export class TreeViewController {
 
   setData(nodes) {
     this.inspector = null;
+    if (this.columnModel.columns.length === 1 && this.columnModel.columns[0]?.kind === 'inspectorPane') {
+      this.columnModel.setColumns([]);
+    }
     this.model.setTree(nodes);
     this.expansion.expandToDepth(this.initialExpandDepth);
     this.searchIndex.rebuild(this.model);
@@ -626,6 +629,11 @@ export class TreeViewController {
     if (column.kind === 'inspectorPane') {
       const localX = x - column.x;
       const node = this.model.nodes[row.nodeIndex];
+      if (node?.data?.valueType === 'object') {
+        const treeX = row.depth * this.rowModel.indentWidth;
+        part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
+        return { area: 'row', part, row, column, x, y: rowY };
+      }
       if (node?.data?.valueType === 'array') {
         if (localX >= column.width - 54 && localX <= column.width - 32) part = 'arrayAdd';
         else if (localX >= column.width - 28 && localX <= column.width - 6) part = 'arrayRemove';
@@ -718,7 +726,7 @@ export class TreeViewController {
       if (hit.part === 'label' || hit.part === 'chevron') {
         const labelX = hit.row.depth * this.rowModel.indentWidth + (hit.row.hasChildren ? 28 : 24);
         text = node.label ?? node.id;
-        width = Math.max(0, layout.editorLeft - labelX - 8);
+        width = data.valueType === 'object' ? Math.max(0, visibleWidth - labelX - 8) : Math.max(0, layout.editorLeft - labelX - 8);
       } else if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove') {
         return null;
       } else {
@@ -795,6 +803,7 @@ export class TreeViewController {
   }
 
   #syncContentSize() {
+    if (this.viewport.viewportWidth > 1) this.#fitInspectorPaneColumn(this.viewport.viewportWidth);
     this.viewport.setContentSize(this.columnModel.contentWidth, this.rowModel.contentHeight);
   }
 
@@ -841,6 +850,7 @@ export class TreeViewController {
       if (!row) continue;
       const node = this.model.nodes[row.nodeIndex];
       if (!node) continue;
+      if (node.data?.valueType === 'object') continue;
       const indentX = row.depth * this.rowModel.indentWidth;
       const labelX = indentX + (row.hasChildren ? 28 : 24);
       const labelWidth = String(node.label ?? node.id ?? '').length * 6.4;

@@ -385,27 +385,38 @@ function drawSituation(ctx, x, y, size, color) {
 function drawDamage(ctx, x, y, size, color) {
   const cx = x + size * 0.5;
   const cy = y + size * 0.52;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.4;
+  const r = size * 0.42;
 
   ctx.beginPath();
   ctx.moveTo(cx, y + 1);
-  ctx.lineTo(x + size * 0.9, y + size * 0.34);
-  ctx.lineTo(x + size * 0.68, y + size * 0.42);
-  ctx.lineTo(x + size - 1, y + size * 0.64);
-  ctx.lineTo(x + size * 0.62, y + size * 0.6);
-  ctx.lineTo(x + size * 0.72, y + size - 1);
-  ctx.lineTo(cx, y + size * 0.72);
-  ctx.lineTo(x + size * 0.28, y + size - 1);
-  ctx.lineTo(x + size * 0.38, y + size * 0.6);
-  ctx.lineTo(x + 1, y + size * 0.64);
-  ctx.lineTo(x + size * 0.32, y + size * 0.42);
-  ctx.lineTo(x + size * 0.1, y + size * 0.34);
+  ctx.lineTo(cx + r * 0.28, cy - r * 0.28);
+  ctx.lineTo(x + size - 1, y + size * 0.2);
+  ctx.lineTo(cx + r * 0.55, cy + r * 0.05);
+  ctx.lineTo(x + size * 0.92, y + size * 0.76);
+  ctx.lineTo(cx + r * 0.22, cy + r * 0.32);
+  ctx.lineTo(cx + r * 0.08, y + size - 1);
+  ctx.lineTo(cx - r * 0.18, cy + r * 0.34);
+  ctx.lineTo(x + size * 0.14, y + size * 0.86);
+  ctx.lineTo(cx - r * 0.42, cy + r * 0.12);
+  ctx.lineTo(x + 1, y + size * 0.38);
+  ctx.lineTo(cx - r * 0.3, cy - r * 0.18);
   ctx.closePath();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = color;
   ctx.fill();
+
+  ctx.fillStyle = '#fff7ed';
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.13, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.08, y + size * 0.08);
+  ctx.lineTo(x + size * 0.2, y + size * 0.2);
+  ctx.moveTo(x + size * 0.84, y + size * 0.88);
+  ctx.lineTo(x + size * 0.94, y + size * 0.98);
+  ctx.moveTo(x + size * 0.9, y + size * 0.06);
+  ctx.lineTo(x + size * 0.82, y + size * 0.18);
+  ctx.stroke();
 }

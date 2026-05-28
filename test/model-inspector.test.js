@@ -97,6 +97,47 @@ test('pane inspector column fits the canvas width after resize', () => {
   assert.equal(controller.viewport.contentWidth, 320);
 });
 
+test('pane inspector object rows use the whole column as a label area', () => {
+  const controller = new TreeViewController({ rowHeight: 20, headerHeight: 24 });
+  controller.resize(500, 160);
+  controller.setModel({ southAircraft_b0_1_aircraft_name_that_needs_room: { range: 10 } }, {}, {
+    presentation: 'pane',
+    flatRoot: true,
+  });
+
+  const hit = controller.hitTest(480, 24 + 10);
+
+  assert.equal(hit.part, 'label');
+  assert.equal(hit.row.nodeId, 'model:southAircraft_b0_1_aircraft_name_that_needs_room');
+});
+
+test('pane inspector object labels do not reserve editor width for editable rows', () => {
+  const controller = new TreeViewController({ rowHeight: 20, headerHeight: 24 });
+  controller.resize(500, 160);
+  controller.setModel({
+    southAircraft_b0_1_aircraft_name_that_needs_room: { x: 1 },
+    y: 2,
+  }, {}, { presentation: 'pane', flatRoot: true });
+
+  const scene = controller.createRenderScene();
+
+  assert.ok(scene.inspectorPaneLabelEnd < 100);
+});
+
+test('setData after pane inspector restores a tree column', () => {
+  const controller = new TreeViewController({ rowHeight: 20, headerHeight: 0 });
+  controller.resize(320, 160);
+  controller.setModel({}, {}, { presentation: 'pane', flatRoot: true, filter: true });
+
+  controller.setData([
+    { id: 'southAircraft_b0_1', label: 'southAircraft_b0_1.aircraft', type: 'platform', icon: 'aircraft' },
+  ]);
+
+  assert.equal(controller.columnModel.columns[0].kind, 'tree');
+  assert.equal(controller.columnModel.columns[0].width, 320);
+  assert.equal(controller.viewport.contentWidth, 320);
+});
+
 test('setModel supports flatRoot and enforceMeta inspector options', () => {
   const controller = new TreeViewController();
   controller.setModel({ sensor: { range: 10, gain: 0.5 } }, {

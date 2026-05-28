@@ -1,5 +1,9 @@
 import { IconRegistry } from '../core/icon-registry.js';
 
+const DISABLED_ALPHA = 0.72;
+const SCROLL_INDICATOR_HOLD_MS = 1600;
+const SCROLL_INDICATOR_FADE_MS = 700;
+
 export class TreeRowRenderer {
   constructor({ iconRegistry } = {}) {
     this.canvas = null;
@@ -7,6 +11,8 @@ export class TreeRowRenderer {
     this.scene = null;
     this.iconRegistry = iconRegistry ?? new IconRegistry();
     this.renderedRows = 0;
+    this.scrollIndicatorState = null;
+    this.scrollIndicatorVisibleUntil = 0;
   }
 
   /** @param {HTMLCanvasElement} canvas */
@@ -24,7 +30,7 @@ export class TreeRowRenderer {
     // Canvas2D reads the state map directly; patches still stay on the hot path.
   }
 
-  render(scene) {
+  render(scene, time = performance.now()) {
     if (scene?.rows) this.scene = scene;
     if (!this.canvas || !this.ctx || !this.scene) return;
     const { viewport, theme } = this.scene;
@@ -47,7 +53,7 @@ export class TreeRowRenderer {
     ctx.translate(viewport.renderInsetX ?? 0, viewport.renderInsetY ?? 0);
     this.#drawHeader(ctx);
     this.#drawRows(ctx);
-    this.#drawScrollIndicator(ctx);
+    this.#drawScrollIndicator(ctx, time);
     ctx.restore();
   }
 
@@ -119,10 +125,12 @@ export class TreeRowRenderer {
     ctx.restore();
   }
 
-  #drawScrollIndicator(ctx) {
-    const { viewport, theme } = this.scene;
+  #drawScrollIndicator(ctx, time) {
+    const { viewport, theme, rows } = this.scene;
     const maxY = Math.max(0, viewport.contentHeight - viewport.rowViewportHeight);
     if (maxY <= 0 || viewport.viewportHeight <= viewport.headerHeight + 12) return;
+    const alpha = this.#scrollIndicatorAlpha(viewport, rows?.length ?? 0, time);
+    if (alpha <= 0) return;
 
     const trackTop = viewport.headerHeight + 4;
     const trackHeight = Math.max(1, viewport.viewportHeight - viewport.headerHeight - 8);
@@ -133,20 +141,38 @@ export class TreeRowRenderer {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineWidth = 2;
-    ctx.globalAlpha = 0.28;
+    ctx.globalAlpha = 0.28 * alpha;
     ctx.strokeStyle = theme.colors.guide;
     ctx.beginPath();
     ctx.moveTo(x, trackTop);
     ctx.lineTo(x, trackTop + trackHeight);
     ctx.stroke();
 
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.9 * alpha;
     ctx.strokeStyle = theme.colors.focus;
     ctx.beginPath();
     ctx.moveTo(x, thumbY);
     ctx.lineTo(x, thumbY + thumbHeight);
     ctx.stroke();
     ctx.restore();
+  }
+
+  #scrollIndicatorAlpha(viewport, rowCount, time) {
+    const nextState = {
+      scrollY: viewport.scrollY,
+      contentHeight: viewport.contentHeight,
+      rowViewportHeight: viewport.rowViewportHeight,
+      viewportHeight: viewport.viewportHeight,
+      rowCount,
+    };
+    if (!sameScrollIndicatorState(this.scrollIndicatorState, nextState)) {
+      this.scrollIndicatorState = nextState;
+      this.scrollIndicatorVisibleUntil = time + SCROLL_INDICATOR_HOLD_MS;
+      return 1;
+    }
+    if (time <= this.scrollIndicatorVisibleUntil) return 1;
+    const fade = 1 - ((time - this.scrollIndicatorVisibleUntil) / SCROLL_INDICATOR_FADE_MS);
+    return clamp01(fade);
   }
 
   #drawRow(ctx, row) {
@@ -226,8 +252,16 @@ export class TreeRowRenderer {
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.globalAlpha = data.disabled ? 0.45 : 1;
+    ctx.globalAlpha = data.disabled ? DISABLED_ALPHA : 1;
     ctx.fillStyle = data.valueType === 'object' || data.valueType === 'array' ? colors.text : colors.textMuted;
+
+    if (data.valueType === 'object') {
+      drawTruncatedText(ctx, node.label ?? node.id, labelX, cy, Math.max(20, rect.x + rect.width - labelX - 8));
+      if (data.meta?.updated) this.#drawUpdatedMarker(ctx, row, theme);
+      ctx.globalAlpha = 1;
+      return;
+    }
+
     const layout = inspectorPaneLayout(rect.width, row.depth, theme.indentWidth, data.editorType, this.scene.inspectorPaneLabelEnd);
     drawTruncatedText(ctx, node.label ?? node.id, labelX, cy, Math.max(20, rect.x + layout.editorLeft - labelX - 8));
 
@@ -238,8 +272,6 @@ export class TreeRowRenderer {
       drawTruncatedText(ctx, data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
       this.#drawSmallButton(ctx, rect.x + rect.width - 54, rect.y + 5, 22, rect.height - 10, '+', theme);
       this.#drawSmallButton(ctx, rect.x + rect.width - 28, rect.y + 5, 22, rect.height - 10, '-', theme);
-    } else if (data.valueType === 'object') {
-      // Pane mode uses object rows as folders; the label is enough.
     } else {
       this.#drawInspectorValueCell(ctx, {
         node,
@@ -264,7 +296,7 @@ export class TreeRowRenderer {
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.globalAlpha = disabled ? 0.45 : 1;
+    ctx.globalAlpha = disabled ? DISABLED_ALPHA : 1;
 
     if (data.editorType === 'checkbox') {
       this.#drawCheckbox(ctx, x, rect.y + rect.height / 2 - 7, Boolean(data.value), theme);
@@ -473,6 +505,15 @@ function resolveNodeStyle(theme, node, state = {}) {
     typeColor: typeRule.color ?? theme.colors.progressFill,
     status,
   };
+}
+
+function sameScrollIndicatorState(a, b) {
+  return Boolean(a) &&
+    a.scrollY === b.scrollY &&
+    a.contentHeight === b.contentHeight &&
+    a.rowViewportHeight === b.rowViewportHeight &&
+    a.viewportHeight === b.viewportHeight &&
+    a.rowCount === b.rowCount;
 }
 
 function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
