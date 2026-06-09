@@ -89,9 +89,8 @@ test('setModel pane presentation does not inject redundant tree column', () => {
 test('pane inspector column fits the canvas width after resize', () => {
   const controller = new TreeViewController();
   controller.setModel({ sensor: { range: 10 } }, {}, { presentation: 'pane' });
-  controller.canvas = { clientWidth: 320, clientHeight: 200 };
 
-  controller.renderMeasured();
+  controller.resize(320, 200);
 
   assert.equal(controller.columnModel.columns[0].width, 320);
   assert.equal(controller.viewport.contentWidth, 320);

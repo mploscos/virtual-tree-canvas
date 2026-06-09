@@ -35,19 +35,21 @@ export class TreeRowRenderer {
     if (!this.canvas || !this.ctx || !this.scene) return;
     const { viewport, theme } = this.scene;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const width = Math.floor(this.canvas.clientWidth * dpr);
-    const height = Math.floor(this.canvas.clientHeight * dpr);
+    const viewportWidth = Math.max(0, viewport.viewportWidth);
+    const viewportHeight = Math.max(0, viewport.viewportHeight);
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+    const width = Math.floor(viewportWidth * dpr);
+    const height = Math.floor(viewportHeight * dpr);
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
-      viewport.resize(this.canvas.clientWidth, this.canvas.clientHeight);
     }
 
     const ctx = this.ctx;
     const colors = theme.colors;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = colors.background;
-    ctx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+    ctx.fillRect(0, 0, viewportWidth, viewportHeight);
 
     ctx.save();
     ctx.translate(viewport.renderInsetX ?? 0, viewport.renderInsetY ?? 0);

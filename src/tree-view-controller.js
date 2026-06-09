@@ -63,6 +63,7 @@ export class TreeViewController {
     this.canvas = canvas;
     this.renderer.initialize(canvas);
     this.renderer.setScene(this.scene);
+    this.#observeCanvasSize();
     return this;
   }
 
@@ -564,7 +565,6 @@ export class TreeViewController {
   }
 
   renderMeasured(time = performance.now()) {
-    this.#syncViewportFromCanvas();
     const sceneStart = performance.now();
     this.scene = this.createRenderScene();
     const sceneMs = performance.now() - sceneStart;
@@ -830,15 +830,16 @@ export class TreeViewController {
     return Math.max(0, Math.floor(this.viewport.scrollY / this.rowModel.rowHeight));
   }
 
-  #syncViewportFromCanvas() {
-    if (!this.canvas) return;
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
-    if (width > 0 && height > 0 && (this.viewport.viewportWidth !== width || this.viewport.viewportHeight !== height)) {
-      this.viewport.resize(width, height);
-      this.#fitInspectorPaneColumn(width);
-      this.#syncContentSize();
-    }
+  #observeCanvasSize() {
+    if (!this.canvas || typeof ResizeObserver === 'undefined') return;
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const width = Math.floor(entry?.contentRect?.width ?? 0);
+      const height = Math.floor(entry?.contentRect?.height ?? 0);
+      if (width > 0 && height > 0) this.resize(width, height);
+    });
+    this.#resizeObserver.observe(this.canvas);
   }
 
   #computeInspectorPaneLabelEnd(visibleRange) {
@@ -901,6 +902,8 @@ export class TreeViewController {
     this.#rebuildRows();
     if (focusId) this.focusedId = focusId;
   }
+
+  #resizeObserver = null;
 }
 
 function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
