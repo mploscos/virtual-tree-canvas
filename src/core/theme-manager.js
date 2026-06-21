@@ -38,6 +38,7 @@ export const darkTheme = {
     warning: { icon: 'warning', color: '#facc15' },
     error: { icon: 'error', color: '#ef4444' },
     task: { icon: 'task', color: '#f97316' },
+    bus: { icon: 'bus', color: '#22d3ee' },
     object: { icon: 'inspector-object', color: '#7dd3fc' },
     array: { icon: 'inspector-array', color: '#a78bfa' },
     string: { icon: 'inspector-value', color: '#94a3b8' },
@@ -108,6 +109,7 @@ export const tacticalTheme = {
     damage: { icon: 'damage', color: '#ff8fab' },
     warning: { icon: 'warning', color: '#ffd166' },
     error: { icon: 'error', color: '#ff5c5c' },
+    bus: { icon: 'bus', color: '#67e8f9' },
   },
 };
 

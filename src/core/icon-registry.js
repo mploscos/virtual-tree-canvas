@@ -73,6 +73,7 @@ export class IconRegistry {
     this.register('warning', drawWarning);
     this.register('error', drawError);
     this.register('task', drawTask);
+    this.register('bus', drawBus);
     this.register('track', drawTrack);
     this.register('point', drawPoint);
     this.register('munition', drawMunition);
@@ -171,6 +172,33 @@ function drawTask(ctx, x, y, size, color) {
   ctx.lineTo(x + size * 0.42, y + size - 5);
   ctx.lineTo(x + size - 5, y + 5);
   ctx.stroke();
+}
+
+function drawBus(ctx, x, y, size, color) {
+  const left = x + size * 0.22;
+  const right = x + size * 0.82;
+  const ys = [y + size * 0.32, y + size * 0.5, y + size * 0.68];
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.25;
+
+  ctx.beginPath();
+  ctx.moveTo(left, ys[0]);
+  ctx.lineTo(right, ys[0]);
+  ctx.moveTo(left, ys[1]);
+  ctx.lineTo(right, ys[1]);
+  ctx.moveTo(left, ys[2]);
+  ctx.lineTo(right, ys[2]);
+  ctx.moveTo(left, ys[0]);
+  ctx.lineTo(left, ys[2]);
+  ctx.stroke();
+
+  for (const cy of ys) {
+    ctx.beginPath();
+    ctx.arc(left, cy, size * 0.075, 0, Math.PI * 2);
+    ctx.arc(right, cy, size * 0.075, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawTrack(ctx, x, y, size, color) {
