@@ -1,4 +1,5 @@
 import { TreeIndex } from './tree-index.js';
+import { mergeDynamicState } from './dynamic-state.js';
 
 /**
  * Owns structural nodes, expanded state, and per-node dynamic state.
@@ -68,7 +69,7 @@ export class TreeModel extends EventTarget {
     for (const patch of patches) {
       const current = this.dynamicState.get(patch.id);
       if (!current) continue;
-      Object.assign(current, patch.state);
+      mergeDynamicState(current, patch.state);
     }
   }
 

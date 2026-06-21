@@ -1,7 +1,8 @@
 export const darkTheme = {
   rowHeight: 28,
   indentWidth: 18,
-  font: '12px system-ui, sans-serif',
+  font: '12px Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+  monoFont: '12px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace',
   colors: {
     background: '#0b1020',
     row: '#0b1020',
@@ -37,6 +38,12 @@ export const darkTheme = {
     warning: { icon: 'warning', color: '#facc15' },
     error: { icon: 'error', color: '#ef4444' },
     task: { icon: 'task', color: '#f97316' },
+    object: { icon: 'inspector-object', color: '#7dd3fc' },
+    array: { icon: 'inspector-array', color: '#a78bfa' },
+    string: { icon: 'inspector-value', color: '#94a3b8' },
+    number: { icon: 'inspector-value', color: '#34d399' },
+    boolean: { icon: 'inspector-value', color: '#22c55e' },
+    null: { icon: 'inspector-value', color: '#64748b' },
   },
   statuses: {
     0: { label: 'OK', color: '#22c55e' },

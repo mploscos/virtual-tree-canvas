@@ -45,9 +45,8 @@ const meta = {
 };
 
 const renderer = new TreeRowRenderer();
-renderer.initialize(canvas);
 const controller = new TreeViewController({ renderer, initialExpandDepth: 3 });
-controller.canvas = canvas;
+controller.initialize(canvas);
 controller.setTheme(themes.dark);
 setInspectorModel();
 

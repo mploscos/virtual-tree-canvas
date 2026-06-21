@@ -61,18 +61,24 @@ export class TreeViewInputController {
       return;
     }
     const hit = this.#hitTest(event);
-    this.canvas.style.cursor = hit?.area === 'header' && hit.part === 'resize' ? 'col-resize' : '';
+    this.canvas.style.cursor = cursorForHit(hit);
     const id = hit?.row?.nodeId ?? null;
-    if (id === this.hoveredId) return;
+    const key = hitKey(hit);
+    if (id === this.hoveredId && key === this.hoveredHitKey) return;
     this.hoveredId = id;
-    this.controller?.setHover(id);
+    this.hoveredHitKey = key;
+    if (this.controller?.setHoverHit) this.controller.setHoverHit(hit);
+    else this.controller?.setHover(id);
     this.onHoverChanged?.(id);
   };
 
   #onMouseLeave = () => {
     if (!this.resizeDrag) this.canvas.style.cursor = '';
     this.hoveredId = null;
-    this.controller?.setHover(null);
+    this.hoveredHitKey = null;
+    this.controller?.setActiveHit?.(null);
+    if (this.controller?.setHoverHit) this.controller.setHoverHit(null);
+    else this.controller?.setHover(null);
     this.onHoverChanged?.(null);
   };
 
@@ -118,6 +124,7 @@ export class TreeViewInputController {
 
   #onMouseDown = (event) => {
     const hit = this.#hitTest(event);
+    this.controller?.setActiveHit?.(hit);
     if (this.cellEditor?.handlePointerDown(event, hit)) {
       event.preventDefault();
       return;
@@ -136,6 +143,7 @@ export class TreeViewInputController {
   #onMouseUp = () => {
     this.resizeDrag = null;
     this.canvas.style.cursor = '';
+    this.controller?.setActiveHit?.(null);
   };
 
   #onKeyDown = (event) => {
@@ -233,4 +241,19 @@ export class TreeViewInputController {
     const part = x >= chevronLeft && x <= chevronRight ? 'chevron' : x <= rowX + 42 ? 'icon' : 'body';
     return { area: 'row', row, x, y, part };
   }
+}
+
+function cursorForHit(hit) {
+  if (hit?.area === 'header' && hit.part === 'resize') return 'col-resize';
+  if (hit?.area === 'header' && hit.part === 'filter') return 'text';
+  if (hit?.area !== 'row') return '';
+  if (hit.part === 'button' || hit.part === 'checkbox' || hit.part === 'arrayAdd' || hit.part === 'arrayRemove' || hit.part === 'chevron') return 'pointer';
+  if (hit.part === 'editor' || hit.part === 'number') return 'text';
+  if (hit.part === 'range') return 'ew-resize';
+  return '';
+}
+
+function hitKey(hit) {
+  if (!hit?.row || !hit.column) return null;
+  return `${hit.row.nodeId}:${hit.column.id}:${hit.part}`;
 }

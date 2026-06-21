@@ -34,6 +34,14 @@ const jsonOutput = document.querySelector('#json-output');
 
 const datasets = new Map();
 const patchBatcher = new PatchBatcher();
+const simulationPatchState = {
+  progress: 0,
+  pulse: 0,
+  value: 0,
+  updatedAt: 0,
+  status: 0,
+  color: undefined,
+};
 let benchmark = new BenchmarkStats();
 let controller = null;
 let input = null;
@@ -44,6 +52,10 @@ let searchTimer = null;
 let filterTimer = null;
 let startingRenderer = false;
 let rendererGeneration = 0;
+let simulationWorker = null;
+let simulationWorkerReady = false;
+let simulationWorkerBusy = false;
+let simulationWorkerPatches = [];
 
 await startRenderer();
 
@@ -109,6 +121,7 @@ async function startRenderer({ keepState = true } = {}) {
   const previousState = keepState && controller ? captureTreeViewState(controller) : null;
   input?.destroy();
   controller?.disableWorkers();
+  stopSimulationWorker();
   shell.querySelector('canvas')?.remove();
   shell.insertAdjacentHTML('afterbegin', '<canvas id="tree"></canvas>');
   canvas = shell.querySelector('#tree');
@@ -116,10 +129,8 @@ async function startRenderer({ keepState = true } = {}) {
   message.textContent = '';
 
   const renderer = new TreeRowRenderer();
-  renderer.initialize(canvas);
-
   const nextController = new TreeViewController({ renderer, initialExpandDepth: 2 });
-  nextController.canvas = canvas;
+  nextController.initialize(canvas);
   nextController.setColumns(defaultTreeTableColumns());
   nextController.setTheme(themes[themeSelect.value]);
   nextController.setData(nodes);
@@ -129,6 +140,7 @@ async function startRenderer({ keepState = true } = {}) {
     return;
   }
   controller = nextController;
+  startSimulationWorker(nodes);
   if (previousState) restoreTreeViewState(controller, previousState);
   else applyScenario();
   if (filterInput.value) await controller.setFilterAsync(filterInput.value);
@@ -174,7 +186,7 @@ function animate(now) {
   lastFrameAt = now;
   if (scenarioSelect.value === 'scroll') controller.scrollBy(0, 14);
 
-  const patches = simulateDynamicUpdates(now);
+  const patches = nextSimulationPatches(now);
   const patchStart = performance.now();
   controller.setDynamicState(patches);
   const patchMs = performance.now() - patchStart;
@@ -195,24 +207,97 @@ function animate(now) {
   requestAnimationFrame(animate);
 }
 
-function simulateDynamicUpdates(now) {
-  const nodeCount = controller.model.nodes.length;
+function startSimulationWorker(datasetNodes) {
+  simulationWorkerReady = false;
+  simulationWorkerBusy = false;
+  simulationWorkerPatches = [];
+  if (typeof Worker === 'undefined') return;
+
+  const generation = rendererGeneration;
+  let worker;
+  try {
+    worker = new Worker(new URL('./update-simulation-worker.js', import.meta.url), { type: 'module' });
+  } catch (_error) {
+    return;
+  }
+  simulationWorker = worker;
+  worker.addEventListener('message', (event) => {
+    if (worker !== simulationWorker || generation !== rendererGeneration) return;
+    const data = event.data;
+    if (data?.type === 'ready') {
+      simulationWorkerReady = true;
+      return;
+    }
+    if (data?.type === 'patches') {
+      simulationWorkerBusy = false;
+      simulationWorkerPatches = Array.isArray(data.patches) ? data.patches : [];
+      if (typeof data.durationMs === 'number') benchmark.recordOperation('worker', data.durationMs);
+    }
+  });
+  worker.addEventListener('error', () => {
+    if (worker !== simulationWorker) return;
+    stopSimulationWorker();
+    message.textContent = 'Simulation worker unavailable; using main thread';
+  });
+  worker.postMessage({
+    type: 'configure',
+    nodes: datasetNodes.map((node) => ({ id: node.id, type: node.type ?? '' })),
+  });
+}
+
+function stopSimulationWorker() {
+  simulationWorker?.terminate();
+  simulationWorker = null;
+  simulationWorkerReady = false;
+  simulationWorkerBusy = false;
+  simulationWorkerPatches = [];
+}
+
+function nextSimulationPatches(now) {
+  const updateCount = currentUpdateCount();
+  if (simulationWorkerReady && simulationWorker) {
+    const patches = simulationWorkerPatches;
+    simulationWorkerPatches = [];
+    requestSimulationFrame(now, updateCount);
+    return patches;
+  }
+  return simulateDynamicUpdatesOnMain(now, updateCount);
+}
+
+function requestSimulationFrame(now, updateCount) {
+  if (!simulationWorker || simulationWorkerBusy) return;
+  simulationWorkerBusy = true;
+  simulationWorker.postMessage({
+    type: 'simulate',
+    now,
+    updateCount,
+    updatedAt: Math.trunc(performance.timeOrigin + now),
+  });
+}
+
+function currentUpdateCount() {
+  const selectedRate = Number(updateRateSelect.value);
+  return scenarioSelect.value === 'heavy' ? Math.max(1000, selectedRate) : selectedRate;
+}
+
+function simulateDynamicUpdatesOnMain(now, updateCount) {
+  const modelNodes = controller.model.nodes;
+  const nodeCount = modelNodes.length;
   if (nodeCount <= 1) return [];
-  const updateCount = scenarioSelect.value === 'heavy' ? Math.max(1000, Number(updateRateSelect.value)) : Number(updateRateSelect.value);
+  const updatedAt = Math.trunc(performance.timeOrigin + now);
   for (let i = 0; i < updateCount; i++) {
     const index = 1 + ((Math.random() * (nodeCount - 1)) | 0);
-    const node = controller.model.nodes[index];
+    const node = modelNodes[index];
     if (!node) continue;
     const id = node.id;
     const progress = (Math.sin(now * 0.002 + index * 0.07) + 1) / 2;
-    patchBatcher.set(id, {
-      progress,
-      pulse: (now * 0.001 + index) % 1,
-      value: progress * 100,
-      updatedAt: Date.now(),
-      status: node.type === 'error' || progress > 0.88 ? 2 : node.type === 'warning' || progress > 0.55 ? 1 : 0,
-      color: progress > 0.94 ? '#fb7185' : undefined,
-    });
+    simulationPatchState.progress = progress;
+    simulationPatchState.pulse = (now * 0.001 + index) % 1;
+    simulationPatchState.value = progress * 100;
+    simulationPatchState.updatedAt = updatedAt;
+    simulationPatchState.status = node.type === 'error' || progress > 0.88 ? 2 : node.type === 'warning' || progress > 0.55 ? 1 : 0;
+    simulationPatchState.color = progress > 0.94 ? '#fb7185' : undefined;
+    patchBatcher.set(id, simulationPatchState);
   }
   return patchBatcher.flush();
 }

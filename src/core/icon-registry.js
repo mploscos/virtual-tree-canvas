@@ -84,6 +84,9 @@ export class IconRegistry {
     this.register('control', drawControl);
     this.register('situation', drawSituation);
     this.register('damage', drawDamage);
+    this.register('inspector-object', drawInspectorObject);
+    this.register('inspector-array', drawInspectorArray);
+    this.register('inspector-value', drawInspectorValue);
   }
 }
 
@@ -419,4 +422,45 @@ function drawDamage(ctx, x, y, size, color) {
   ctx.moveTo(x + size * 0.9, y + size * 0.06);
   ctx.lineTo(x + size * 0.82, y + size * 0.18);
   ctx.stroke();
+}
+
+function drawInspectorObject(ctx, x, y, size, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  const left = x + size * 0.24;
+  const top = y + size * 0.22;
+  const width = size * 0.52;
+  const height = size * 0.56;
+  ctx.strokeRect(left, top, width, height);
+  ctx.beginPath();
+  ctx.moveTo(left + width * 0.28, top);
+  ctx.lineTo(left + width * 0.28, top + height);
+  ctx.moveTo(left + width * 0.72, top);
+  ctx.lineTo(left + width * 0.72, top + height);
+  ctx.stroke();
+}
+
+function drawInspectorArray(ctx, x, y, size, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  const cx = x + size * 0.5;
+  const cy = y + size * 0.5;
+  ctx.beginPath();
+  ctx.arc(cx - size * 0.18, cy, size * 0.18, 0, Math.PI * 2);
+  ctx.arc(cx + size * 0.18, cy, size * 0.18, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawInspectorValue(ctx, x, y, size, color) {
+  const cx = x + size * 0.5;
+  const cy = y + size * 0.5;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.11, 0, Math.PI * 2);
+  ctx.fill();
 }

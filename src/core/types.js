@@ -20,6 +20,9 @@
  * @property {boolean} [selected]
  * @property {boolean} [highlighted]
  * @property {boolean} [visible]
+ * @property {boolean} [updated]
+ * @property {number} [updatedAt]
+ * @property {string} [icon]
  */
 
 /**
@@ -41,4 +44,3 @@
  * @property {string} id
  * @property {NodeDynamicState} state
  */
-

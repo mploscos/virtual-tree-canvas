@@ -214,6 +214,27 @@ test('inspector can disable edit updated markers', () => {
   assert.equal(controller.model.dynamicState.get('model:sensor.range')?.updated, undefined);
 });
 
+test('table inspector hit testing identifies editable control parts', () => {
+  const controller = new TreeViewController({ rowHeight: 28, headerHeight: 28 });
+  controller.resize(900, 200);
+  controller.setModel({
+    enabled: true,
+    action: false,
+    mode: 'track',
+    range: 10,
+  }, {
+    action: { button: 'Run' },
+    mode: { options: { Search: 'search', Track: 'track' } },
+    range: { min: 0, max: 100, step: 1 },
+  });
+
+  assert.equal(controller.hitTest(320, 28 + 28 + 14).part, 'checkbox');
+  assert.equal(controller.hitTest(320, 28 + 56 + 14).part, 'button');
+  assert.equal(controller.hitTest(320, 28 + 84 + 14).part, 'editor');
+  assert.equal(controller.hitTest(320, 28 + 112 + 14).part, 'range');
+  assert.equal(controller.hitTest(548, 28 + 112 + 14).part, 'number');
+});
+
 test('inspector can add and remove array items', () => {
   const model = { tracks: [] };
   const controller = new TreeViewController();

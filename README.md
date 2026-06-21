@@ -131,7 +131,8 @@ tree.setModel(model, meta, {
   presentation: 'pane',
   flatRoot: true,    // render root properties directly
   enforceMeta: true, // fields without metadata are readonly/disabled
-  filter: true       // use the header as a filter input
+  filter: true,      // use the header as a filter input
+  markUpdated: false // do not show update dots for local user edits
 });
 ```
 

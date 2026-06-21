@@ -78,6 +78,7 @@ export class CellEditorManager {
     const rect = this.#clampRectToHost(this.#overlayRect(hit), 4);
     const hostRect = this.host.getBoundingClientRect();
     const element = createEditorElement(data);
+    element.className = `vtc-editor vtc-editor-${data.editorType}`;
     Object.assign(element.style, {
       position: 'absolute',
       left: `${rect.x - hostRect.left}px`,
@@ -90,12 +91,14 @@ export class CellEditorManager {
       boxSizing: 'border-box',
       margin: '0',
       outline: 'none',
-      border: '1px solid #38bdf8',
-      borderRadius: '3px',
-      background: '#0b1020',
+      appearance: 'none',
+      border: '1px solid rgba(56, 189, 248, 0.65)',
+      borderRadius: '6px',
+      background: '#0f172a',
       color: '#e5e7eb',
-      font: '12px system-ui, sans-serif',
-      padding: data.editorType === 'color' ? '0 2px' : '0 6px',
+      boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.8), 0 8px 20px rgba(0, 0, 0, 0.28)',
+      font: editorFont(data),
+      padding: data.editorType === 'color' ? '0 2px' : data.editorType === 'select' ? '0 22px 0 8px' : '0 8px',
       textAlign: data.editorType === 'number' || data.editorType === 'range' ? 'right' : 'left',
     });
     const commit = () => {
@@ -154,7 +157,7 @@ export class CellEditorManager {
       borderRadius: '4px',
       background: '#0b1020',
       color: '#e5e7eb',
-      font: '12px system-ui, sans-serif',
+      font: SANS_FONT,
       padding: '0 8px',
     });
     element.addEventListener('input', () => this.controller.setFilter(element.value));
@@ -267,7 +270,10 @@ function createEditorElement(data) {
     return select;
   }
   const input = document.createElement('input');
-  input.type = data.editorType === 'color' ? 'color' : data.editorType === 'number' || data.editorType === 'range' ? 'number' : 'text';
+  input.type = data.editorType === 'color' ? 'color' : 'text';
+  if (data.editorType === 'number' || data.editorType === 'range') {
+    input.inputMode = data.meta.integer ? 'numeric' : 'decimal';
+  }
   input.value = data.value ?? '';
   if (data.meta.min !== undefined) input.min = data.meta.min;
   if (data.meta.max !== undefined) input.max = data.meta.max;
@@ -288,11 +294,24 @@ function ensureOverlayHost(host) {
 }
 
 function parseEditorValue(element, data) {
-  if (data.editorType === 'number' || data.editorType === 'range') return data.meta.integer ? Number.parseInt(element.value, 10) : Number(element.value);
+  if (data.editorType === 'number' || data.editorType === 'range') {
+    const value = data.meta.integer ? Number.parseInt(element.value, 10) : Number(element.value);
+    if (!Number.isFinite(value)) return data.value;
+    const min = Number.isFinite(data.meta.min) ? data.meta.min : -Infinity;
+    const max = Number.isFinite(data.meta.max) ? data.meta.max : Infinity;
+    return Math.max(min, Math.min(max, value));
+  }
   if (data.editorType === 'select') {
     const values = Object.values(data.meta.options ?? {});
     const match = values.find((value) => String(value) === element.value);
     return match ?? element.value;
   }
   return element.value;
+}
+
+const SANS_FONT = '12px Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+const MONO_FONT = '12px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace';
+
+function editorFont(data) {
+  return data.editorType === 'number' || data.editorType === 'range' ? MONO_FONT : SANS_FONT;
 }

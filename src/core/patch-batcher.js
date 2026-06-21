@@ -1,3 +1,5 @@
+import { cloneDynamicState, mergeDynamicState } from './dynamic-state.js';
+
 export class PatchBatcher {
   constructor() {
     /** @type {Map<string, import('./types.js').NodeDynamicState>} */
@@ -7,8 +9,8 @@ export class PatchBatcher {
   /** @param {string} id @param {import('./types.js').NodeDynamicState} state */
   set(id, state) {
     const current = this.pending.get(id);
-    if (current) Object.assign(current, state);
-    else this.pending.set(id, { ...state });
+    if (current) mergeDynamicState(current, state);
+    else this.pending.set(id, cloneDynamicState(state));
   }
 
   /** @param {Array<import('./types.js').DynamicPatch>} patches */
@@ -26,4 +28,3 @@ export class PatchBatcher {
     return this.pending.size;
   }
 }
-

@@ -44,6 +44,9 @@ export class TreeViewController {
     this.searchHighlights = new Set();
     this.filterQuery = '';
     this.hoverId = null;
+    this.hoverPart = null;
+    this.activeId = null;
+    this.activePart = null;
     this.focusedId = null;
     this.anchorRowIndex = null;
     this.lastPatchCount = 0;
@@ -63,6 +66,7 @@ export class TreeViewController {
     this.canvas = canvas;
     this.renderer.initialize(canvas);
     this.renderer.setScene(this.scene);
+    this.#resizeToCanvasClientSize();
     this.#observeCanvasSize();
     return this;
   }
@@ -469,7 +473,25 @@ export class TreeViewController {
   setHover(nodeId) {
     if (this.hoverId === nodeId) return;
     this.hoverId = nodeId;
+    this.hoverPart = null;
     this.events.emit('nodehover', { nodeId });
+  }
+
+  setHoverHit(hit) {
+    const nodeId = hit?.row?.nodeId ?? null;
+    const part = hit?.part ?? null;
+    if (this.hoverId === nodeId && this.hoverPart === part) return;
+    this.hoverId = nodeId;
+    this.hoverPart = part;
+    this.events.emit('nodehover', { nodeId, part });
+  }
+
+  setActiveHit(hit) {
+    const nodeId = hit?.row?.nodeId ?? null;
+    const part = hit?.part ?? null;
+    if (this.activeId === nodeId && this.activePart === part) return;
+    this.activeId = nodeId;
+    this.activePart = part;
   }
 
   clickNode(nodeId, event = {}) {
@@ -588,6 +610,9 @@ export class TreeViewController {
       dynamicState: this.model.dynamicState,
       selection: this.selection.selected,
       hoverNodeId: this.hoverId,
+      hoverPart: this.hoverPart,
+      activeNodeId: this.activeId,
+      activePart: this.activePart,
       focusNodeId: this.focusedId,
       searchMatches: this.searchHighlights,
       sort: this.columnModel.sort,
@@ -661,6 +686,8 @@ export class TreeViewController {
       else if (localX >= treeX + 26 && localX <= treeX + 44) part = 'icon';
       else if (localX >= treeX + 48) part = 'label';
       else part = 'cell';
+    } else if (column.kind === 'inspectorValue') {
+      part = this.#inspectorEditorPart(row, x - column.x, column.width);
     }
     return { area: 'row', part, row, column, x, y: rowY };
   }
@@ -840,6 +867,13 @@ export class TreeViewController {
       if (width > 0 && height > 0) this.resize(width, height);
     });
     this.#resizeObserver.observe(this.canvas);
+  }
+
+  #resizeToCanvasClientSize() {
+    if (!this.canvas) return;
+    const width = Math.floor(this.canvas.clientWidth || this.canvas.getBoundingClientRect().width || 0);
+    const height = Math.floor(this.canvas.clientHeight || this.canvas.getBoundingClientRect().height || 0);
+    if (width > 0 && height > 0) this.resize(width, height);
   }
 
   #computeInspectorPaneLabelEnd(visibleRange) {
