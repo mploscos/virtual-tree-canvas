@@ -101,7 +101,10 @@ export class CellEditorManager {
       padding: data.editorType === 'color' ? '0 2px' : data.editorType === 'select' ? '0 22px 0 8px' : '0 8px',
       textAlign: data.editorType === 'number' || data.editorType === 'range' ? 'right' : 'left',
     });
+    let committed = false;
     const commit = () => {
+      if (committed) return;
+      committed = true;
       const nextValue = parseEditorValue(element, data);
       this.controller.updateInspectorValue(node.id, nextValue, data.editorType);
       this.#removeOverlay();
@@ -110,6 +113,9 @@ export class CellEditorManager {
       if (event.key === 'Enter') commit();
       else if (event.key === 'Escape') this.#removeOverlay();
     });
+    if (data.editorType === 'select') {
+      element.addEventListener('change', commit);
+    }
     element.addEventListener('blur', commit);
     ensureOverlayHost(this.host);
     this.host.append(element);
