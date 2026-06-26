@@ -110,19 +110,86 @@ function drawFolder(ctx, x, y, size, color) {
 }
 
 function drawAircraft(ctx, x, y, size, color) {
+  const cx = x + size * 0.5;
+  ctx.save();
+  ctx.strokeStyle = color;
   ctx.fillStyle = color;
+  ctx.lineWidth = 1.35;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
   ctx.beginPath();
-  ctx.moveTo(x + size * 0.5, y + 1);
-  ctx.lineTo(x + size * 0.62, y + size * 0.58);
-  ctx.lineTo(x + size - 1, y + size * 0.72);
-  ctx.lineTo(x + size * 0.58, y + size * 0.78);
-  ctx.lineTo(x + size * 0.54, y + size - 1);
-  ctx.lineTo(x + size * 0.46, y + size - 1);
-  ctx.lineTo(x + size * 0.42, y + size * 0.78);
-  ctx.lineTo(x + 1, y + size * 0.72);
-  ctx.lineTo(x + size * 0.38, y + size * 0.58);
+  ctx.moveTo(cx, y + 1.5);
+  ctx.lineTo(cx + size * 0.08, y + size * 0.56);
+  ctx.lineTo(cx + size * 0.05, y + size - 2);
+  ctx.lineTo(cx - size * 0.05, y + size - 2);
+  ctx.lineTo(cx - size * 0.08, y + size * 0.56);
   ctx.closePath();
   ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.08, y + size * 0.54);
+  ctx.lineTo(x + 1.5, y + size * 0.76);
+  ctx.lineTo(cx - size * 0.03, y + size * 0.68);
+  ctx.lineTo(cx + size * 0.03, y + size * 0.68);
+  ctx.lineTo(x + size - 1.5, y + size * 0.76);
+  ctx.lineTo(cx + size * 0.08, y + size * 0.54);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.05, y + size * 0.82);
+  ctx.lineTo(x + size * 0.25, y + size - 1.5);
+  ctx.moveTo(cx + size * 0.05, y + size * 0.82);
+  ctx.lineTo(x + size * 0.75, y + size - 1.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTask(ctx, x, y, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.35;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  roundIconRect(ctx, x + 3.5, y + 2.5, size - 7, size - 5, 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.4, y + 2.5);
+  ctx.lineTo(x + size * 0.6, y + 2.5);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x + 5.2, y + size * 0.48);
+  ctx.lineTo(x + size * 0.38, y + size * 0.63);
+  ctx.lineTo(x + size * 0.6, y + size * 0.38);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.62, y + size * 0.6);
+  ctx.lineTo(x + size - 4.5, y + size * 0.6);
+  ctx.moveTo(x + 5, y + size * 0.78);
+  ctx.lineTo(x + size - 4.5, y + size * 0.78);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function roundIconRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, width, height, radius);
+    return;
+  }
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
 }
 
 function drawRadar(ctx, x, y, size, color) {
@@ -160,17 +227,6 @@ function drawError(ctx, x, y, size, color) {
   ctx.lineTo(x + size - 5, y + size - 5);
   ctx.moveTo(x + size - 5, y + 5);
   ctx.lineTo(x + 5, y + size - 5);
-  ctx.stroke();
-}
-
-function drawTask(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x + 3, y + 2, size - 6, size - 4);
-  ctx.beginPath();
-  ctx.moveTo(x + 5, y + size * 0.52);
-  ctx.lineTo(x + size * 0.42, y + size - 5);
-  ctx.lineTo(x + size - 5, y + 5);
   ctx.stroke();
 }
 

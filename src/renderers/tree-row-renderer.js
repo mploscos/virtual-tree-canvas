@@ -1,8 +1,6 @@
 import { IconRegistry } from '../core/icon-registry.js';
 
 const DISABLED_ALPHA = 0.72;
-const SCROLL_INDICATOR_HOLD_MS = 1600;
-const SCROLL_INDICATOR_FADE_MS = 700;
 
 export class TreeRowRenderer {
   constructor({ iconRegistry } = {}) {
@@ -11,8 +9,6 @@ export class TreeRowRenderer {
     this.scene = null;
     this.iconRegistry = iconRegistry ?? new IconRegistry();
     this.renderedRows = 0;
-    this.scrollIndicatorState = null;
-    this.scrollIndicatorVisibleUntil = 0;
   }
 
   /** @param {HTMLCanvasElement} canvas */
@@ -55,7 +51,6 @@ export class TreeRowRenderer {
     ctx.translate(viewport.renderInsetX ?? 0, viewport.renderInsetY ?? 0);
     this.#drawHeader(ctx);
     this.#drawRows(ctx);
-    this.#drawScrollIndicator(ctx, time);
     ctx.restore();
   }
 
@@ -141,56 +136,6 @@ export class TreeRowRenderer {
       if (row) this.#drawRow(ctx, row);
     }
     ctx.restore();
-  }
-
-  #drawScrollIndicator(ctx, time) {
-    const { viewport, theme, rows } = this.scene;
-    const maxY = Math.max(0, viewport.contentHeight - viewport.rowViewportHeight);
-    if (maxY <= 0 || viewport.viewportHeight <= viewport.headerHeight + 12) return;
-    const alpha = this.#scrollIndicatorAlpha(viewport, rows?.length ?? 0, time);
-    if (alpha <= 0) return;
-
-    const trackTop = viewport.headerHeight + 4;
-    const trackHeight = Math.max(1, viewport.viewportHeight - viewport.headerHeight - 8);
-    const thumbHeight = Math.max(18, Math.min(trackHeight, trackHeight * (viewport.rowViewportHeight / viewport.contentHeight)));
-    const thumbY = trackTop + (trackHeight - thumbHeight) * (viewport.scrollY / maxY);
-    const x = Math.max(2, viewport.viewportWidth - 4);
-
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = 0.28 * alpha;
-    ctx.strokeStyle = theme.colors.guide;
-    ctx.beginPath();
-    ctx.moveTo(x, trackTop);
-    ctx.lineTo(x, trackTop + trackHeight);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.9 * alpha;
-    ctx.strokeStyle = theme.colors.focus;
-    ctx.beginPath();
-    ctx.moveTo(x, thumbY);
-    ctx.lineTo(x, thumbY + thumbHeight);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  #scrollIndicatorAlpha(viewport, rowCount, time) {
-    const nextState = {
-      scrollY: viewport.scrollY,
-      contentHeight: viewport.contentHeight,
-      rowViewportHeight: viewport.rowViewportHeight,
-      viewportHeight: viewport.viewportHeight,
-      rowCount,
-    };
-    if (!sameScrollIndicatorState(this.scrollIndicatorState, nextState)) {
-      this.scrollIndicatorState = nextState;
-      this.scrollIndicatorVisibleUntil = time + SCROLL_INDICATOR_HOLD_MS;
-      return 1;
-    }
-    if (time <= this.scrollIndicatorVisibleUntil) return 1;
-    const fade = 1 - ((time - this.scrollIndicatorVisibleUntil) / SCROLL_INDICATOR_FADE_MS);
-    return clamp01(fade);
   }
 
   #drawRow(ctx, row) {
@@ -421,10 +366,7 @@ export class TreeRowRenderer {
     const valueWidth = Math.min(64, Math.max(42, width * 0.28));
     const gap = 8;
     const barWidth = Math.max(24, width - valueWidth - gap);
-    ctx.fillStyle = theme.colors.progressTrack;
-    ctx.fillRect(x, y, barWidth, 8);
-    ctx.fillStyle = theme.colors.progressFill;
-    ctx.fillRect(x, y, barWidth * ratio, 8);
+    this.#drawMeterBar(ctx, x, y + 0.5, barWidth, 7, ratio, theme.colors.progressFill, theme);
     this.#drawControlSurface(ctx, x + barWidth + gap, y - 6, valueWidth, 20, theme, {
       hovered: Boolean(state.hoveredNumber),
       active: Boolean(state.activeNumber),
@@ -495,27 +437,53 @@ export class TreeRowRenderer {
   #drawStatusCell(ctx, { rect, style, theme }) {
     const badgeWidth = Math.min(58, rect.width - 12);
     const x = rect.x + (rect.width - badgeWidth) / 2;
-    const y = rect.y + (rect.height - 16) / 2;
-    ctx.fillStyle = style.status.color;
-    roundRect(ctx, x, y, badgeWidth, 16, 8);
+    const y = rect.y + (rect.height - 17) / 2;
+    const statusColor = style.status.color;
+    const baseFill = theme.colors.badgeFill ?? theme.colors.progressTrack;
+    ctx.fillStyle = mixColor(baseFill, statusColor, 0.18);
+    roundRect(ctx, x, y, badgeWidth, 17, 8);
     ctx.fill();
-    ctx.fillStyle = theme.colors.badgeText;
+    ctx.strokeStyle = mixColor(theme.colors.border, statusColor, 0.42);
+    ctx.stroke();
+    ctx.fillStyle = mixColor(theme.colors.text, statusColor, 0.36);
     ctx.font = '10px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    drawTruncatedText(ctx, style.status.label, x + badgeWidth / 2, y + 8, badgeWidth - 8);
+    drawTruncatedText(ctx, style.status.label, x + badgeWidth / 2, y + 8.5, badgeWidth - 8);
     ctx.textAlign = 'left';
   }
 
   #drawProgressCell(ctx, { state, rect, theme, style }) {
     if (state.progress === undefined) return this.#drawTextCell(ctx, { state, rect, theme, style, column: { align: 'right', value: () => '' }, node: {} });
+    const ratio = clamp01(state.progress);
     const barX = rect.x + 10;
-    const barY = rect.y + (rect.height - 8) / 2;
+    const barHeight = 7;
+    const barY = rect.y + (rect.height - barHeight) / 2;
     const barWidth = Math.max(20, rect.width - 20);
+    const fillColor = state.color ?? theme.colors.progressFill;
+    this.#drawMeterBar(ctx, barX, barY, barWidth, barHeight, ratio, fillColor, theme);
+  }
+
+  #drawMeterBar(ctx, x, y, width, height, ratio, fillColor, theme) {
+    const radius = height / 2;
     ctx.fillStyle = theme.colors.progressTrack;
-    ctx.fillRect(barX, barY, barWidth, 8);
-    ctx.fillStyle = state.color ?? theme.colors.progressFill;
-    ctx.fillRect(barX, barY, barWidth * clamp01(state.progress), 8);
+    roundRect(ctx, x, y, width, height, radius);
+    ctx.fill();
+    ctx.strokeStyle = mixColor(theme.colors.border, fillColor, 0.22);
+    ctx.stroke();
+
+    const fillWidth = width * clamp01(ratio);
+    if (fillWidth <= 0) return;
+    ctx.save();
+    roundRect(ctx, x, y, width, height, radius);
+    ctx.clip();
+    ctx.fillStyle = fillColor;
+    roundRect(ctx, x, y, Math.max(1, fillWidth), height, Math.min(radius, fillWidth / 2));
+    ctx.fill();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = mixColor(fillColor, '#ffffff', 0.38);
+    ctx.fillRect(x + 1, y + 1, Math.max(0, fillWidth - 2), 1);
+    ctx.restore();
   }
 
   #drawTextCell(ctx, { node, state, rect, column, theme }) {
@@ -576,15 +544,6 @@ function resolveNodeStyle(theme, node, state = {}) {
     typeColor: typeRule.color ?? theme.colors.progressFill,
     status,
   };
-}
-
-function sameScrollIndicatorState(a, b) {
-  return Boolean(a) &&
-    a.scrollY === b.scrollY &&
-    a.contentHeight === b.contentHeight &&
-    a.rowViewportHeight === b.rowViewportHeight &&
-    a.viewportHeight === b.viewportHeight &&
-    a.rowCount === b.rowCount;
 }
 
 function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {

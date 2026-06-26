@@ -116,3 +116,87 @@ test('ctrl+a selects all visible rows', () => {
 
   assert.deepEqual(controller.getSelection(), ['root', 'a', 'b', 'c']);
 });
+
+test('native scrollbar bridge stays synchronized with viewport scroll', () => {
+  const previousDocument = globalThis.document;
+  const previousComputedStyle = globalThis.getComputedStyle;
+
+  class FakeElement extends EventTarget {
+    constructor() {
+      super();
+      this.children = [];
+      this.parentElement = null;
+      const style = {};
+      style.setProperty = (key, value) => {
+        style[key] = value;
+      };
+      this.style = style;
+      this.className = '';
+      this.id = '';
+      this.textContent = '';
+      this.scrollTop = 0;
+      this.scrollLeft = 0;
+      this.clientWidth = 100;
+      this.clientHeight = 100;
+      this.offsetWidth = 114;
+      this.offsetHeight = 114;
+    }
+
+    appendChild(child) {
+      this.children.push(child);
+      child.parentElement = this;
+      return child;
+    }
+
+    remove() {
+      const siblings = this.parentElement?.children;
+      if (!siblings) return;
+      const index = siblings.indexOf(this);
+      if (index >= 0) siblings.splice(index, 1);
+      this.parentElement = null;
+    }
+  }
+
+  try {
+    const host = new FakeElement();
+    const canvas = new FakeElement();
+    canvas.clientWidth = 200;
+    canvas.clientHeight = 80;
+    canvas.getBoundingClientRect = () => ({ width: 200, height: 80, left: 0, top: 0 });
+    host.appendChild(canvas);
+    const head = new FakeElement();
+    const body = new FakeElement();
+    globalThis.document = {
+      head,
+      body,
+      createElement: () => new FakeElement(),
+      getElementById: (id) => [...head.children, ...body.children].find((child) => child.id === id) ?? null,
+    };
+    globalThis.getComputedStyle = () => ({ position: 'static' });
+
+    const renderer = {
+      initialize() {},
+      setScene() {},
+      render() {},
+      updateDynamicState() {},
+    };
+    const controller = new TreeViewController({ initialExpandDepth: 10, rowHeight: 20, renderer });
+    controller.initialize(canvas);
+    controller.setData(nodes);
+
+    const vertical = host.children.find((child) => child.className === 'virtual-tree-canvas-scrollbar virtual-tree-canvas-scrollbar-y');
+    assert.ok(vertical);
+    assert.ok(head.children.find((child) => child.id === 'virtual-tree-canvas-native-scrollbar-style'));
+    assert.ok(vertical.style['--vtc-scrollbar-thumb']);
+
+    vertical.scrollTop = 40;
+    vertical.dispatchEvent(new Event('scroll'));
+    assert.equal(controller.viewport.scrollY, 40);
+
+    controller.scrollTo(0, 20);
+    assert.equal(vertical.scrollTop, 20);
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.getComputedStyle = previousComputedStyle;
+  }
+});

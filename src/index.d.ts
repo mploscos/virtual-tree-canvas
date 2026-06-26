@@ -71,7 +71,7 @@ export class TreeViewController {
   rowModel: any;
   expansion: any;
   selection: any;
-  constructor(options?: Record<string, any>);
+  constructor(options?: Record<string, any> & { nativeScrollbars?: boolean });
   on(type: string, listener: (event: any) => void): any;
   off(type: string, listener: (event: any) => void): void;
   setData(nodes: TreeNode[]): void;
@@ -89,6 +89,7 @@ export class TreeViewController {
   clearFilter(): void;
   focusNode(nodeId: string, options?: Record<string, any>): boolean;
   scrollToNode(nodeId: string, align?: TreeViewAlign): boolean;
+  scrollTo(x: number, y: number): void;
   getSelection(): string[];
   setSelection(ids: string[]): void;
   clearSelection(): void;

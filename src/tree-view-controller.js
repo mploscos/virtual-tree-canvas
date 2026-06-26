@@ -40,6 +40,7 @@ export class TreeViewController {
     this.themeManager = options.themeManager ?? new ThemeManager();
     this.iconRegistry = options.iconRegistry ?? new IconRegistry();
     this.renderer = options.renderer ?? new TreeRowRenderer({ themeManager: this.themeManager, iconRegistry: this.iconRegistry });
+    this.nativeScrollbars = options.nativeScrollbars !== false;
     this.initialExpandDepth = options.initialExpandDepth ?? 1;
     this.searchHighlights = new Set();
     this.filterQuery = '';
@@ -68,6 +69,7 @@ export class TreeViewController {
     this.renderer.setScene(this.scene);
     this.#resizeToCanvasClientSize();
     this.#observeCanvasSize();
+    this.#setupNativeScrollbars();
     return this;
   }
 
@@ -281,6 +283,7 @@ export class TreeViewController {
     if (beforeRowHeight !== nextTheme.rowHeight || beforeIndentWidth !== nextTheme.indentWidth) {
       this.#rebuildRows();
     }
+    this.#nativeScroll?.applyTheme?.(nextTheme);
     this.events.emit('themechange', { theme: nextTheme });
   }
 
@@ -582,6 +585,11 @@ export class TreeViewController {
     this.events.emit('viewportchange', this.getViewportState());
   }
 
+  scrollTo(x, y) {
+    this.viewport.scrollTo(x, y);
+    this.events.emit('viewportchange', this.getViewportState());
+  }
+
   render(time = performance.now()) {
     this.renderMeasured(time);
   }
@@ -876,6 +884,132 @@ export class TreeViewController {
     if (width > 0 && height > 0) this.resize(width, height);
   }
 
+  #setupNativeScrollbars() {
+    if (!this.nativeScrollbars || !this.canvas || typeof document === 'undefined') return;
+    const host = this.canvas.parentElement;
+    if (!host) return;
+
+    this.#nativeScroll?.destroy?.();
+    ensureNativeScrollbarStyles(document);
+
+    const previousHostPosition = host.style.position;
+    let hostPositionChanged = false;
+    if (typeof getComputedStyle === 'function' && getComputedStyle(host).position === 'static') {
+      host.style.position = 'relative';
+      hostPositionChanged = true;
+    }
+
+    const vertical = document.createElement('div');
+    const verticalSpacer = document.createElement('div');
+    const horizontal = document.createElement('div');
+    const horizontalSpacer = document.createElement('div');
+    const corner = document.createElement('div');
+
+    vertical.className = 'virtual-tree-canvas-scrollbar virtual-tree-canvas-scrollbar-y';
+    horizontal.className = 'virtual-tree-canvas-scrollbar virtual-tree-canvas-scrollbar-x';
+    corner.className = 'virtual-tree-canvas-scrollbar-corner';
+    vertical.appendChild(verticalSpacer);
+    horizontal.appendChild(horizontalSpacer);
+    applyNativeScrollbarTheme([vertical, horizontal, corner], this.themeManager.get());
+
+    const size = nativeScrollbarSize();
+    Object.assign(vertical.style, {
+      position: 'absolute',
+      top: `${this.viewport.headerHeight}px`,
+      right: '0',
+      bottom: '0',
+      width: `${size}px`,
+      overflowX: 'hidden',
+      overflowY: 'auto',
+      zIndex: '4',
+    });
+    Object.assign(horizontal.style, {
+      position: 'absolute',
+      left: '0',
+      right: '0',
+      bottom: '0',
+      height: `${size}px`,
+      overflowX: 'auto',
+      overflowY: 'hidden',
+      zIndex: '4',
+    });
+    Object.assign(corner.style, {
+      position: 'absolute',
+      right: '0',
+      bottom: '0',
+      width: `${size}px`,
+      height: `${size}px`,
+      zIndex: '4',
+      background: 'transparent',
+      pointerEvents: 'none',
+    });
+    Object.assign(verticalSpacer.style, {
+      width: '1px',
+      minHeight: '1px',
+    });
+    Object.assign(horizontalSpacer.style, {
+      height: '1px',
+      minWidth: '1px',
+    });
+
+    host.appendChild(vertical);
+    host.appendChild(horizontal);
+    host.appendChild(corner);
+
+    let syncing = false;
+    const sync = () => {
+      const maxX = Math.max(0, this.viewport.contentWidth - this.viewport.viewportWidth);
+      const maxY = Math.max(0, this.viewport.contentHeight - this.viewport.rowViewportHeight);
+      const showX = maxX > 0;
+      const showY = maxY > 0;
+
+      vertical.style.display = showY ? 'block' : 'none';
+      horizontal.style.display = showX ? 'block' : 'none';
+      corner.style.display = showX && showY ? 'block' : 'none';
+      vertical.style.bottom = showX ? `${size}px` : '0';
+      horizontal.style.right = showY ? `${size}px` : '0';
+      vertical.style.top = `${this.viewport.headerHeight}px`;
+
+      verticalSpacer.style.height = `${Math.ceil(maxY + vertical.clientHeight)}px`;
+      horizontalSpacer.style.width = `${Math.ceil(maxX + horizontal.clientWidth)}px`;
+
+      syncing = true;
+      vertical.scrollTop = this.viewport.scrollY;
+      horizontal.scrollLeft = this.viewport.scrollX;
+      syncing = false;
+    };
+    const onVerticalScroll = () => {
+      if (syncing) return;
+      this.viewport.scrollTo(this.viewport.scrollX, vertical.scrollTop);
+      this.events.emit('viewportchange', this.getViewportState());
+    };
+    const onHorizontalScroll = () => {
+      if (syncing) return;
+      this.viewport.scrollTo(horizontal.scrollLeft, this.viewport.scrollY);
+      this.events.emit('viewportchange', this.getViewportState());
+    };
+    const onViewportChange = () => sync();
+
+    vertical.addEventListener('scroll', onVerticalScroll, { passive: true });
+    horizontal.addEventListener('scroll', onHorizontalScroll, { passive: true });
+    this.viewport.addEventListener('change', onViewportChange);
+    sync();
+
+    this.#nativeScroll = {
+      sync,
+      applyTheme: (theme) => applyNativeScrollbarTheme([vertical, horizontal, corner], theme),
+      destroy: () => {
+        vertical.removeEventListener('scroll', onVerticalScroll);
+        horizontal.removeEventListener('scroll', onHorizontalScroll);
+        this.viewport.removeEventListener('change', onViewportChange);
+        vertical.remove();
+        horizontal.remove();
+        corner.remove();
+        if (hostPositionChanged) host.style.position = previousHostPosition;
+      },
+    };
+  }
+
   #computeInspectorPaneLabelEnd(visibleRange) {
     const column = this.columnModel.columns.find((item) => item.kind === 'inspectorPane');
     if (!column) return 0;
@@ -938,6 +1072,133 @@ export class TreeViewController {
   }
 
   #resizeObserver = null;
+  #nativeScroll = null;
+}
+
+const NATIVE_SCROLLBAR_STYLE_ID = 'virtual-tree-canvas-native-scrollbar-style';
+
+function ensureNativeScrollbarStyles(doc) {
+  if (!doc || typeof doc.createElement !== 'function') return;
+  if (typeof doc.getElementById === 'function' && doc.getElementById(NATIVE_SCROLLBAR_STYLE_ID)) return;
+  const style = doc.createElement('style');
+  style.id = NATIVE_SCROLLBAR_STYLE_ID;
+  style.textContent = `
+.virtual-tree-canvas-scrollbar {
+  --vtc-scrollbar-size: 12px;
+  --vtc-scrollbar-track: rgba(15, 23, 42, 0.32);
+  --vtc-scrollbar-thumb: rgba(148, 163, 184, 0.58);
+  --vtc-scrollbar-thumb-hover: rgba(148, 163, 184, 0.78);
+  --vtc-scrollbar-thumb-active: rgba(56, 189, 248, 0.76);
+  --vtc-scrollbar-thumb-border: rgba(255, 255, 255, 0.08);
+  background: var(--vtc-scrollbar-track);
+  scrollbar-color: var(--vtc-scrollbar-thumb) var(--vtc-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+.virtual-tree-canvas-scrollbar:hover {
+  scrollbar-color: var(--vtc-scrollbar-thumb-hover) var(--vtc-scrollbar-track);
+}
+
+.virtual-tree-canvas-scrollbar::-webkit-scrollbar {
+  width: var(--vtc-scrollbar-size);
+  height: var(--vtc-scrollbar-size);
+}
+
+.virtual-tree-canvas-scrollbar::-webkit-scrollbar-track {
+  background: var(--vtc-scrollbar-track);
+}
+
+.virtual-tree-canvas-scrollbar::-webkit-scrollbar-thumb {
+  min-width: 28px;
+  min-height: 28px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, var(--vtc-scrollbar-thumb-highlight), transparent 52%),
+    var(--vtc-scrollbar-thumb);
+  background-clip: content-box;
+  box-shadow: inset 0 0 0 1px var(--vtc-scrollbar-thumb-border);
+}
+
+.virtual-tree-canvas-scrollbar:hover::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(180deg, var(--vtc-scrollbar-thumb-highlight), transparent 52%),
+    var(--vtc-scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+.virtual-tree-canvas-scrollbar::-webkit-scrollbar-thumb:active {
+  background:
+    linear-gradient(180deg, var(--vtc-scrollbar-thumb-highlight), transparent 52%),
+    var(--vtc-scrollbar-thumb-active);
+  background-clip: content-box;
+}
+
+.virtual-tree-canvas-scrollbar::-webkit-scrollbar-corner,
+.virtual-tree-canvas-scrollbar-corner {
+  background: var(--vtc-scrollbar-track);
+}
+`;
+  const target = doc.head ?? doc.body ?? doc.documentElement;
+  target?.appendChild?.(style);
+}
+
+function applyNativeScrollbarTheme(elements, theme) {
+  const colors = theme?.colors ?? {};
+  const track = alphaHex(colors.row ?? colors.background ?? '#0b1020', 0.74);
+  const thumb = mixHex(colors.borderStrong ?? colors.border ?? '#334155', colors.textMuted ?? colors.focus ?? '#94a3b8', 0.55);
+  const hover = mixHex(thumb, colors.focus ?? '#38bdf8', 0.32);
+  const active = mixHex(thumb, colors.focus ?? '#38bdf8', 0.52);
+  const highlight = alphaHex('#ffffff', 0.2);
+  const border = alphaHex('#ffffff', 0.09);
+  for (const element of elements) {
+    if (!element?.style?.setProperty) continue;
+    element.style.setProperty('--vtc-scrollbar-track', track);
+    element.style.setProperty('--vtc-scrollbar-thumb', thumb);
+    element.style.setProperty('--vtc-scrollbar-thumb-hover', hover);
+    element.style.setProperty('--vtc-scrollbar-thumb-active', active);
+    element.style.setProperty('--vtc-scrollbar-thumb-highlight', highlight);
+    element.style.setProperty('--vtc-scrollbar-thumb-border', border);
+  }
+}
+
+function mixHex(a, b, amount) {
+  const from = parseHexColor(a);
+  const to = parseHexColor(b);
+  if (!from || !to) return amount >= 0.5 ? b : a;
+  const t = Math.max(0, Math.min(1, amount));
+  const value = from.map((channel, index) => Math.round(channel + (to[index] - channel) * t));
+  return `rgb(${value[0]}, ${value[1]}, ${value[2]})`;
+}
+
+function alphaHex(value, alpha) {
+  const color = parseHexColor(value);
+  if (!color) return value;
+  return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${Math.max(0, Math.min(1, alpha))})`;
+}
+
+function parseHexColor(value) {
+  const text = String(value ?? '').trim();
+  const match = /^#([0-9a-f]{6})$/i.exec(text);
+  if (!match) return null;
+  const number = Number.parseInt(match[1], 16);
+  return [(number >> 16) & 255, (number >> 8) & 255, number & 255];
+}
+
+function nativeScrollbarSize() {
+  if (typeof document === 'undefined') return 14;
+  const probe = document.createElement('div');
+  Object.assign(probe.style, {
+    position: 'absolute',
+    top: '-9999px',
+    width: '100px',
+    height: '100px',
+    overflow: 'scroll',
+  });
+  document.body?.appendChild(probe);
+  const size = Math.max(10, probe.offsetWidth - probe.clientWidth || 14);
+  probe.remove();
+  return size;
 }
 
 function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
