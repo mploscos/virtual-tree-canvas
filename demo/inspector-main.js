@@ -1,5 +1,4 @@
-import { CellEditorManager, themes, TreeRowRenderer, TreeViewController } from '../src/index.js';
-import { TreeViewInputController } from '../src/input/index.js';
+import { themes, TreeViewController } from '../src/index.js';
 
 const canvas = document.querySelector('#tree');
 const json = document.querySelector('#json');
@@ -44,22 +43,9 @@ const meta = {
   'actions.calibrate': { button: 'Calibrate', fullWidthButton: true, description: 'Emit an action event' },
 };
 
-const renderer = new TreeRowRenderer();
-const controller = new TreeViewController({ renderer, initialExpandDepth: 3 });
-controller.initialize(canvas);
+const controller = new TreeViewController({ canvas, host: canvasHost, initialExpandDepth: 3 });
 controller.setTheme(themes.dark);
 setInspectorModel();
-
-const cellEditor = new CellEditorManager({ controller, canvas });
-new TreeViewInputController({
-  canvas,
-  controller,
-  viewport: controller.viewport,
-  rowModel: controller.rowModel,
-  expansion: controller.expansion,
-  selection: controller.selection,
-  cellEditor,
-});
 
 controller.on('valuechange', (event) => {
   message.textContent = `${event.detail.path}: ${event.detail.oldValue} -> ${event.detail.newValue}`;

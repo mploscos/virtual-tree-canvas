@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { TreeViewController } from '../src/index.js';
+import { CellEditorManager, TreeViewController, TreeViewInputController } from '../src/index.js';
 
 const nodes = [
   { id: 'root', label: 'Root' },
@@ -117,6 +117,26 @@ test('ctrl+a selects all visible rows', () => {
   assert.deepEqual(controller.getSelection(), ['root', 'a', 'b', 'c']);
 });
 
+test('public initialization APIs fail on invalid dependencies', () => {
+  const controller = new TreeViewController();
+
+  assert.throws(() => controller.initialize({}), /HTMLCanvasElement/);
+  assert.throws(() => new TreeViewInputController({}), /TreeViewController/);
+  assert.throws(() => new CellEditorManager({ controller }), /initialized/);
+});
+
+test('layout metrics update rows through controller API', () => {
+  const controller = createController();
+
+  controller.setLayoutMetrics({ rowHeight: 24, indentWidth: 20, headerHeight: 10 });
+
+  assert.equal(controller.rowModel.rowHeight, 24);
+  assert.equal(controller.viewport.rowHeight, 24);
+  assert.equal(controller.rowModel.indentWidth, 20);
+  assert.equal(controller.viewport.headerHeight, 10);
+  assert.throws(() => controller.setLayoutMetrics({ rowHeight: 0 }), /rowHeight/);
+});
+
 test('native scrollbar bridge stays synchronized with viewport scroll', () => {
   const previousDocument = globalThis.document;
   const previousComputedStyle = globalThis.getComputedStyle;
@@ -162,6 +182,7 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
     const canvas = new FakeElement();
     canvas.clientWidth = 200;
     canvas.clientHeight = 80;
+    canvas.getContext = () => ({});
     canvas.getBoundingClientRect = () => ({ width: 200, height: 80, left: 0, top: 0 });
     host.appendChild(canvas);
     const head = new FakeElement();

@@ -62,6 +62,8 @@ export class TreeRowRenderer {
 
 export class TreeViewController {
   canvas?: HTMLCanvasElement;
+  inputController?: TreeViewInputController | null;
+  cellEditor?: CellEditorManager | null;
   viewport: {
     viewportWidth: number;
     viewportHeight: number;
@@ -72,6 +74,10 @@ export class TreeViewController {
   expansion: any;
   selection: any;
   constructor(options?: Record<string, any> & { nativeScrollbars?: boolean });
+  initialize(canvas: HTMLCanvasElement): this;
+  attachCellEditor(options?: { host?: HTMLElement | null }): CellEditorManager;
+  attachInput(options?: { cellEditor?: CellEditorManager | null }): TreeViewInputController;
+  destroy(): void;
   on(type: string, listener: (event: any) => void): any;
   off(type: string, listener: (event: any) => void): void;
   setData(nodes: TreeNode[]): void;
@@ -79,6 +85,7 @@ export class TreeViewController {
   setColumns(columns: Column[]): void;
   setDynamicState(patches: DynamicPatch[]): void;
   setTheme(theme: any): void;
+  setLayoutMetrics(options?: { rowHeight?: number; indentWidth?: number; headerHeight?: number }): void;
   resize(width: number, height: number): void;
   render(time?: number): void;
   renderMeasured(time?: number): any;
@@ -98,12 +105,12 @@ export class TreeViewController {
 }
 
 export class TreeViewInputController {
-  constructor(options?: Record<string, any>);
+  constructor(options: { controller: TreeViewController; cellEditor?: CellEditorManager | null });
   destroy(): void;
 }
 
 export class CellEditorManager {
-  constructor(options?: Record<string, any>);
+  constructor(options: { controller: TreeViewController; host?: HTMLElement | null });
   destroy(): void;
   close(): void;
 }

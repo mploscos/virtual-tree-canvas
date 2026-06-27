@@ -12,7 +12,9 @@ import {
   TreeViewViewport,
   VisibleRowModel,
 } from './core/index.js';
+import { CellEditorManager } from './inspector/cell-editor-manager.js';
 import { formatInspectorValue, getAtPath, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath } from './inspector/index.js';
+import { TreeViewInputController } from './input/tree-view-input-controller.js';
 import { TreeRowRenderer } from './renderers/index.js';
 
 export class TreeViewController {
@@ -58,12 +60,19 @@ export class TreeViewController {
     this.workerRevision = 0;
     this.sortValueSnapshot = null;
     this.inspector = null;
+    this.inputController = null;
+    this.cellEditor = null;
     this.scene = this.createRenderScene();
 
     if (options.canvas) this.initialize(options.canvas);
+    if (options.editable !== false && (options.host || options.editable)) this.attachCellEditor({ host: options.host });
+    if (options.canvas && options.input !== false) this.attachInput();
   }
 
   initialize(canvas) {
+    if (!canvas || typeof canvas.getContext !== 'function') {
+      throw new TypeError('TreeViewController.initialize requires an HTMLCanvasElement');
+    }
     this.canvas = canvas;
     this.renderer.initialize(canvas);
     this.renderer.setScene(this.scene);
@@ -71,6 +80,39 @@ export class TreeViewController {
     this.#observeCanvasSize();
     this.#setupNativeScrollbars();
     return this;
+  }
+
+  attachCellEditor(options = {}) {
+    if (!this.canvas) throw new Error('TreeViewController.attachCellEditor requires an initialized canvas');
+    this.cellEditor?.destroy?.();
+    this.cellEditor = new CellEditorManager({
+      controller: this,
+      host: options.host,
+    });
+    return this.cellEditor;
+  }
+
+  attachInput(options = {}) {
+    if (!this.canvas) throw new Error('TreeViewController.attachInput requires an initialized canvas');
+    this.inputController?.destroy?.();
+    this.inputController = new TreeViewInputController({
+      controller: this,
+      cellEditor: options.cellEditor ?? this.cellEditor,
+    });
+    return this.inputController;
+  }
+
+  destroy() {
+    this.inputController?.destroy?.();
+    this.cellEditor?.destroy?.();
+    this.disableWorkers();
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    this.#nativeScroll?.destroy?.();
+    this.#nativeScroll = null;
+    this.inputController = null;
+    this.cellEditor = null;
+    this.canvas = null;
   }
 
   on(type, listener) {
@@ -285,6 +327,24 @@ export class TreeViewController {
     }
     this.#nativeScroll?.applyTheme?.(nextTheme);
     this.events.emit('themechange', { theme: nextTheme });
+  }
+
+  setLayoutMetrics(options = {}) {
+    const rowHeight = options.rowHeight ?? this.rowModel.rowHeight;
+    const indentWidth = options.indentWidth ?? this.rowModel.indentWidth;
+    const headerHeight = options.headerHeight ?? this.viewport.headerHeight;
+    assertPositiveNumber(rowHeight, 'rowHeight');
+    assertPositiveNumber(indentWidth, 'indentWidth');
+    assertNonNegativeNumber(headerHeight, 'headerHeight');
+    const rowsChanged = this.rowModel.rowHeight !== rowHeight || this.rowModel.indentWidth !== indentWidth;
+    this.rowModel.rowHeight = rowHeight;
+    this.rowModel.indentWidth = indentWidth;
+    this.viewport.rowHeight = rowHeight;
+    this.viewport.indentWidth = indentWidth;
+    this.viewport.headerHeight = headerHeight;
+    if (rowsChanged) this.#rebuildRows();
+    else this.#syncContentSize();
+    this.events.emit('layoutchange', this.getViewportState());
   }
 
   registerIcon(name, imageOrUrl) {
@@ -1199,6 +1259,18 @@ function nativeScrollbarSize() {
   const size = Math.max(10, probe.offsetWidth - probe.clientWidth || 14);
   probe.remove();
   return size;
+}
+
+function assertPositiveNumber(value, name) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new TypeError(`${name} must be a positive number`);
+  }
+}
+
+function assertNonNegativeNumber(value, name) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new TypeError(`${name} must be a non-negative number`);
+  }
 }
 
 function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {

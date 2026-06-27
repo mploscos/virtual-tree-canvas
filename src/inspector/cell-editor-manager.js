@@ -1,8 +1,10 @@
 export class CellEditorManager {
-  constructor({ controller, canvas, host = null }) {
+  constructor({ controller, host = null }) {
+    if (!controller) throw new TypeError('CellEditorManager requires a TreeViewController');
+    if (!controller.canvas) throw new Error('CellEditorManager requires an initialized TreeViewController canvas');
     this.controller = controller;
-    this.canvas = canvas;
-    this.host = host ?? canvas.parentElement ?? document.body;
+    this.canvas = controller.canvas;
+    this.host = host ?? controller.canvas.parentElement ?? document.body;
     this.overlay = null;
     this.rangeDrag = null;
     this.onMouseMove = this.#onMouseMove.bind(this);

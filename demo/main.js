@@ -1,14 +1,12 @@
 import {
   BenchmarkStats,
   PatchBatcher,
-  TreeRowRenderer,
   TreeViewController,
   captureTreeViewState,
   defaultTreeTableColumns,
   restoreTreeViewState,
   themes,
 } from '../src/index.js';
-import { TreeViewInputController } from '../src/input/index.js';
 import { generateTree } from '../examples/generate-tree.js';
 
 let canvas = document.querySelector('#tree');
@@ -44,7 +42,6 @@ const simulationPatchState = {
 };
 let benchmark = new BenchmarkStats();
 let controller = null;
-let input = null;
 let nodes = getDataset(Number(datasetSelect.value));
 let lastFrameAt = performance.now();
 let lastInputAt = 0;
@@ -119,8 +116,7 @@ async function startRenderer({ keepState = true } = {}) {
   const generation = ++rendererGeneration;
   startingRenderer = true;
   const previousState = keepState && controller ? captureTreeViewState(controller) : null;
-  input?.destroy();
-  controller?.disableWorkers();
+  controller?.destroy();
   stopSimulationWorker();
   shell.querySelector('canvas')?.remove();
   shell.insertAdjacentHTML('afterbegin', '<canvas id="tree"></canvas>');
@@ -128,9 +124,7 @@ async function startRenderer({ keepState = true } = {}) {
   canvas.dataset.multi = multiMode.checked ? 'true' : 'false';
   message.textContent = '';
 
-  const renderer = new TreeRowRenderer();
-  const nextController = new TreeViewController({ renderer, initialExpandDepth: 2 });
-  nextController.initialize(canvas);
+  const nextController = new TreeViewController({ canvas, initialExpandDepth: 2 });
   nextController.setColumns(defaultTreeTableColumns());
   nextController.setTheme(themes[themeSelect.value]);
   nextController.setData(nodes);
@@ -144,7 +138,7 @@ async function startRenderer({ keepState = true } = {}) {
   if (previousState) restoreTreeViewState(controller, previousState);
   else applyScenario();
   if (filterInput.value) await controller.setFilterAsync(filterInput.value);
-  renderer.setScene(controller.createRenderScene());
+  controller.renderer.setScene(controller.createRenderScene());
   controller.on('searchchange', (event) => {
     if (typeof event.detail.totalMs === 'number') benchmark.recordOperation('search', event.detail.totalMs);
     if (typeof event.detail.workerMs === 'number') benchmark.recordOperation('worker', event.detail.workerMs);
@@ -154,14 +148,6 @@ async function startRenderer({ keepState = true } = {}) {
     if (typeof event.detail.workerMs === 'number') benchmark.recordOperation('worker', event.detail.workerMs);
   });
 
-  input = new TreeViewInputController({
-    canvas,
-    controller,
-    viewport: controller.viewport,
-    rowModel: controller.rowModel,
-    expansion: controller.expansion,
-    selection: controller.selection,
-  });
   benchmark = new BenchmarkStats();
   startingRenderer = false;
 }
