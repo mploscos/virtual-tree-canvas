@@ -8,13 +8,21 @@ export class TreeSearchIndex {
 
   /** @param {import('./tree-model.js').TreeModel} model */
   rebuild(model) {
-    this.records = model.nodes.map((node) => ({
-      id: node.id,
-      label: (node.label ?? '').toLowerCase(),
-      path: (model.index.pathById.get(node.id) ?? '').toLowerCase(),
-      tags: (node.tags ?? []).join(' ').toLowerCase(),
-      type: (node.type ?? '').toLowerCase(),
-    }));
+    this.records = model.nodes.map((node) => {
+      const path = model.index.pathById.get(node.id) ?? '';
+      const searchId = searchableNodeId(node);
+      const record = {
+        id: node.id,
+        searchId: normalize(searchId),
+        label: normalize(node.label ?? ''),
+        path: normalize(path),
+        tags: normalize((node.tags ?? []).join(' ')),
+        type: normalize(node.type ?? ''),
+        value: normalize(searchableNodeValue(node)),
+      };
+      record.searchText = defaultSearchText(node, record);
+      return record;
+    });
   }
 
   /**
@@ -32,11 +40,16 @@ export class TreeSearchIndex {
     const fields = options.fields ?? ['label', 'id', 'path', 'tags', 'type'];
     const limit = options.limit ?? 100;
     const results = [];
+    const defaultFields = isDefaultSearchFields(fields);
     for (const record of this.records) {
-      for (const field of fields) {
-        if (String(record[field] ?? '').includes(q)) {
-          results.push(record.id);
-          break;
+      if (defaultFields) {
+        if (record.searchText.includes(q)) results.push(record.id);
+      } else {
+        for (const field of fields) {
+          if (searchFieldValue(record, field).includes(q)) {
+            results.push(record.id);
+            break;
+          }
         }
       }
       if (results.length >= limit) break;
@@ -67,4 +80,43 @@ export class TreeSearchIndex {
     this.cursor = -1;
     this.lastQuery = '';
   }
+}
+
+function isDefaultSearchFields(fields) {
+  return fields.length === 5 && fields.includes('label') && fields.includes('id') && fields.includes('path') && fields.includes('tags') && fields.includes('type');
+}
+
+function searchFieldValue(record, field) {
+  if (field === 'id') return record.searchId || normalize(record.id);
+  return normalize(record[field] ?? '');
+}
+
+function searchableNodeId(node) {
+  if (node?.data?.inspector) return node.data.key ?? node.label ?? node.id;
+  return node?.id ?? '';
+}
+
+function searchableNodeValue(node) {
+  if (!node?.data?.inspector) return '';
+  return node.data.valueText ?? node.data.value ?? '';
+}
+
+function defaultSearchText(node, record) {
+  if (node?.data?.inspector) {
+    const data = node.data;
+    return normalize([
+      record.searchId,
+      node.label ?? '',
+      data.key ?? '',
+      data.valueText ?? '',
+      data.valueType ?? '',
+      record.tags,
+      record.type,
+    ].join(' '));
+  }
+  return normalize(`${record.searchId} ${record.label} ${record.path} ${record.tags} ${record.type}`);
+}
+
+function normalize(value) {
+  return String(value ?? '').toLowerCase();
 }

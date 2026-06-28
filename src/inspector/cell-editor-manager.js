@@ -141,7 +141,7 @@ export class CellEditorManager {
     const rect = this.#clampRectToHost({
       x: headerRect.x + 8,
       y: headerRect.y + 5,
-      width: Math.max(24, Math.min(headerRect.width, this.controller.viewport.viewportWidth) - 16),
+      width: Math.max(24, Math.min(headerRect.width, this.controller.viewport.contentViewportWidth) - 16),
       height: Math.max(20, headerRect.height - 10),
     }, 0);
     const hostRect = this.host.getBoundingClientRect();
@@ -214,7 +214,7 @@ export class CellEditorManager {
   #overlayRect(hit) {
     if (hit.column?.kind !== 'inspectorPane') return this.controller.getCellClientRect(hit);
     const rect = this.controller.getCellClientRect(hit);
-    const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.viewportWidth));
+    const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.contentViewportWidth));
     const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
     const { editorLeft, editorWidth } = this.controller.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
     if (hit.part === 'number') {
@@ -227,7 +227,7 @@ export class CellEditorManager {
   #rangeBarRect(hit) {
     const rect = this.controller.getCellClientRect(hit);
     if (hit.column?.kind === 'inspectorPane') {
-      const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.viewportWidth));
+      const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.contentViewportWidth));
       const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
       const { editorLeft, editorWidth } = this.controller.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
       const valueWidth = Math.min(64, Math.max(42, (editorWidth - 20) * 0.28));

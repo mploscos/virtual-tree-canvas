@@ -58,9 +58,13 @@ export class TreeRowRenderer {
     const { viewport, columns, theme, sort, headerFilter, filterQuery } = this.scene;
     if (viewport.headerHeight <= 0) return;
     const colors = theme.colors;
+    const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
     ctx.save();
     ctx.fillStyle = colors.row;
     ctx.fillRect(0, 0, viewport.viewportWidth, viewport.headerHeight);
+    ctx.beginPath();
+    ctx.rect(0, 0, visibleWidth, viewport.headerHeight);
+    ctx.clip();
     ctx.translate(-viewport.scrollX, 0);
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
@@ -86,7 +90,7 @@ export class TreeRowRenderer {
     ctx.strokeStyle = colors.border;
     ctx.beginPath();
     ctx.moveTo(0, viewport.headerHeight + 0.5);
-    ctx.lineTo(viewport.viewportWidth, viewport.headerHeight + 0.5);
+    ctx.lineTo(visibleWidth, viewport.headerHeight + 0.5);
     ctx.stroke();
   }
 
@@ -94,7 +98,7 @@ export class TreeRowRenderer {
     const colors = theme.colors;
     const x = column.x + 8;
     const y = 5;
-    const visibleRight = viewport.scrollX + viewport.viewportWidth;
+    const visibleRight = viewport.scrollX + (viewport.contentViewportWidth ?? viewport.viewportWidth);
     const visibleWidth = Math.max(1, Math.min(column.x + column.width, visibleRight) - column.x);
     const width = Math.max(40, visibleWidth - 16);
     const height = Math.max(18, viewport.headerHeight - 10);
@@ -126,9 +130,10 @@ export class TreeRowRenderer {
   #drawRows(ctx) {
     const { rows, visibleRange, viewport } = this.scene;
     this.renderedRows = visibleRange.count;
+    const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, viewport.headerHeight, viewport.viewportWidth, viewport.rowViewportHeight);
+    ctx.rect(0, viewport.headerHeight, visibleWidth, viewport.rowViewportHeight);
     ctx.clip();
     ctx.translate(-viewport.scrollX, viewport.headerHeight - viewport.scrollY);
     for (let i = visibleRange.first; i <= visibleRange.last; i++) {
@@ -150,7 +155,7 @@ export class TreeRowRenderer {
     const focused = focusNodeId === row.nodeId;
     const y = row.y;
     const visibleX = viewport.scrollX;
-    const visibleWidth = viewport.viewportWidth;
+    const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
 
     ctx.fillStyle = selected ? colors.rowSelected : highlighted ? colors.rowHighlighted : hovered ? colors.rowHover : colors.row;
     ctx.fillRect(visibleX, y, visibleWidth, row.height);
@@ -209,7 +214,7 @@ export class TreeRowRenderer {
   }
 
   #drawInspectorPaneCell(ctx, { node, row, rect, theme, style, hovered, hoverPart, activePart }) {
-    const visibleRight = this.scene.viewport.scrollX + this.scene.viewport.viewportWidth;
+    const visibleRight = this.scene.viewport.scrollX + (this.scene.viewport.contentViewportWidth ?? this.scene.viewport.viewportWidth);
     rect = { ...rect, width: Math.max(1, Math.min(rect.x + rect.width, visibleRight) - rect.x) };
     const data = node.data ?? {};
     const colors = theme.colors;

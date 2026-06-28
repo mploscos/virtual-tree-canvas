@@ -13,10 +13,17 @@ export class TreeViewViewport extends EventTarget {
     this.contentWidth = 1;
     this.contentHeight = 1;
     this.zoom = 1;
+    this.scrollbarSize = 0;
+    this.verticalScrollbarVisible = false;
+    this.horizontalScrollbarVisible = false;
+  }
+
+  get contentViewportWidth() {
+    return Math.max(1, this.viewportWidth - (this.verticalScrollbarVisible ? this.scrollbarSize : 0));
   }
 
   get rowViewportHeight() {
-    return Math.max(1, this.viewportHeight - this.headerHeight);
+    return Math.max(1, this.viewportHeight - this.headerHeight - (this.horizontalScrollbarVisible ? this.scrollbarSize : 0));
   }
 
   resize(width, height) {
@@ -31,6 +38,21 @@ export class TreeViewViewport extends EventTarget {
     this.contentHeight = Math.max(1, height);
     this.clamp();
     this.dispatchEvent(new Event('change'));
+  }
+
+  setScrollbarState({ size = this.scrollbarSize, vertical = this.verticalScrollbarVisible, horizontal = this.horizontalScrollbarVisible } = {}) {
+    const nextSize = Math.max(0, size);
+    const nextVertical = Boolean(vertical && nextSize > 0);
+    const nextHorizontal = Boolean(horizontal && nextSize > 0);
+    const changed =
+      this.scrollbarSize !== nextSize ||
+      this.verticalScrollbarVisible !== nextVertical ||
+      this.horizontalScrollbarVisible !== nextHorizontal;
+    this.scrollbarSize = nextSize;
+    this.verticalScrollbarVisible = nextVertical;
+    this.horizontalScrollbarVisible = nextHorizontal;
+    this.clamp();
+    return changed;
   }
 
   scrollBy(dx, dy) {
@@ -61,7 +83,7 @@ export class TreeViewViewport extends EventTarget {
   }
 
   clamp() {
-    const maxX = Math.max(0, this.contentWidth - this.viewportWidth);
+    const maxX = Math.max(0, this.contentWidth - this.contentViewportWidth);
     const maxY = Math.max(0, this.contentHeight - this.rowViewportHeight);
     this.scrollX = Math.max(0, Math.min(maxX, this.scrollX));
     this.scrollY = Math.max(0, Math.min(maxY, this.scrollY));

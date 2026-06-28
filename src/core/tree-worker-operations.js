@@ -27,14 +27,18 @@ export function createWorkerTreeState(nodes) {
   const records = nodes.map((node) => {
     const path = pathById.get(node.id) ?? '';
     const tags = (node.tags ?? []).join(' ');
-    return {
+    const record = {
       id: node.id,
+      searchId: searchableNodeId(node),
       label: node.label ?? '',
       path,
       tags,
       type: node.type ?? '',
-      searchText: normalize(`${node.id} ${node.label ?? ''} ${path} ${tags} ${node.type ?? ''}`),
+      value: searchableNodeValue(node),
     };
+    record.searchText = defaultSearchText(node, record);
+    record.filterText = defaultFilterText(node, record);
+    return record;
   });
 
   return { nodes, idToIndex, childrenByParent, parentById, roots, pathById, records };
@@ -47,7 +51,7 @@ export function searchWorkerTree(state, query, { fields = ['label', 'id', 'path'
   const defaultFields = fields.length === 5 && fields.includes('label') && fields.includes('id') && fields.includes('path') && fields.includes('tags') && fields.includes('type');
 
   for (const record of state.records) {
-    const matches = defaultFields ? record.searchText.includes(q) : fields.some((field) => normalize(record[field]).includes(q));
+    const matches = defaultFields ? record.searchText.includes(q) : fields.some((field) => searchFieldValue(record, field).includes(q));
     if (!matches) continue;
     results.push(record.id);
     if (results.length >= limit) break;
@@ -115,7 +119,7 @@ export function getIncludedIdsForQuery(state, query, candidateIds = null) {
   const records = candidateIds ? idsToRecords(state, candidateIds) : state.records;
 
   for (const record of records) {
-    if (!record.searchText.includes(q)) continue;
+    if (!(record.filterText ?? record.searchText).includes(q)) continue;
     matchingIds.push(record.id);
     let id = record.id;
     while (id !== null && id !== undefined && !includedIds.has(id)) {
@@ -151,4 +155,51 @@ function columnValue(node, columnId) {
 
 function normalize(value) {
   return String(value ?? '').toLowerCase();
+}
+
+function searchFieldValue(record, field) {
+  if (field === 'id') return normalize(record.searchId || record.id);
+  return normalize(record[field]);
+}
+
+function searchableNodeId(node) {
+  if (node?.data?.inspector) return node.data.key ?? node.label ?? node.id;
+  return node?.id ?? '';
+}
+
+function searchableNodeValue(node) {
+  if (!node?.data?.inspector) return '';
+  return node.data.valueText ?? node.data.value ?? '';
+}
+
+function defaultSearchText(node, record) {
+  if (node?.data?.inspector) {
+    const data = node.data;
+    return normalize([
+      record.searchId,
+      node.label ?? '',
+      data.key ?? '',
+      data.valueText ?? '',
+      data.valueType ?? '',
+      record.tags,
+      record.type,
+    ].join(' '));
+  }
+  return normalize(`${record.searchId} ${record.label} ${record.path} ${record.tags} ${record.type}`);
+}
+
+function defaultFilterText(node, record) {
+  if (node?.data?.inspector) {
+    const data = node.data;
+    return normalize([
+      node.label ?? '',
+      node.type ?? '',
+      data.path ?? '',
+      data.key ?? '',
+      data.valueText ?? '',
+      data.meta?.description ?? '',
+      ...Object.keys(data.meta?.options ?? {}),
+    ].join(' '));
+  }
+  return record.searchText;
 }

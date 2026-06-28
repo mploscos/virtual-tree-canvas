@@ -18,6 +18,28 @@ test('worker search finds id, label, path, tags, and type', () => {
   assert.deepEqual(searchWorkerTree(state, 'air'), ['a1']);
 });
 
+test('worker inspector search ignores ancestor path matches', () => {
+  const inspectorNodes = [
+    { id: 'model:relativeSpatial', label: 'relativeSpatial', type: 'object', data: { inspector: true, path: 'relativeSpatial', key: 'relativeSpatial', valueText: '{"key":0}', valueType: 'object' } },
+    { id: 'model:relativeSpatial.key', parentId: 'model:relativeSpatial', label: 'key', type: 'number', data: { inspector: true, path: 'relativeSpatial.key', key: 'key', valueText: '0', valueType: 'number' } },
+    { id: 'model:relativeSpatial.type', parentId: 'model:relativeSpatial', label: 'type', type: 'string', data: { inspector: true, path: 'relativeSpatial.type', key: 'type', valueText: 'rpr.SpatialStaticStruct', valueType: 'string' } },
+    { id: 'model:relativeSpatial.value', parentId: 'model:relativeSpatial', label: 'value', type: 'object', data: { inspector: true, path: 'relativeSpatial.value', key: 'value', valueText: '{"worldLocation":{}}', valueType: 'object' } },
+    { id: 'model:relativeSpatial.value.worldLocation', parentId: 'model:relativeSpatial.value', label: 'worldLocation', type: 'object', data: { inspector: true, path: 'relativeSpatial.value.worldLocation', key: 'worldLocation', valueText: '{"x":0}', valueType: 'object' } },
+    { id: 'model:relativeSpatial.value.worldLocation.x', parentId: 'model:relativeSpatial.value.worldLocation', label: 'x', type: 'number', data: { inspector: true, path: 'relativeSpatial.value.worldLocation.x', key: 'x', valueText: '0', valueType: 'number' } },
+  ];
+  const state = createWorkerTreeState(inspectorNodes);
+
+  assert.deepEqual(searchWorkerTree(state, 'spatial'), [
+    'model:relativeSpatial',
+    'model:relativeSpatial.type',
+  ]);
+  assert.deepEqual(getIncludedIdsForQuery(state, 'worldlocation').matchingIds, [
+    'model:relativeSpatial.value',
+    'model:relativeSpatial.value.worldLocation',
+    'model:relativeSpatial.value.worldLocation.x',
+  ]);
+});
+
 test('worker row rebuild applies expansion and filter without requiring expanded ancestors', () => {
   const state = createWorkerTreeState(nodes);
   const result = rebuildWorkerRows(state, {

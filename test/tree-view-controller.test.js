@@ -160,6 +160,8 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
       this.clientHeight = 100;
       this.offsetWidth = 114;
       this.offsetHeight = 114;
+      this.offsetLeft = 0;
+      this.offsetTop = 0;
     }
 
     appendChild(child) {
@@ -182,8 +184,10 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
     const canvas = new FakeElement();
     canvas.clientWidth = 200;
     canvas.clientHeight = 80;
+    canvas.offsetLeft = 7;
+    canvas.offsetTop = 30;
     canvas.getContext = () => ({});
-    canvas.getBoundingClientRect = () => ({ width: 200, height: 80, left: 0, top: 0 });
+    canvas.getBoundingClientRect = () => ({ width: 200, height: 80, left: 7, top: 30 });
     host.appendChild(canvas);
     const head = new FakeElement();
     const body = new FakeElement();
@@ -209,6 +213,11 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
     assert.ok(vertical);
     assert.ok(head.children.find((child) => child.id === 'virtual-tree-canvas-native-scrollbar-style'));
     assert.ok(vertical.style['--vtc-scrollbar-thumb']);
+    assert.equal(vertical.style.left, '193px');
+    assert.equal(vertical.style.top, '58px');
+    assert.equal(vertical.style.height, '52px');
+    assert.equal(controller.viewport.contentViewportWidth, 186);
+    assert.equal(controller.hitTest(187, 30), null);
 
     vertical.scrollTop = 40;
     vertical.dispatchEvent(new Event('scroll'));

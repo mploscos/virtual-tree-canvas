@@ -1,6 +1,6 @@
 {
   "name": "virtual-tree-canvas",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "High-performance Canvas2D virtual tree/table widget for very large hierarchical datasets.",
   "type": "module",
   "main": "./src/index.js",

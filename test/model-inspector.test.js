@@ -194,6 +194,32 @@ test('inspector filter ignores the internal model id prefix', () => {
   );
 });
 
+test('inspector search results only include rows with own matching text', () => {
+  const controller = new TreeViewController();
+  controller.setModel({
+    relativeSpatial: {
+      key: 0,
+      type: 'rpr.SpatialStaticStruct',
+      value: {
+        worldLocation: {
+          x: 0,
+          y: 0,
+          z: 0,
+        },
+      },
+    },
+    removed: false,
+  }, {}, { presentation: 'pane', flatRoot: true });
+
+  assert.deepEqual(controller.search('spatial'), [
+    'model:relativeSpatial',
+    'model:relativeSpatial.type',
+  ]);
+  assert.equal(controller.getSearchState().current, 'model:relativeSpatial');
+  assert.equal(controller.nextSearchResult(), 'model:relativeSpatial.type');
+  assert.equal(controller.nextSearchResult(), 'model:relativeSpatial');
+});
+
 test('inspector edits mark updated without search highlight background', () => {
   const controller = new TreeViewController();
   controller.setModel({ sensor: { range: 10 } });

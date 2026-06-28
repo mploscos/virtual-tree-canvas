@@ -700,6 +700,7 @@ export class TreeViewController {
     const localX = clientX - (this.viewport.renderInsetX ?? 0);
     const localY = clientY - (this.viewport.renderInsetY ?? 0);
     if (localX < 0 || localY < 0) return null;
+    if (localX >= this.viewport.contentViewportWidth) return null;
     const x = localX + this.viewport.scrollX;
     if (localY < this.viewport.headerHeight) {
       const resizeColumn = this.columnModel.getResizeHandleAt(x);
@@ -711,6 +712,7 @@ export class TreeViewController {
       return column ? { area: 'header', part: 'label', column, x, y: localY } : { area: 'header', part: 'header', column: null, x, y: localY };
     }
 
+    if (localY >= this.viewport.headerHeight + this.viewport.rowViewportHeight) return null;
     const rowY = localY - this.viewport.headerHeight + this.viewport.scrollY;
     const rowIndex = Math.floor(rowY / this.rowModel.rowHeight);
     const row = this.rowModel.getRow(rowIndex);
@@ -776,7 +778,7 @@ export class TreeViewController {
   }
 
   #visibleInspectorPaneWidth(column) {
-    return Math.max(1, Math.min(column.width, this.viewport.scrollX + this.viewport.viewportWidth - column.x));
+    return Math.max(1, Math.min(column.width, this.viewport.scrollX + this.viewport.contentViewportWidth - column.x));
   }
 
   getInspectorPaneLayout(width, row = null, editorType = '') {
@@ -797,10 +799,11 @@ export class TreeViewController {
   getHeaderClientRect(hit) {
     if (!hit?.column || !this.canvas) return { x: 0, y: 0, width: 0, height: 0 };
     const rect = this.canvas.getBoundingClientRect();
+    const visibleWidth = Math.max(0, this.viewport.contentViewportWidth - Math.max(0, hit.column.x - this.viewport.scrollX));
     return {
       x: rect.left + (this.viewport.renderInsetX ?? 0) + hit.column.x - this.viewport.scrollX,
       y: rect.top + (this.viewport.renderInsetY ?? 0),
-      width: hit.column.width,
+      width: Math.min(hit.column.width, visibleWidth || hit.column.width),
       height: this.viewport.headerHeight,
     };
   }
@@ -898,7 +901,9 @@ export class TreeViewController {
   }
 
   #syncContentSize() {
-    if (this.viewport.viewportWidth > 1) this.#fitInspectorPaneColumn(this.viewport.viewportWidth);
+    this.#syncScrollbarState(this.columnModel.contentWidth, this.rowModel.contentHeight);
+    if (this.viewport.viewportWidth > 1) this.#fitInspectorPaneColumn(this.viewport.contentViewportWidth);
+    this.#syncScrollbarState(this.columnModel.contentWidth, this.rowModel.contentHeight);
     this.viewport.setContentSize(this.columnModel.contentWidth, this.rowModel.contentHeight);
   }
 
@@ -973,12 +978,13 @@ export class TreeViewController {
     applyNativeScrollbarTheme([vertical, horizontal, corner], this.themeManager.get());
 
     const size = nativeScrollbarSize();
+    this.#nativeScrollbarSize = size;
     Object.assign(vertical.style, {
       position: 'absolute',
-      top: `${this.viewport.headerHeight}px`,
-      right: '0',
-      bottom: '0',
+      top: '0',
+      left: '0',
       width: `${size}px`,
+      height: '1px',
       overflowX: 'hidden',
       overflowY: 'auto',
       zIndex: '4',
@@ -986,8 +992,8 @@ export class TreeViewController {
     Object.assign(horizontal.style, {
       position: 'absolute',
       left: '0',
-      right: '0',
-      bottom: '0',
+      top: '0',
+      width: '1px',
       height: `${size}px`,
       overflowX: 'auto',
       overflowY: 'hidden',
@@ -995,8 +1001,8 @@ export class TreeViewController {
     });
     Object.assign(corner.style, {
       position: 'absolute',
-      right: '0',
-      bottom: '0',
+      left: '0',
+      top: '0',
       width: `${size}px`,
       height: `${size}px`,
       zIndex: '4',
@@ -1018,17 +1024,24 @@ export class TreeViewController {
 
     let syncing = false;
     const sync = () => {
-      const maxX = Math.max(0, this.viewport.contentWidth - this.viewport.viewportWidth);
+      this.#syncScrollbarState(this.viewport.contentWidth, this.viewport.contentHeight);
+      const maxX = Math.max(0, this.viewport.contentWidth - this.viewport.contentViewportWidth);
       const maxY = Math.max(0, this.viewport.contentHeight - this.viewport.rowViewportHeight);
       const showX = maxX > 0;
       const showY = maxY > 0;
+      const canvasMetrics = this.#canvasHostMetrics();
 
       vertical.style.display = showY ? 'block' : 'none';
       horizontal.style.display = showX ? 'block' : 'none';
       corner.style.display = showX && showY ? 'block' : 'none';
-      vertical.style.bottom = showX ? `${size}px` : '0';
-      horizontal.style.right = showY ? `${size}px` : '0';
-      vertical.style.top = `${this.viewport.headerHeight}px`;
+      vertical.style.left = `${canvasMetrics.left + canvasMetrics.width - size}px`;
+      vertical.style.top = `${canvasMetrics.top + this.viewport.headerHeight}px`;
+      vertical.style.height = `${Math.max(1, canvasMetrics.height - this.viewport.headerHeight - (showX ? size : 0))}px`;
+      horizontal.style.left = `${canvasMetrics.left}px`;
+      horizontal.style.top = `${canvasMetrics.top + canvasMetrics.height - size}px`;
+      horizontal.style.width = `${Math.max(1, canvasMetrics.width - (showY ? size : 0))}px`;
+      corner.style.left = `${canvasMetrics.left + canvasMetrics.width - size}px`;
+      corner.style.top = `${canvasMetrics.top + canvasMetrics.height - size}px`;
 
       verticalSpacer.style.height = `${Math.ceil(maxY + vertical.clientHeight)}px`;
       horizontalSpacer.style.width = `${Math.ceil(maxX + horizontal.clientWidth)}px`;
@@ -1065,9 +1078,35 @@ export class TreeViewController {
         vertical.remove();
         horizontal.remove();
         corner.remove();
+        this.#nativeScrollbarSize = 0;
+        this.viewport.setScrollbarState({ size: 0, vertical: false, horizontal: false });
         if (hostPositionChanged) host.style.position = previousHostPosition;
       },
     };
+  }
+
+  #syncScrollbarState(contentWidth, contentHeight) {
+    const size = this.nativeScrollbars ? this.#nativeScrollbarSize : 0;
+    if (!size) {
+      this.viewport.setScrollbarState({ size: 0, vertical: false, horizontal: false });
+      return;
+    }
+    let availableWidth = this.viewport.viewportWidth;
+    let availableRowHeight = Math.max(1, this.viewport.viewportHeight - this.viewport.headerHeight);
+    let showY = contentHeight > availableRowHeight;
+    let showX = contentWidth > availableWidth;
+    if (showY && contentWidth > Math.max(1, availableWidth - size)) showX = true;
+    if (showX && contentHeight > Math.max(1, availableRowHeight - size)) showY = true;
+    this.viewport.setScrollbarState({ size, vertical: showY, horizontal: showX });
+  }
+
+  #canvasHostMetrics() {
+    if (!this.canvas) return { left: 0, top: 0, width: this.viewport.viewportWidth, height: this.viewport.viewportHeight };
+    const left = Number.isFinite(this.canvas.offsetLeft) ? this.canvas.offsetLeft : 0;
+    const top = Number.isFinite(this.canvas.offsetTop) ? this.canvas.offsetTop : 0;
+    const width = Math.max(1, Math.floor(this.canvas.clientWidth || this.canvas.getBoundingClientRect?.().width || this.viewport.viewportWidth));
+    const height = Math.max(1, Math.floor(this.canvas.clientHeight || this.canvas.getBoundingClientRect?.().height || this.viewport.viewportHeight));
+    return { left, top, width, height };
   }
 
   #computeInspectorPaneLabelEnd(visibleRange) {
@@ -1133,6 +1172,7 @@ export class TreeViewController {
 
   #resizeObserver = null;
   #nativeScroll = null;
+  #nativeScrollbarSize = 0;
 }
 
 const NATIVE_SCROLLBAR_STYLE_ID = 'virtual-tree-canvas-native-scrollbar-style';
