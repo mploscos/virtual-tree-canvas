@@ -892,11 +892,10 @@ export class TreeViewController {
   }
 
   #rebuildRows() {
-    const scrollX = this.viewport.scrollX;
-    const scrollY = this.viewport.scrollY;
+    const scrollAnchor = this.#captureScrollAnchor();
     this.rowModel.rebuild();
     this.#syncContentSize();
-    this.viewport.scrollTo(scrollX, scrollY);
+    this.#restoreScrollAnchor(scrollAnchor);
     this.rebuildCount++;
   }
 
@@ -1149,12 +1148,31 @@ export class TreeViewController {
   }
 
   #applyWorkerRows(result) {
-    const scrollX = this.viewport.scrollX;
-    const scrollY = this.viewport.scrollY;
+    const scrollAnchor = this.#captureScrollAnchor();
     this.rowModel.applyRows(result);
     this.#syncContentSize();
-    this.viewport.scrollTo(scrollX, scrollY);
+    this.#restoreScrollAnchor(scrollAnchor);
     this.rebuildCount++;
+  }
+
+  #captureScrollAnchor() {
+    const scrollX = this.viewport.scrollX;
+    const scrollY = this.viewport.scrollY;
+    const rowIndex = Math.max(0, Math.floor(scrollY / this.rowModel.rowHeight));
+    const row = this.rowModel.getRow(rowIndex);
+    if (!row) return { scrollX, scrollY, nodeId: null, offsetY: 0 };
+    return {
+      scrollX,
+      scrollY,
+      nodeId: row.nodeId,
+      offsetY: Math.max(0, scrollY - row.y),
+    };
+  }
+
+  #restoreScrollAnchor(anchor) {
+    const row = anchor.nodeId ? this.rowModel.getRowById(anchor.nodeId) : null;
+    const scrollY = row ? row.y + anchor.offsetY : anchor.scrollY;
+    this.viewport.scrollTo(anchor.scrollX, scrollY);
   }
 
   #rebuildInspectorModel(focusPath = '') {

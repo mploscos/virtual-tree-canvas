@@ -44,6 +44,18 @@ test('scrollToNode supports alignment modes', () => {
   assert.equal(controller.viewport.scrollY, 5 * 20 + 20 - 32);
 });
 
+test('structural changes above the viewport preserve the visible row anchor', () => {
+  const controller = createController();
+  controller.expand('b');
+  controller.scrollToNode('b1', 'start');
+  assert.equal(controller.viewport.scrollY, 3 * 20);
+
+  controller.expand('a');
+
+  assert.equal(controller.rowModel.getRowById('b1').rowIndex, 5);
+  assert.equal(controller.viewport.scrollY, 5 * 20);
+});
+
 test('keyboard navigation moves focus through visible rows', () => {
   const controller = createController();
   controller.setSelection(['root']);
