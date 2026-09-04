@@ -13,12 +13,12 @@ export class TreeSearchIndex {
       const searchId = searchableNodeId(node);
       const record = {
         id: node.id,
-        searchId: normalize(searchId),
-        label: normalize(node.label ?? ''),
-        path: normalize(path),
-        tags: normalize((node.tags ?? []).join(' ')),
-        type: normalize(node.type ?? ''),
-        value: normalize(searchableNodeValue(node)),
+        searchId,
+        label: node.label ?? '',
+        path,
+        tags: (node.tags ?? []).join(' '),
+        type: node.type ?? '',
+        value: searchableNodeValue(node),
       };
       record.searchText = defaultSearchText(node, record);
       return record;
@@ -27,10 +27,10 @@ export class TreeSearchIndex {
 
   /**
    * @param {string} query
-   * @param {{ fields?: string[], limit?: number }} options
+   * @param {{ fields?: string[], limit?: number, caseSensitive?: boolean, wholeWord?: boolean }} options
    */
   search(query, options = {}) {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchValue(query.trim(), options);
     this.lastQuery = query;
     if (!q) {
       this.results = [];
@@ -43,10 +43,10 @@ export class TreeSearchIndex {
     const defaultFields = isDefaultSearchFields(fields);
     for (const record of this.records) {
       if (defaultFields) {
-        if (record.searchText.includes(q)) results.push(record.id);
+        if (matchesSearch(normalizeSearchValue(record.searchText, options), q, options.wholeWord)) results.push(record.id);
       } else {
         for (const field of fields) {
-          if (searchFieldValue(record, field).includes(q)) {
+          if (matchesSearch(searchFieldValue(record, field, options), q, options.wholeWord)) {
             results.push(record.id);
             break;
           }
@@ -86,9 +86,9 @@ function isDefaultSearchFields(fields) {
   return fields.length === 5 && fields.includes('label') && fields.includes('id') && fields.includes('path') && fields.includes('tags') && fields.includes('type');
 }
 
-function searchFieldValue(record, field) {
-  if (field === 'id') return record.searchId || normalize(record.id);
-  return normalize(record[field] ?? '');
+function searchFieldValue(record, field, options) {
+  if (field === 'id') return normalizeSearchValue(record.searchId || record.id, options);
+  return normalizeSearchValue(record[field] ?? '', options);
 }
 
 function searchableNodeId(node) {
@@ -104,7 +104,7 @@ function searchableNodeValue(node) {
 function defaultSearchText(node, record) {
   if (node?.data?.inspector) {
     const data = node.data;
-    return normalize([
+    return [
       record.searchId,
       node.label ?? '',
       data.key ?? '',
@@ -112,11 +112,26 @@ function defaultSearchText(node, record) {
       data.valueType ?? '',
       record.tags,
       record.type,
-    ].join(' '));
+    ].join(' ');
   }
-  return normalize(`${record.searchId} ${record.label} ${record.path} ${record.tags} ${record.type}`);
+  return `${record.searchId} ${record.label} ${record.path} ${record.tags} ${record.type}`;
 }
 
-function normalize(value) {
-  return String(value ?? '').toLowerCase();
+function normalizeSearchValue(value, options = {}) {
+  const text = String(value ?? '');
+  return options.caseSensitive ? text : text.toLowerCase();
+}
+
+function matchesSearch(text, query, wholeWord = false) {
+  if (!wholeWord) return text.includes(query);
+  let index = text.indexOf(query);
+  while (index !== -1) {
+    if (!isWordChar(text[index - 1]) && !isWordChar(text[index + query.length])) return true;
+    index = text.indexOf(query, index + query.length);
+  }
+  return false;
+}
+
+function isWordChar(char) {
+  return typeof char === 'string' && /[\p{L}\p{N}_]/u.test(char);
 }

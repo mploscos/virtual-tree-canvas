@@ -21,6 +21,34 @@ test('IconRegistry caches icons by name', () => {
   assert.equal(registry.get('custom'), first);
 });
 
+test('built-in icons are SVG sources and raster cache uses size, colour and DPR', async () => {
+  const originalCreateImageBitmap = globalThis.createImageBitmap;
+  const bitmaps = [];
+  globalThis.createImageBitmap = async (blob, options) => {
+    const bitmap = { blob, options };
+    bitmaps.push(bitmap);
+    return bitmap;
+  };
+
+  try {
+    const registry = new IconRegistry({ pixelRatio: 2 });
+    assert.equal(registry.get('radar').kind, 'svg');
+    registry.register('test-svg', '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0h24v24H0z"/></svg>');
+
+    const [bitmap] = await registry.prepare({ icons: ['test-svg'], size: 15, color: '#12abef', pixelRatio: 2 });
+    assert.equal(bitmap.options.resizeWidth, 30);
+    assert.match(await bitmap.blob.text(), /#12abef/);
+
+    const calls = [];
+    registry.draw({ getTransform: () => ({ a: 2 }), drawImage: (...args) => calls.push(args) }, 'test-svg', 1, 2, 15, '#12abef');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0], bitmap);
+    assert.equal(bitmaps.length, 1);
+  } finally {
+    globalThis.createImageBitmap = originalCreateImageBitmap;
+  }
+});
+
 test('dynamic color override wins over type color', () => {
   const manager = new ThemeManager(darkTheme);
   const style = manager.resolveNodeStyle({ id: 'platform-1', type: 'platform' }, { color: '#ffffff' });
@@ -51,4 +79,3 @@ test('theme change does not rebuild visible rows for visual-only changes', () =>
   assert.equal(controller.rebuildCount, rebuildCount);
   assert.equal(controller.rowModel.rows.length, rowCount);
 });
-

@@ -8,6 +8,7 @@
  * @property {number} height
  * @property {boolean} expanded
  * @property {boolean} hasChildren
+ * @property {number} [stickyY]
  */
 
 export class VisibleRowModel extends EventTarget {
@@ -145,5 +146,43 @@ export class VisibleRowModel extends EventTarget {
     const first = Math.max(0, Math.floor(viewport.scrollY / this.rowHeight) - overscan);
     const last = Math.min(this.rows.length - 1, Math.ceil((viewport.scrollY + rowViewportHeight) / this.rowHeight) + overscan);
     return { first, last, count: last >= first ? last - first + 1 : 0 };
+  }
+
+  /** @param {import('./tree-view-viewport.js').TreeViewViewport} viewport */
+  getStickyRows(viewport) {
+    const rowViewportHeight = viewport.rowViewportHeight ?? viewport.viewportHeight;
+    if (rowViewportHeight < this.rowHeight * 2) return [];
+    const max = Math.max(0, Math.min(6, Math.floor(rowViewportHeight / this.rowHeight) - 1));
+    const first = Math.max(0, Math.floor(viewport.scrollY / this.rowHeight));
+    let row = this.getRow(first);
+    if (!row) return [];
+    let sticky = this.#getStickyPath(row);
+    for (let i = row.rowIndex + 1; i < this.rows.length; i++) {
+      const candidate = this.rows[i];
+      if (candidate.y - viewport.scrollY >= Math.min(sticky.length, max) * this.rowHeight) break;
+      const replaceAt = sticky.findIndex((ancestor) => ancestor.depth >= candidate.depth);
+      if (replaceAt === -1) {
+        if (candidate.hasChildren && sticky.length < max) sticky = [...sticky, candidate];
+      } else if (!candidate.hasChildren) {
+        sticky = sticky.slice(0, replaceAt);
+      } else {
+        sticky = [...sticky.slice(0, replaceAt), candidate];
+      }
+    }
+    return sticky
+      .slice(-max)
+      .map((ancestor, index) => ({
+        ...ancestor,
+        stickyY: Math.max(ancestor.y - viewport.scrollY, index * this.rowHeight),
+      }));
+  }
+
+  /** @param {TreeRow} row */
+  #getStickyPath(row) {
+    const ancestors = this.model.index.getAncestors(row.nodeId).reverse()
+      .map((id) => this.getRowById(id))
+      .filter((ancestor) => ancestor && ancestor.rowIndex < row.rowIndex);
+    if (row.hasChildren) ancestors.push(row);
+    return ancestors;
   }
 }

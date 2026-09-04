@@ -44,14 +44,17 @@ export function createWorkerTreeState(nodes) {
   return { nodes, idToIndex, childrenByParent, parentById, roots, pathById, records };
 }
 
-export function searchWorkerTree(state, query, { fields = ['label', 'id', 'path', 'tags', 'type'], limit = 500 } = {}) {
-  const q = normalize(query);
+export function searchWorkerTree(state, query, options = {}) {
+  const { fields = ['label', 'id', 'path', 'tags', 'type'], limit = 500 } = options;
+  const q = normalizeSearchValue(String(query ?? '').trim(), options);
   if (!q) return [];
   const results = [];
   const defaultFields = fields.length === 5 && fields.includes('label') && fields.includes('id') && fields.includes('path') && fields.includes('tags') && fields.includes('type');
 
   for (const record of state.records) {
-    const matches = defaultFields ? record.searchText.includes(q) : fields.some((field) => searchFieldValue(record, field).includes(q));
+    const matches = defaultFields
+      ? matchesSearch(normalizeSearchValue(record.searchText, options), q, options.wholeWord)
+      : fields.some((field) => matchesSearch(searchFieldValue(record, field, options), q, options.wholeWord));
     if (!matches) continue;
     results.push(record.id);
     if (results.length >= limit) break;
@@ -64,10 +67,11 @@ export function rebuildWorkerRows(state, options = {}) {
   const indentWidth = options.indentWidth ?? 18;
   const expanded = new Set(options.expandedIds ?? []);
   const filterCollapsed = new Set(options.filterCollapsedIds ?? []);
-  const query = normalize(options.filterQuery ?? '');
+  const filterOptions = options.filterOptions ?? {};
+  const query = normalizeSearchValue(options.filterQuery ?? '', filterOptions);
   const sort = options.sort ?? { columnId: null, direction: null };
   const sortValues = options.sortValues ? new Map(options.sortValues) : null;
-  const includedIds = options.includedIds ? new Set(options.includedIds) : query ? getIncludedIdsForQuery(state, query).includedIds : null;
+  const includedIds = options.includedIds ? new Set(options.includedIds) : query ? getIncludedIdsForQuery(state, query, null, filterOptions).includedIds : null;
   const rows = [];
   let maxDepth = 0;
 
@@ -112,14 +116,14 @@ export function rebuildWorkerRows(state, options = {}) {
   };
 }
 
-export function getIncludedIdsForQuery(state, query, candidateIds = null) {
-  const q = normalize(query);
+export function getIncludedIdsForQuery(state, query, candidateIds = null, options = {}) {
+  const q = normalizeSearchValue(query, options);
   const includedIds = new Set();
   const matchingIds = [];
   const records = candidateIds ? idsToRecords(state, candidateIds) : state.records;
 
   for (const record of records) {
-    if (!(record.filterText ?? record.searchText).includes(q)) continue;
+    if (!matchesSearch(normalizeSearchValue(record.filterText ?? record.searchText, options), q, options.wholeWord)) continue;
     matchingIds.push(record.id);
     let id = record.id;
     while (id !== null && id !== undefined && !includedIds.has(id)) {
@@ -153,13 +157,9 @@ function columnValue(node, columnId) {
   return node[columnId] ?? '';
 }
 
-function normalize(value) {
-  return String(value ?? '').toLowerCase();
-}
-
-function searchFieldValue(record, field) {
-  if (field === 'id') return normalize(record.searchId || record.id);
-  return normalize(record[field]);
+function searchFieldValue(record, field, options) {
+  if (field === 'id') return normalizeSearchValue(record.searchId || record.id, options);
+  return normalizeSearchValue(record[field], options);
 }
 
 function searchableNodeId(node) {
@@ -175,7 +175,7 @@ function searchableNodeValue(node) {
 function defaultSearchText(node, record) {
   if (node?.data?.inspector) {
     const data = node.data;
-    return normalize([
+    return [
       record.searchId,
       node.label ?? '',
       data.key ?? '',
@@ -183,15 +183,15 @@ function defaultSearchText(node, record) {
       data.valueType ?? '',
       record.tags,
       record.type,
-    ].join(' '));
+    ].join(' ');
   }
-  return normalize(`${record.searchId} ${record.label} ${record.path} ${record.tags} ${record.type}`);
+  return `${record.searchId} ${record.label} ${record.path} ${record.tags} ${record.type}`;
 }
 
 function defaultFilterText(node, record) {
   if (node?.data?.inspector) {
     const data = node.data;
-    return normalize([
+    return [
       node.label ?? '',
       node.type ?? '',
       data.path ?? '',
@@ -199,7 +199,26 @@ function defaultFilterText(node, record) {
       data.valueText ?? '',
       data.meta?.description ?? '',
       ...Object.keys(data.meta?.options ?? {}),
-    ].join(' '));
+    ].join(' ');
   }
   return record.searchText;
+}
+
+function normalizeSearchValue(value, options = {}) {
+  const text = String(value ?? '');
+  return options.caseSensitive ? text : text.toLowerCase();
+}
+
+function matchesSearch(text, query, wholeWord = false) {
+  if (!wholeWord) return text.includes(query);
+  let index = text.indexOf(query);
+  while (index !== -1) {
+    if (!isWordChar(text[index - 1]) && !isWordChar(text[index + query.length])) return true;
+    index = text.indexOf(query, index + query.length);
+  }
+  return false;
+}
+
+function isWordChar(char) {
+  return typeof char === 'string' && /[\p{L}\p{N}_]/u.test(char);
 }

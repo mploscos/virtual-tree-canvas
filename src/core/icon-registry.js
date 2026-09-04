@@ -1,550 +1,228 @@
+import { builtinIconUrls } from '../assets/icons.js';
+
+/**
+ * Icon source registry for the Canvas2D tree renderer.
+ *
+ * SVG icons remain editable files, but are decoded to an ImageBitmap (or a
+ * small canvas fallback) only once for each size, device-pixel-ratio and
+ * colour combination. The render hot path is therefore a single drawImage.
+ */
 export class IconRegistry {
-  constructor() {
+  constructor({ pixelRatio } = {}) {
     this.icons = new Map();
-    this.loading = new Map();
+    this.listeners = new Set();
+    this.pixelRatio = pixelRatio ?? devicePixelRatio();
     this.#registerBuiltIns();
   }
 
+  /** Register an SVG string/URL, an image URL, ImageBitmap, or legacy Canvas draw function. */
   register(name, icon) {
     if (!name) throw new Error('Icon name is required');
     if (this.icons.has(name)) return this.icons.get(name);
+
     if (typeof icon === 'function') {
-      this.icons.set(name, { kind: 'vector', draw: icon });
-      return this.icons.get(name);
+      const entry = { kind: 'vector', draw: icon };
+      this.icons.set(name, entry);
+      return entry;
     }
+
     if (typeof icon === 'string') {
-      if (icon.trim().startsWith('<svg')) return this.#registerSvgString(name, icon);
-      return this.#registerUrl(name, icon);
+      const source = icon.trim();
+      if (source.startsWith('<svg')) return this.#registerSvg(name, { source });
+      if (isSvgUrl(source)) return this.#registerSvg(name, { url: source });
+      return this.#registerImageUrl(name, source);
     }
-    this.icons.set(name, { kind: 'image', image: icon, loaded: true });
-    return this.icons.get(name);
+
+    const entry = { kind: 'image', image: icon, loaded: true };
+    this.icons.set(name, entry);
+    return entry;
   }
 
   get(name) {
     return this.icons.get(name) ?? this.icons.get('placeholder');
   }
 
+  /** Listen for a decoded icon becoming ready, so hosts can repaint once. */
+  onChange(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Starts loading and rasterising a known set of icons ahead of first paint.
+   * A colour is part of the cache key because theme colours are baked into SVG
+   * assets that use currentColor.
+   */
+  prepare({ icons = this.icons.keys(), size = 15, color = '#94a3b8', pixelRatio = this.pixelRatio } = {}) {
+    return Promise.all([...icons].map((name) => this.#requestRaster(this.get(name), size, color, pixelRatio)));
+  }
+
   draw(ctx, name, x, y, size, color) {
     const icon = this.get(name);
     if (!icon) return;
     if (icon.kind === 'vector') {
+      // Kept for backwards compatibility. Built-in icons are all SVG assets.
       icon.draw(ctx, x, y, size, color);
       return;
     }
-    if (icon.loaded && icon.image) {
-      ctx.drawImage(icon.image, x, y, size, size);
+    if (icon.kind === 'image') {
+      if (icon.loaded && icon.image) ctx.drawImage(icon.image, x, y, size, size);
       return;
     }
-    this.get('placeholder')?.draw(ctx, x, y, size, color);
+
+    const pixelRatio = canvasPixelRatio(ctx, this.pixelRatio);
+    const key = rasterKey(size, color, pixelRatio);
+    const raster = icon.rasters.get(key);
+    if (raster) {
+      ctx.drawImage(raster, x, y, size, size);
+      return;
+    }
+    this.#requestRaster(icon, size, color, pixelRatio);
   }
 
-  #registerUrl(name, url) {
-    if (this.icons.has(name)) return this.icons.get(name);
-    const entry = { kind: 'image', image: null, loaded: false, url };
+  #registerSvg(name, { source = null, url = null }) {
+    const entry = {
+      kind: 'svg',
+      source,
+      url,
+      rasters: new Map(),
+      pending: new Map(),
+      sourcePromise: null,
+      error: null,
+    };
     this.icons.set(name, entry);
-    if (typeof Image !== 'undefined' && !this.loading.has(url)) {
-      const image = new Image();
-      image.decoding = 'async';
-      image.onload = () => {
-        entry.image = image;
-        entry.loaded = true;
-        this.loading.delete(url);
-      };
-      image.src = url;
-      this.loading.set(url, image);
-    }
+    // Fetching source eagerly moves network and SVG parsing out of scrolling.
+    // Avoid file-URL fetch attempts while the package is exercised in Node.
+    if (typeof window !== 'undefined') this.#loadSvg(entry);
     return entry;
   }
 
-  #registerSvgString(name, svg) {
-    if (typeof Blob === 'undefined' || typeof URL === 'undefined') {
-      this.icons.set(name, { kind: 'svg', svg, loaded: false });
-      return this.icons.get(name);
-    }
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-    return this.#registerUrl(name, url);
+  #registerImageUrl(name, url) {
+    const entry = { kind: 'image', image: null, loaded: false, url };
+    this.icons.set(name, entry);
+    if (typeof Image === 'undefined') return entry;
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      entry.image = image;
+      entry.loaded = true;
+      this.#notify();
+    };
+    image.onerror = () => { entry.error = new Error(`Unable to load icon: ${url}`); };
+    image.src = url;
+    return entry;
+  }
+
+  async #requestRaster(icon, size, color, pixelRatio) {
+    if (!icon || icon.kind !== 'svg') return null;
+    const key = rasterKey(size, color, pixelRatio);
+    if (icon.rasters.has(key)) return icon.rasters.get(key);
+    if (icon.pending.has(key)) return icon.pending.get(key);
+
+    const pending = this.#loadSvg(icon)
+      .then((source) => source && rasterizeSvg(source, size, color, pixelRatio))
+      .then((raster) => {
+        if (raster) {
+          icon.rasters.set(key, raster);
+          this.#notify();
+        }
+        return raster;
+      })
+      .catch((error) => {
+        icon.error = error;
+        return null;
+      })
+      .finally(() => icon.pending.delete(key));
+    icon.pending.set(key, pending);
+    return pending;
+  }
+
+  #loadSvg(icon) {
+    if (icon.source) return Promise.resolve(icon.source);
+    if (icon.sourcePromise) return icon.sourcePromise;
+    if (!icon.url || typeof fetch !== 'function') return Promise.resolve(null);
+
+    icon.sourcePromise = fetch(icon.url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Unable to load SVG icon: ${icon.url}`);
+        return response.text();
+      })
+      .then((source) => {
+        icon.source = source;
+        return source;
+      })
+      .catch((error) => {
+        icon.error = error;
+        return null;
+      });
+    return icon.sourcePromise;
+  }
+
+  #notify() {
+    for (const listener of this.listeners) listener();
   }
 
   #registerBuiltIns() {
-    this.register('placeholder', drawPlaceholder);
-    this.register('folder', drawFolder);
-    this.register('aircraft', drawAircraft);
-    this.register('radar', drawRadar);
-    this.register('warning', drawWarning);
-    this.register('error', drawError);
-    this.register('task', drawTask);
-    this.register('bus', drawBus);
-    this.register('track', drawTrack);
-    this.register('point', drawPoint);
-    this.register('munition', drawMunition);
-    this.register('air', drawAircraft);
-    this.register('ground', drawGroundVehicle);
-    this.register('surface', drawSurfaceVehicle);
-    this.register('subsurface', drawSubsurfaceVehicle);
-    this.register('space', drawSpaceVehicle);
-    this.register('control', drawControl);
-    this.register('situation', drawSituation);
-    this.register('damage', drawDamage);
-    this.register('inspector-object', drawInspectorObject);
-    this.register('inspector-array', drawInspectorArray);
-    this.register('inspector-value', drawInspectorValue);
+    for (const [name, url] of Object.entries(builtinIconUrls)) this.register(name, url);
   }
 }
 
-function drawPlaceholder(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.strokeRect(x + 2.5, y + 2.5, size - 5, size - 5);
-}
+async function rasterizeSvg(source, size, color, pixelRatio) {
+  const pixelSize = Math.max(1, Math.round(size * pixelRatio));
+  const svg = source.replaceAll('currentColor', color);
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
 
-function drawFolder(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x + 1, y + 5);
-  ctx.lineTo(x + size * 0.38, y + 5);
-  ctx.lineTo(x + size * 0.48, y + 8);
-  ctx.lineTo(x + size - 1, y + 8);
-  ctx.lineTo(x + size - 1, y + size - 2);
-  ctx.lineTo(x + 1, y + size - 2);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawAircraft(ctx, x, y, size, color) {
-  const cx = x + size * 0.5;
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.35;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  ctx.beginPath();
-  ctx.moveTo(cx, y + 1.5);
-  ctx.lineTo(cx + size * 0.08, y + size * 0.56);
-  ctx.lineTo(cx + size * 0.05, y + size - 2);
-  ctx.lineTo(cx - size * 0.05, y + size - 2);
-  ctx.lineTo(cx - size * 0.08, y + size * 0.56);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(cx - size * 0.08, y + size * 0.54);
-  ctx.lineTo(x + 1.5, y + size * 0.76);
-  ctx.lineTo(cx - size * 0.03, y + size * 0.68);
-  ctx.lineTo(cx + size * 0.03, y + size * 0.68);
-  ctx.lineTo(x + size - 1.5, y + size * 0.76);
-  ctx.lineTo(cx + size * 0.08, y + size * 0.54);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(cx - size * 0.05, y + size * 0.82);
-  ctx.lineTo(x + size * 0.25, y + size - 1.5);
-  ctx.moveTo(cx + size * 0.05, y + size * 0.82);
-  ctx.lineTo(x + size * 0.75, y + size - 1.5);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawTask(ctx, x, y, size, color) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.35;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  roundIconRect(ctx, x + 3.5, y + 2.5, size - 7, size - 5, 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.4, y + 2.5);
-  ctx.lineTo(x + size * 0.6, y + 2.5);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(x + 5.2, y + size * 0.48);
-  ctx.lineTo(x + size * 0.38, y + size * 0.63);
-  ctx.lineTo(x + size * 0.6, y + size * 0.38);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.62, y + size * 0.6);
-  ctx.lineTo(x + size - 4.5, y + size * 0.6);
-  ctx.moveTo(x + 5, y + size * 0.78);
-  ctx.lineTo(x + size - 4.5, y + size * 0.78);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function roundIconRect(ctx, x, y, width, height, radius) {
-  ctx.beginPath();
-  if (typeof ctx.roundRect === 'function') {
-    ctx.roundRect(x, y, width, height, radius);
-    return;
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(blob, {
+        resizeWidth: pixelSize,
+        resizeHeight: pixelSize,
+        resizeQuality: 'high',
+      });
+    } catch {
+      // Safari and older Chromium versions can reject SVG blobs here. The
+      // canvas fallback below still creates one fixed-size raster per key.
+    }
   }
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-}
 
-function drawRadar(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, size * 0.34, -0.4, Math.PI * 1.4);
-  ctx.moveTo(x + size / 2, y + size / 2);
-  ctx.lineTo(x + size * 0.84, y + size * 0.28);
-  ctx.stroke();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, 2, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawWarning(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x + size / 2, y + 1);
-  ctx.lineTo(x + size - 1, y + size - 2);
-  ctx.lineTo(x + 1, y + size - 2);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawError(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, size * 0.42, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.moveTo(x + 5, y + 5);
-  ctx.lineTo(x + size - 5, y + size - 5);
-  ctx.moveTo(x + size - 5, y + 5);
-  ctx.lineTo(x + 5, y + size - 5);
-  ctx.stroke();
-}
-
-function drawBus(ctx, x, y, size, color) {
-  const left = x + size * 0.22;
-  const right = x + size * 0.82;
-  const ys = [y + size * 0.32, y + size * 0.5, y + size * 0.68];
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.25;
-
-  ctx.beginPath();
-  ctx.moveTo(left, ys[0]);
-  ctx.lineTo(right, ys[0]);
-  ctx.moveTo(left, ys[1]);
-  ctx.lineTo(right, ys[1]);
-  ctx.moveTo(left, ys[2]);
-  ctx.lineTo(right, ys[2]);
-  ctx.moveTo(left, ys[0]);
-  ctx.lineTo(left, ys[2]);
-  ctx.stroke();
-
-  for (const cy of ys) {
-    ctx.beginPath();
-    ctx.arc(left, cy, size * 0.075, 0, Math.PI * 2);
-    ctx.arc(right, cy, size * 0.075, 0, Math.PI * 2);
-    ctx.fill();
+  if (typeof Image === 'undefined' || typeof document === 'undefined' || typeof URL === 'undefined') return null;
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = await loadImage(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelSize;
+    canvas.height = pixelSize;
+    const ctx = canvas.getContext('2d');
+    ctx?.drawImage(image, 0, 0, pixelSize, pixelSize);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }
 
-function drawTrack(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, size * 0.34, 0, Math.PI * 2);
-  ctx.moveTo(x + size / 2, y + 1);
-  ctx.lineTo(x + size / 2, y + size - 1);
-  ctx.moveTo(x + 1, y + size / 2);
-  ctx.lineTo(x + size - 1, y + size / 2);
-  ctx.stroke();
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Unable to decode SVG icon: ${url}`));
+    image.src = url;
+  });
 }
 
-function drawPoint(ctx, x, y, size, color) {
-  const cx = x + size / 2;
-  const cy = y + size / 2;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.22, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.42, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx, y + 1);
-  ctx.lineTo(cx, y + size * 0.22);
-  ctx.moveTo(cx, y + size * 0.78);
-  ctx.lineTo(cx, y + size - 1);
-  ctx.moveTo(x + 1, cy);
-  ctx.lineTo(x + size * 0.22, cy);
-  ctx.moveTo(x + size * 0.78, cy);
-  ctx.lineTo(x + size - 1, cy);
-  ctx.stroke();
+function isSvgUrl(value) {
+  return /^data:image\/svg\+xml/i.test(value) || /\.svg(?:[?#].*)?$/i.test(value);
 }
 
-function drawMunition(ctx, x, y, size, color) {
-  const cx = x + size * 0.5;
-  const bodyTop = y + size * 0.25;
-  const bodyBottom = y + size * 0.76;
-  ctx.fillStyle = color;
-
-  ctx.beginPath();
-  ctx.moveTo(cx, y + 1);
-  ctx.lineTo(cx + size * 0.17, bodyTop);
-  ctx.lineTo(cx - size * 0.17, bodyTop);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillRect(cx - size * 0.11, bodyTop, size * 0.22, bodyBottom - bodyTop);
-
-  ctx.beginPath();
-  ctx.moveTo(cx - size * 0.11, y + size * 0.63);
-  ctx.lineTo(x + 1, y + size - 2);
-  ctx.lineTo(cx - size * 0.11, y + size * 0.82);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(cx + size * 0.11, y + size * 0.63);
-  ctx.lineTo(x + size - 1, y + size - 2);
-  ctx.lineTo(cx + size * 0.11, y + size * 0.82);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255,255,255,.35)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx, bodyTop + 1);
-  ctx.lineTo(cx, bodyBottom - 1);
-  ctx.stroke();
-
-  ctx.strokeStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(cx - size * 0.12, bodyBottom);
-  ctx.lineTo(cx, y + size - 1);
-  ctx.lineTo(cx + size * 0.12, bodyBottom);
-  ctx.stroke();
+function rasterKey(size, color, pixelRatio) {
+  return `${size}|${pixelRatio}|${color}`;
 }
 
-function drawGroundVehicle(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  const bodyY = y + size * 0.42;
-  ctx.fillRect(x + size * 0.16, bodyY, size * 0.68, size * 0.26);
-  ctx.fillRect(x + size * 0.34, y + size * 0.26, size * 0.28, size * 0.2);
-  ctx.fillRect(x + size * 0.62, y + size * 0.34, size * 0.3, size * 0.06);
-  ctx.beginPath();
-  ctx.arc(x + size * 0.28, y + size * 0.76, size * 0.09, 0, Math.PI * 2);
-  ctx.arc(x + size * 0.5, y + size * 0.76, size * 0.09, 0, Math.PI * 2);
-  ctx.arc(x + size * 0.72, y + size * 0.76, size * 0.09, 0, Math.PI * 2);
-  ctx.fill();
+function devicePixelRatio() {
+  return Math.max(1, globalThis.devicePixelRatio || 1);
 }
 
-function drawSurfaceVehicle(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x + 1, y + size * 0.58);
-  ctx.lineTo(x + size * 0.82, y + size * 0.58);
-  ctx.lineTo(x + size - 1, y + size * 0.72);
-  ctx.lineTo(x + size * 0.18, y + size * 0.82);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillRect(x + size * 0.34, y + size * 0.34, size * 0.24, size * 0.2);
-  ctx.fillRect(x + size * 0.46, y + size * 0.18, size * 0.08, size * 0.18);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.18, y + size * 0.88);
-  ctx.quadraticCurveTo(x + size * 0.34, y + size * 0.78, x + size * 0.5, y + size * 0.88);
-  ctx.quadraticCurveTo(x + size * 0.66, y + size * 0.98, x + size * 0.82, y + size * 0.88);
-  ctx.stroke();
-}
-
-function drawSubsurfaceVehicle(ctx, x, y, size, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(x + size * 0.5, y + size * 0.58, size * 0.38, size * 0.18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(x + size * 0.44, y + size * 0.28, size * 0.12, size * 0.18);
-  ctx.fillRect(x + size * 0.38, y + size * 0.26, size * 0.24, size * 0.06);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.16, y + size * 0.86);
-  ctx.quadraticCurveTo(x + size * 0.32, y + size * 0.78, x + size * 0.5, y + size * 0.86);
-  ctx.quadraticCurveTo(x + size * 0.68, y + size * 0.94, x + size * 0.84, y + size * 0.86);
-  ctx.stroke();
-}
-
-function drawSpaceVehicle(ctx, x, y, size, color) {
-  const cx = x + size * 0.5;
-  const cy = y + size * 0.5;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.16, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeRect(x + size * 0.12, y + size * 0.32, size * 0.24, size * 0.36);
-  ctx.strokeRect(x + size * 0.64, y + size * 0.32, size * 0.24, size * 0.36);
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.36, cy);
-  ctx.lineTo(x + size * 0.64, cy);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, size * 0.42, size * 0.18, -0.45, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-function drawControl(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.3;
-  const cx = x + size * 0.5;
-  const baseY = y + size * 0.68;
-
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.22, baseY);
-  ctx.lineTo(x + size * 0.78, baseY);
-  ctx.lineTo(x + size * 0.88, y + size * 0.88);
-  ctx.lineTo(x + size * 0.12, y + size * 0.88);
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(cx, baseY);
-  ctx.lineTo(x + size * 0.42, y + size * 0.32);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(x + size * 0.4, y + size * 0.28, size * 0.13, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(x + size * 0.66, y + size * 0.78, size * 0.055, 0, Math.PI * 2);
-  ctx.arc(x + size * 0.78, y + size * 0.78, size * 0.055, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawSituation(ctx, x, y, size, color) {
-  const cx = x + size * 0.5;
-  const cy = y + size * 0.5;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.25;
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.42, 0, Math.PI * 2);
-  ctx.moveTo(cx - size * 0.42, cy);
-  ctx.lineTo(cx + size * 0.42, cy);
-  ctx.moveTo(cx, cy - size * 0.42);
-  ctx.lineTo(cx, cy + size * 0.42);
-  ctx.stroke();
-
-  ctx.globalAlpha = 0.55;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.25, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(x + size * 0.82, y + size * 0.26);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(x + size * 0.68, y + size * 0.38, size * 0.055, 0, Math.PI * 2);
-  ctx.arc(x + size * 0.36, y + size * 0.62, size * 0.045, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawDamage(ctx, x, y, size, color) {
-  const cx = x + size * 0.5;
-  const cy = y + size * 0.52;
-  const r = size * 0.42;
-
-  ctx.beginPath();
-  ctx.moveTo(cx, y + 1);
-  ctx.lineTo(cx + r * 0.28, cy - r * 0.28);
-  ctx.lineTo(x + size - 1, y + size * 0.2);
-  ctx.lineTo(cx + r * 0.55, cy + r * 0.05);
-  ctx.lineTo(x + size * 0.92, y + size * 0.76);
-  ctx.lineTo(cx + r * 0.22, cy + r * 0.32);
-  ctx.lineTo(cx + r * 0.08, y + size - 1);
-  ctx.lineTo(cx - r * 0.18, cy + r * 0.34);
-  ctx.lineTo(x + size * 0.14, y + size * 0.86);
-  ctx.lineTo(cx - r * 0.42, cy + r * 0.12);
-  ctx.lineTo(x + 1, y + size * 0.38);
-  ctx.lineTo(cx - r * 0.3, cy - r * 0.18);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  ctx.fillStyle = '#fff7ed';
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.13, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.1;
-  ctx.beginPath();
-  ctx.moveTo(x + size * 0.08, y + size * 0.08);
-  ctx.lineTo(x + size * 0.2, y + size * 0.2);
-  ctx.moveTo(x + size * 0.84, y + size * 0.88);
-  ctx.lineTo(x + size * 0.94, y + size * 0.98);
-  ctx.moveTo(x + size * 0.9, y + size * 0.06);
-  ctx.lineTo(x + size * 0.82, y + size * 0.18);
-  ctx.stroke();
-}
-
-function drawInspectorObject(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  const left = x + size * 0.24;
-  const top = y + size * 0.22;
-  const width = size * 0.52;
-  const height = size * 0.56;
-  ctx.strokeRect(left, top, width, height);
-  ctx.beginPath();
-  ctx.moveTo(left + width * 0.28, top);
-  ctx.lineTo(left + width * 0.28, top + height);
-  ctx.moveTo(left + width * 0.72, top);
-  ctx.lineTo(left + width * 0.72, top + height);
-  ctx.stroke();
-}
-
-function drawInspectorArray(ctx, x, y, size, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  const cx = x + size * 0.5;
-  const cy = y + size * 0.5;
-  ctx.beginPath();
-  ctx.arc(cx - size * 0.18, cy, size * 0.18, 0, Math.PI * 2);
-  ctx.arc(cx + size * 0.18, cy, size * 0.18, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-function drawInspectorValue(ctx, x, y, size, color) {
-  const cx = x + size * 0.5;
-  const cy = y + size * 0.5;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.25;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.3, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.11, 0, Math.PI * 2);
-  ctx.fill();
+function canvasPixelRatio(ctx, fallback) {
+  const transform = ctx.getTransform?.();
+  return Math.max(1, Math.abs(transform?.a) || fallback || 1);
 }

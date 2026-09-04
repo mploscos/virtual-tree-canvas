@@ -46,6 +46,7 @@ export class TreeViewController {
     this.initialExpandDepth = options.initialExpandDepth ?? 1;
     this.searchHighlights = new Set();
     this.filterQuery = '';
+    this.filterOptions = { caseSensitive: false, wholeWord: false };
     this.hoverId = null;
     this.hoverPart = null;
     this.activeId = null;
@@ -112,6 +113,7 @@ export class TreeViewController {
     this.#nativeScroll = null;
     this.inputController = null;
     this.cellEditor = null;
+    this.renderer?.destroy?.();
     this.canvas = null;
   }
 
@@ -211,8 +213,14 @@ export class TreeViewController {
 
   enableWorkers(workerUrl) {
     if (this.workerClient) return Promise.resolve(this);
-    this.workerClient = new TreeWorkerClient(workerUrl);
-    return this.workerClient.setData(this.model.nodes).then(() => this);
+    const client = new TreeWorkerClient(workerUrl);
+    this.workerClient = client;
+    return client.setData(this.model.nodes)
+      .then(() => this)
+      .catch((error) => {
+        if (this.workerClient === client) this.disableWorkers();
+        throw error;
+      });
   }
 
   disableWorkers() {
@@ -271,38 +279,42 @@ export class TreeViewController {
     this.events.emit('sortchange', { columnId: null, direction: null });
   }
 
-  setFilter(queryOrPredicate = '') {
+  setFilter(queryOrPredicate = '', options = {}) {
     this.filterQuery = typeof queryOrPredicate === 'string' ? queryOrPredicate : '';
+    this.filterOptions = typeof queryOrPredicate === 'string'
+      ? { caseSensitive: Boolean(options.caseSensitive), wholeWord: Boolean(options.wholeWord) }
+      : { caseSensitive: false, wholeWord: false };
     if (typeof queryOrPredicate === 'function') {
       this.rowModel.setFilterPredicate(queryOrPredicate);
     } else {
-      const query = queryOrPredicate.trim().toLowerCase();
-      this.rowModel.setFilterPredicate(query ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', query) : null);
+      const query = normalizeFilterValue(queryOrPredicate.trim(), this.filterOptions);
+      this.rowModel.setFilterPredicate(query ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', query, this.filterOptions) : null);
     }
     this.#rebuildRows();
-    this.events.emit('filterchange', { query: this.filterQuery, visibleRows: this.rowModel.rows.length });
+    this.events.emit('filterchange', { query: this.filterQuery, options: this.filterOptions, visibleRows: this.rowModel.rows.length });
   }
 
   clearFilter() {
     this.setFilter('');
   }
 
-  async setFilterAsync(query = '') {
+  async setFilterAsync(query = '', options = {}) {
     if (!this.workerClient || typeof query !== 'string') {
-      this.setFilter(query);
+      this.setFilter(query, options);
       return this.rowModel.rows;
     }
     const totalStart = now();
     const revision = ++this.workerRevision;
     this.filterQuery = query;
-    const normalized = query.trim().toLowerCase();
-    this.rowModel.setFilterPredicate(normalized ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', normalized) : null);
+    this.filterOptions = { caseSensitive: Boolean(options.caseSensitive), wholeWord: Boolean(options.wholeWord) };
+    const normalized = normalizeFilterValue(query.trim(), this.filterOptions);
+    this.rowModel.setFilterPredicate(normalized ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', normalized, this.filterOptions) : null);
     const workerStart = now();
-    const result = await this.workerClient.rebuildRows(this.#workerRowOptions({ filterQuery: query }));
+    const result = await this.workerClient.rebuildRows(this.#workerRowOptions({ filterQuery: query, filterOptions: this.filterOptions }));
     const workerMs = now() - workerStart;
     if (revision !== this.workerRevision) return this.rowModel.rows;
     this.#applyWorkerRows(result);
-    this.events.emit('filterchange', { query: this.filterQuery, visibleRows: this.rowModel.rows.length, worker: true, workerMs, totalMs: now() - totalStart });
+    this.events.emit('filterchange', { query: this.filterQuery, options: this.filterOptions, visibleRows: this.rowModel.rows.length, worker: true, workerMs, totalMs: now() - totalStart });
     return this.rowModel.rows;
   }
 
@@ -393,7 +405,12 @@ export class TreeViewController {
 
   search(query, options = {}) {
     for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
-    const results = this.searchIndex.search(query, { limit: options.limit ?? 500, fields: options.fields });
+    const results = this.searchIndex.search(query, {
+      limit: options.limit ?? 500,
+      fields: options.fields,
+      caseSensitive: options.caseSensitive,
+      wholeWord: options.wholeWord,
+    });
     this.searchHighlights = new Set(results);
     const expandedSizeBefore = this.expansion.model.expanded.size;
     for (const id of results) {
@@ -419,7 +436,12 @@ export class TreeViewController {
     const revision = ++this.workerRevision;
     for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
     const searchStart = now();
-    const results = await this.workerClient.search(query, { limit: options.limit ?? 500, fields: options.fields });
+    const results = await this.workerClient.search(query, {
+      limit: options.limit ?? 500,
+      fields: options.fields,
+      caseSensitive: options.caseSensitive,
+      wholeWord: options.wholeWord,
+    });
     const searchMs = now() - searchStart;
     if (revision !== this.workerRevision) return this.searchIndex.results;
     this.searchIndex.lastQuery = query;
@@ -671,6 +693,7 @@ export class TreeViewController {
     return {
       rows: this.rowModel.rows,
       visibleRange,
+      stickyRows: this.rowModel.getStickyRows(this.viewport),
       viewport: this.viewport,
       columns: this.columnModel.columns,
       theme: this.themeManager.get(),
@@ -1143,6 +1166,7 @@ export class TreeViewController {
       indentWidth: this.rowModel.indentWidth,
       sort: this.columnModel.sort,
       filterQuery: this.filterQuery,
+      filterOptions: this.filterOptions,
       ...overrides,
     };
   }
@@ -1366,7 +1390,7 @@ function compareColumnValues(column, a, b, dynamicState, snapshot = null) {
   return String(aValue ?? '').localeCompare(String(bValue ?? ''), undefined, { numeric: true, sensitivity: 'base' });
 }
 
-function matchesFilter(node, state, path, query) {
+function matchesFilter(node, state, path, query, options = {}) {
   const inspector = node.data?.inspector;
   const values = inspector
     ? [
@@ -1387,7 +1411,26 @@ function matchesFilter(node, state, path, query) {
         state.status,
         state.value,
       ];
-  return values.some((value) => String(value ?? '').toLowerCase().includes(query));
+  return values.some((value) => matchesSearch(normalizeFilterValue(value, options), query, options.wholeWord));
+}
+
+function normalizeFilterValue(value, options = {}) {
+  const text = String(value ?? '');
+  return options.caseSensitive ? text : text.toLowerCase();
+}
+
+function matchesSearch(text, query, wholeWord = false) {
+  if (!wholeWord) return text.includes(query);
+  let index = text.indexOf(query);
+  while (index !== -1) {
+    if (!isWordChar(text[index - 1]) && !isWordChar(text[index + query.length])) return true;
+    index = text.indexOf(query, index + query.length);
+  }
+  return false;
+}
+
+function isWordChar(char) {
+  return typeof char === 'string' && /[\p{L}\p{N}_]/u.test(char);
 }
 
 function inspectorTooltipValue(node) {

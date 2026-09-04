@@ -6,6 +6,8 @@ export class TreeWorkerClient {
     this.pending = new Map();
     this.ready = Promise.resolve();
     this.worker.addEventListener('message', this.#onMessage);
+    this.worker.addEventListener('error', this.#onError);
+    this.worker.addEventListener('messageerror', this.#onMessageError);
   }
 
   setData(nodes) {
@@ -27,6 +29,8 @@ export class TreeWorkerClient {
     for (const { reject } of this.pending.values()) reject(new Error('Tree worker destroyed'));
     this.pending.clear();
     this.worker.removeEventListener('message', this.#onMessage);
+    this.worker.removeEventListener('error', this.#onError);
+    this.worker.removeEventListener('messageerror', this.#onMessageError);
     this.worker.terminate();
   }
 
@@ -47,4 +51,17 @@ export class TreeWorkerClient {
     if (ok) pending.resolve(result);
     else pending.reject(new Error(error || 'Tree worker request failed'));
   };
+
+  #onError = (event) => {
+    this.#rejectPending(new Error(event.message || 'Tree worker failed'));
+  };
+
+  #onMessageError = () => {
+    this.#rejectPending(new Error('Tree worker returned an unreadable message'));
+  };
+
+  #rejectPending(error) {
+    for (const { reject } of this.pending.values()) reject(error);
+    this.pending.clear();
+  }
 }

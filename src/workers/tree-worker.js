@@ -25,28 +25,37 @@ self.addEventListener('message', (event) => {
 });
 
 function rebuildRowsIncremental(payload) {
-  const query = String(payload.filterQuery ?? '').trim().toLowerCase();
+  const options = {
+    caseSensitive: Boolean(payload.filterOptions?.caseSensitive),
+    wholeWord: Boolean(payload.filterOptions?.wholeWord),
+  };
+  const query = normalizeFilterValue(payload.filterQuery ?? '', options);
   if (!query) return rebuildWorkerRows(state, payload);
 
-  let cached = filterCache.get(query);
+  const cacheKey = `${options.caseSensitive ? 1 : 0}:${options.wholeWord ? 1 : 0}:${query}`;
+  let cached = filterCache.get(cacheKey);
   if (!cached) {
-    const base = findBestPrefixCache(query);
-    const computed = getIncludedIdsForQuery(state, query, base?.matchingIds ?? null);
+    const base = findBestPrefixCache(query, options);
+    const computed = getIncludedIdsForQuery(state, query, base?.matchingIds ?? null, options);
     cached = {
+      query,
+      options,
       matchingIds: computed.matchingIds,
       includedIds: Array.from(computed.includedIds),
     };
-    filterCache.set(query, cached);
+    filterCache.set(cacheKey, cached);
     trimFilterCache();
   }
   return rebuildWorkerRows(state, { ...payload, includedIds: cached.includedIds });
 }
 
-function findBestPrefixCache(query) {
+function findBestPrefixCache(query, options = {}) {
   let best = null;
-  for (const [cachedQuery, cached] of filterCache) {
+  for (const cached of filterCache.values()) {
+    if (cached.options.caseSensitive !== Boolean(options.caseSensitive) || cached.options.wholeWord !== Boolean(options.wholeWord)) continue;
+    const cachedQuery = cached.query;
     if (!cachedQuery || cachedQuery === query || !query.startsWith(cachedQuery)) continue;
-    if (!best || cachedQuery.length > best.query.length) best = { query: cachedQuery, ...cached };
+    if (!best || cachedQuery.length > best.query.length) best = cached;
   }
   return best;
 }
@@ -56,4 +65,9 @@ function trimFilterCache(limit = 8) {
     const oldest = filterCache.keys().next().value;
     filterCache.delete(oldest);
   }
+}
+
+function normalizeFilterValue(value, options = {}) {
+  const text = String(value ?? '').trim();
+  return options.caseSensitive ? text : text.toLowerCase();
 }

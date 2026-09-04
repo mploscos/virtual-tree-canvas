@@ -1,5 +1,17 @@
 export type TreeViewAlign = 'start' | 'center' | 'end' | 'nearest';
 
+export type IconDrawFunction = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => void;
+export type IconSource = string | CanvasImageSource | IconDrawFunction;
+
+export class IconRegistry {
+  constructor(options?: { pixelRatio?: number });
+  register(name: string, icon: IconSource): any;
+  get(name: string): any;
+  onChange(listener: () => void): () => void;
+  prepare(options?: { icons?: Iterable<string>; size?: number; color?: string; pixelRatio?: number }): Promise<any[]>;
+  draw(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, size: number, color: string): void;
+}
+
 export type TreeNode = {
   id: string;
   parentId?: string | null;
@@ -86,13 +98,14 @@ export class TreeViewController {
   setDynamicState(patches: DynamicPatch[]): void;
   setTheme(theme: any): void;
   setLayoutMetrics(options?: { rowHeight?: number; indentWidth?: number; headerHeight?: number }): void;
+  registerIcon(name: string, icon: IconSource): any;
   resize(width: number, height: number): void;
   render(time?: number): void;
   renderMeasured(time?: number): any;
   hitTest(clientX: number, clientY: number): any;
   getTooltipForHit(hit: any): any;
-  search(query: string, options?: Record<string, any>): any;
-  setFilter(queryOrPredicate?: string | ((node: any, state: any) => boolean)): void;
+  search(query: string, options?: Record<string, any> & { caseSensitive?: boolean; wholeWord?: boolean }): any;
+  setFilter(queryOrPredicate?: string | ((node: any, state: any) => boolean), options?: { caseSensitive?: boolean; wholeWord?: boolean }): void;
   clearFilter(): void;
   focusNode(nodeId: string, options?: Record<string, any>): boolean;
   scrollToNode(nodeId: string, align?: TreeViewAlign): boolean;

@@ -29,6 +29,7 @@ const focusRandomButton = document.querySelector('#focus-random');
 const copyResultsButton = document.querySelector('#copy-results');
 const jsonDialog = document.querySelector('#json-dialog');
 const jsonOutput = document.querySelector('#json-output');
+const useWorkers = new URLSearchParams(location.search).get('workers') !== 'false';
 
 const datasets = new Map();
 const patchBatcher = new PatchBatcher();
@@ -128,13 +129,13 @@ async function startRenderer({ keepState = true } = {}) {
   nextController.setColumns(defaultTreeTableColumns());
   nextController.setTheme(themes[themeSelect.value]);
   nextController.setData(nodes);
-  await nextController.enableWorkers().catch(() => null);
+  if (useWorkers) await nextController.enableWorkers().catch(() => null);
   if (generation !== rendererGeneration) {
     nextController.disableWorkers();
     return;
   }
   controller = nextController;
-  startSimulationWorker(nodes);
+  if (useWorkers) startSimulationWorker(nodes);
   if (previousState) restoreTreeViewState(controller, previousState);
   else applyScenario();
   if (filterInput.value) await controller.setFilterAsync(filterInput.value);

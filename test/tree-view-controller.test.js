@@ -121,6 +121,87 @@ test('search state tracks cursor and clearSearch removes highlights', () => {
   assert.equal(controller.model.dynamicState.get('b').highlighted, false);
 });
 
+test('search supports match case and whole word options', () => {
+  const controller = new TreeViewController();
+  controller.setData([
+    { id: 'root', label: 'Root' },
+    { id: 'lower', label: 'alpha beta' },
+    { id: 'upper', label: 'Alpha Betamax' },
+  ]);
+
+  assert.deepEqual(controller.search('alpha', { caseSensitive: true }), ['lower']);
+  assert.deepEqual(controller.search('Alpha', { caseSensitive: true }), ['upper']);
+  assert.deepEqual(controller.search('beta', { wholeWord: true }), ['lower']);
+});
+
+test('filter supports match case and whole word options', () => {
+  const controller = new TreeViewController();
+  controller.setData([
+    { id: 'root', label: 'Root' },
+    { id: 'lower', label: 'alpha beta' },
+    { id: 'upper', label: 'Alpha Betamax' },
+  ]);
+
+  controller.setFilter('Alpha', { caseSensitive: true });
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['upper']);
+
+  controller.setFilter('beta', { wholeWord: true });
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['lower']);
+});
+
+test('render scene exposes sticky ancestor rows for scrolled children', () => {
+  const controller = createController();
+  controller.resize(200, 88);
+  controller.expandAll();
+  controller.scrollToNode('b1', 'start');
+
+  assert.deepEqual(controller.createRenderScene().stickyRows.map((row) => row.nodeId), ['root', 'b']);
+});
+
+test('sticky ancestor rows are replaced by sibling branches entering the sticky area', () => {
+  const controller = new TreeViewController({ initialExpandDepth: Number.MAX_SAFE_INTEGER, rowHeight: 20 });
+  controller.resize(200, 128);
+  controller.setData([
+    { id: 'root', label: 'Root' },
+    { id: 'array', parentId: 'root', label: 'Array' },
+    { id: 'item0', parentId: 'array', label: '[0]' },
+    { id: 'item0-value', parentId: 'item0', label: 'parameterValue' },
+    { id: 'item0-leaf', parentId: 'item0-value', label: 'key' },
+    { id: 'item1', parentId: 'array', label: '[1]' },
+    { id: 'item1-value', parentId: 'item1', label: 'parameterValue' },
+    { id: 'item1-leaf', parentId: 'item1-value', label: 'key' },
+    { id: 'tail0', parentId: 'root', label: 'Tail 0' },
+    { id: 'tail1', parentId: 'root', label: 'Tail 1' },
+    { id: 'tail2', parentId: 'root', label: 'Tail 2' },
+  ]);
+
+  controller.scrollTo(0, 80);
+
+  assert.deepEqual(controller.createRenderScene().stickyRows.map((row) => row.nodeId), ['root', 'array', 'item1', 'item1-value']);
+});
+
+test('sticky ancestor rows are truncated by leaf siblings entering the sticky area', () => {
+  const controller = new TreeViewController({ initialExpandDepth: Number.MAX_SAFE_INTEGER, rowHeight: 20 });
+  controller.resize(200, 128);
+  controller.setData([
+    { id: 'properties', label: 'Properties' },
+    { id: 'isPartOf', parentId: 'properties', label: 'isPartOf' },
+    { id: 'namedLocation', parentId: 'isPartOf', label: 'namedLocation' },
+    { id: 'stationName', parentId: 'namedLocation', label: 'stationName' },
+    { id: 'value', parentId: 'stationName', label: 'value' },
+    { id: 'bodyDistance', parentId: 'value', label: 'bodyDistance' },
+    { id: 'liveEntityMeasuredSpeed', parentId: 'properties', label: 'liveEntityMeasuredSpeed' },
+    { id: 'marking', parentId: 'properties', label: 'marking' },
+    { id: 'markingEncodingType', parentId: 'marking', label: 'markingEncodingType' },
+    { id: 'tail0', parentId: 'properties', label: 'Tail 0' },
+    { id: 'tail1', parentId: 'properties', label: 'Tail 1' },
+  ]);
+
+  controller.scrollTo(0, 80);
+
+  assert.deepEqual(controller.createRenderScene().stickyRows.map((row) => row.nodeId), ['properties']);
+});
+
 test('ctrl+a selects all visible rows', () => {
   const controller = createController();
 

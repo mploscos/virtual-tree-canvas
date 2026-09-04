@@ -9,6 +9,9 @@ export class TreeRowRenderer {
     this.scene = null;
     this.iconRegistry = iconRegistry ?? new IconRegistry();
     this.renderedRows = 0;
+    this.iconRenderQueued = false;
+    this.preparedIconThemeKey = null;
+    this.stopIconListener = this.iconRegistry.onChange?.(() => this.#scheduleIconRender()) ?? null;
   }
 
   /** @param {HTMLCanvasElement} canvas */
@@ -20,6 +23,14 @@ export class TreeRowRenderer {
 
   setScene(scene) {
     this.scene = scene;
+  }
+
+  destroy() {
+    this.stopIconListener?.();
+    this.stopIconListener = null;
+    this.canvas = null;
+    this.ctx = null;
+    this.scene = null;
   }
 
   updateDynamicState(_patches) {
@@ -43,6 +54,7 @@ export class TreeRowRenderer {
 
     const ctx = this.ctx;
     const colors = theme.colors;
+    this.#prepareThemeIcons(theme, dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = colors.background;
     ctx.fillRect(0, 0, viewportWidth, viewportHeight);
@@ -51,7 +63,31 @@ export class TreeRowRenderer {
     ctx.translate(viewport.renderInsetX ?? 0, viewport.renderInsetY ?? 0);
     this.#drawHeader(ctx);
     this.#drawRows(ctx);
+    this.#drawStickyRows(ctx);
     ctx.restore();
+  }
+
+  #scheduleIconRender() {
+    if (this.iconRenderQueued) return;
+    this.iconRenderQueued = true;
+    const schedule = globalThis.requestAnimationFrame ?? ((callback) => setTimeout(callback, 0));
+    schedule(() => {
+      this.iconRenderQueued = false;
+      this.render();
+    });
+  }
+
+  #prepareThemeIcons(theme, pixelRatio) {
+    const iconColors = new Map([['placeholder', theme.colors.textMuted]]);
+    for (const style of Object.values(theme.types ?? {})) {
+      if (style?.icon) iconColors.set(style.icon, style.color ?? theme.colors.progressFill);
+    }
+    const key = `${pixelRatio}|${[...iconColors].map(([icon, color]) => `${icon}:${color}`).join(',')}`;
+    if (key === this.preparedIconThemeKey) return;
+    this.preparedIconThemeKey = key;
+    for (const [icon, color] of iconColors) {
+      this.iconRegistry.prepare?.({ icons: [icon], size: 15, color, pixelRatio });
+    }
   }
 
   #drawHeader(ctx) {
@@ -141,6 +177,34 @@ export class TreeRowRenderer {
       if (row) this.#drawRow(ctx, row);
     }
     ctx.restore();
+  }
+
+  #drawStickyRows(ctx) {
+    const { stickyRows = [], viewport, theme } = this.scene;
+    if (!stickyRows.length) return;
+    const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
+    const height = Math.min(
+      viewport.rowViewportHeight,
+      stickyRows.reduce((bottom, row, index) => Math.max(bottom, (row.stickyY ?? index * row.height) + row.height), 0)
+    );
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, viewport.headerHeight, visibleWidth, height);
+    ctx.clip();
+    ctx.translate(-viewport.scrollX, viewport.headerHeight);
+    for (let i = 0; i < stickyRows.length; i++) {
+      const row = stickyRows[i];
+      this.#drawRow(ctx, { ...row, y: row.stickyY ?? i * row.height });
+    }
+    ctx.restore();
+
+    const bottom = viewport.headerHeight + height;
+    ctx.strokeStyle = theme.colors.border;
+    ctx.beginPath();
+    ctx.moveTo(0, bottom + 0.5);
+    ctx.lineTo(visibleWidth, bottom + 0.5);
+    ctx.stroke();
   }
 
   #drawRow(ctx, row) {
