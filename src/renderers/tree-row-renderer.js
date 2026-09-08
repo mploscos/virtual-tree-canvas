@@ -1,3 +1,4 @@
+import { numericLayout } from '../inspector/numeric-layout.js';
 import { IconRegistry } from '../core/icon-registry.js';
 
 const DISABLED_ALPHA = 0.72;
@@ -344,12 +345,21 @@ export class TreeRowRenderer {
     const readonly = data.readonly;
     const x = rect.x + 10;
     const y = rect.y + 5;
-    const width = Math.max(24, rect.width - 20);
+    const fullWidth = Math.max(24, rect.width - 20);
+    const numeric = numericLayout(fullWidth, data);
+    const width = numeric.contentWidth;
     const height = rect.height - 10;
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.globalAlpha = disabled ? DISABLED_ALPHA : 1;
+
+    if (numeric.unit && numeric.unitWidth) {
+      ctx.font = theme.unitFont ?? theme.monoFont ?? theme.font;
+      ctx.fillStyle = theme.colors.unit ?? theme.colors.textMuted;
+      drawTruncatedText(ctx, numeric.unit, x + numeric.unitLeft, rect.y + rect.height / 2, numeric.unitWidth);
+      ctx.font = theme.font;
+    }
 
     if (data.editorType === 'checkbox') {
       this.#drawCheckbox(ctx, x, rect.y + rect.height / 2 - 8, Boolean(data.value), theme);
@@ -385,7 +395,15 @@ export class TreeRowRenderer {
       this.#drawMutedText(ctx, data.valueText, x + 8, rect.y + rect.height / 2, selectWidth - 30, theme);
       this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
     } else {
-      this.#drawMutedText(ctx, data.valueText, x, rect.y + rect.height / 2, width, theme, readonly);
+      if (numeric.unit) {
+        ctx.font = theme.monoFont ?? theme.font;
+        ctx.fillStyle = readonly ? theme.colors.textMuted : theme.colors.text;
+        ctx.textAlign = 'right';
+        drawTruncatedText(ctx, data.valueText, x + width, rect.y + rect.height / 2, width);
+        ctx.textAlign = 'left';
+      } else {
+        this.#drawMutedText(ctx, data.valueText, x, rect.y + rect.height / 2, width, theme, readonly);
+      }
     }
 
     if (meta.updated && !suppressUpdatedMarker) {
@@ -432,9 +450,8 @@ export class TreeRowRenderer {
     const max = meta.max ?? 100;
     const value = typeof data.value === 'number' ? data.value : min;
     const ratio = max === min ? 0 : clamp01((value - min) / (max - min));
-    const valueWidth = Math.min(64, Math.max(42, width * 0.28));
+    const { valueWidth, barWidth } = numericLayout(width);
     const gap = 8;
-    const barWidth = Math.max(24, width - valueWidth - gap);
     this.#drawMeterBar(ctx, x, y + 0.5, barWidth, 7, ratio, theme.colors.progressFill, theme);
     this.#drawControlSurface(ctx, x + barWidth + gap, y - 6, valueWidth, 20, theme, {
       hovered: Boolean(state.hoveredNumber),

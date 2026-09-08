@@ -2,6 +2,7 @@ export const darkTheme = {
   rowHeight: 28,
   indentWidth: 18,
   font: '12px Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+  unitFont: '11px ui-monospace, SFMono-Regular, Consolas, monospace',
   monoFont: '12px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace',
   colors: {
     background: '#0a0f1c',

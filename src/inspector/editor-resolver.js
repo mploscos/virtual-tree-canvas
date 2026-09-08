@@ -28,6 +28,11 @@ export function formatInspectorValue(value, meta = {}) {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
   if (typeof value === 'object') return Array.isArray(value) ? `Array(${value.length})` : 'Object';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+  if (typeof value === 'number') {
+    if (Number.isFinite(value) && Number.isInteger(meta.precision) && meta.precision >= 0 && meta.precision <= 20) {
+      return value.toFixed(meta.precision);
+    }
+    return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+  }
   return String(value);
 }

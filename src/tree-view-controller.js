@@ -12,6 +12,7 @@ import {
   TreeViewViewport,
   VisibleRowModel,
 } from './core/index.js';
+import { numericLayout } from './inspector/numeric-layout.js';
 import { CellEditorManager } from './inspector/cell-editor-manager.js';
 import { formatInspectorValue, getAtPath, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath } from './inspector/index.js';
 import { TreeViewInputController } from './input/tree-view-input-controller.js';
@@ -789,11 +790,11 @@ export class TreeViewController {
     const node = this.model.nodes[row.nodeIndex];
     const data = node?.data;
     if (!data?.inspector) return 'cell';
+    const numeric = numericLayout(Math.max(24, editorWidth - 20), data);
+    if (numeric.unit && localEditorX >= 10 + numeric.unitLeft) return 'unit';
     if (data.editorType === 'checkbox') return 'checkbox';
     if (data.editorType === 'range') {
-      const width = Math.max(24, editorWidth - 20);
-      const valueWidth = Math.min(64, Math.max(42, width * 0.28));
-      const numberLeft = editorWidth - valueWidth - 10;
+      const numberLeft = 10 + numeric.numberLeft;
       return localEditorX >= numberLeft ? 'number' : 'range';
     }
     if (data.editorType === 'button') return 'button';

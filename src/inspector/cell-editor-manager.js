@@ -1,3 +1,5 @@
+import { numericLayout } from './numeric-layout.js';
+
 export class CellEditorManager {
   constructor({ controller, host = null }) {
     if (!controller) throw new TypeError('CellEditorManager requires a TreeViewController');
@@ -81,6 +83,7 @@ export class CellEditorManager {
     const hostRect = this.host.getBoundingClientRect();
     const element = createEditorElement(data);
     element.className = `vtc-editor vtc-editor-${data.editorType}`;
+    element.setAttribute('aria-label', [node.label, numericLayout(rect.width, data).unit].filter(Boolean).join(' '));
     Object.assign(element.style, {
       position: 'absolute',
       left: `${rect.x - hostRect.left}px`,
@@ -208,34 +211,36 @@ export class CellEditorManager {
   }
 
   #isEditableHit(hit) {
-    return hit?.area === 'row' && (hit.column?.kind === 'inspectorValue' || hit.column?.kind === 'inspectorPane');
+    return hit?.area === 'row' && hit.part !== 'unit' && (hit.column?.kind === 'inspectorValue' || hit.column?.kind === 'inspectorPane');
   }
 
-  #overlayRect(hit) {
-    if (hit.column?.kind !== 'inspectorPane') return this.controller.getCellClientRect(hit);
+  #editorContentRect(hit) {
     const rect = this.controller.getCellClientRect(hit);
+    if (hit.column?.kind !== 'inspectorPane') {
+      return { x: rect.x + 10, y: rect.y + 4, width: Math.max(24, rect.width - 20), height: rect.height - 8 };
+    }
     const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.contentViewportWidth));
     const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
     const { editorLeft, editorWidth } = this.controller.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
-    if (hit.part === 'number') {
-      const valueWidth = Math.min(64, Math.max(42, (editorWidth - 20) * 0.28));
-      return { x: rect.x + editorLeft + editorWidth - valueWidth - 10, y: rect.y + 4, width: valueWidth, height: rect.height - 8 };
+    return { x: rect.x + editorLeft + 10, y: rect.y + 4, width: Math.max(24, editorWidth - 20), height: rect.height - 8 };
+  }
+
+  #overlayRect(hit) {
+    const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
+    const rect = this.#editorContentRect(hit);
+    const layout = numericLayout(rect.width, data);
+    if (hit.part === 'number' && data.editorType === 'range') {
+      return { ...rect, x: rect.x + layout.numberLeft, width: layout.valueWidth };
     }
-    return { x: rect.x + editorLeft + 10, y: rect.y + 4, width: editorWidth - 20, height: rect.height - 8 };
+    if (layout.unit) return { ...rect, width: layout.contentWidth };
+    if (hit.column?.kind !== 'inspectorPane') return this.controller.getCellClientRect(hit);
+    return rect;
   }
 
   #rangeBarRect(hit) {
-    const rect = this.controller.getCellClientRect(hit);
-    if (hit.column?.kind === 'inspectorPane') {
-      const visibleWidth = Math.max(1, Math.min(rect.width, this.controller.viewport.contentViewportWidth));
-      const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
-      const { editorLeft, editorWidth } = this.controller.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
-      const valueWidth = Math.min(64, Math.max(42, (editorWidth - 20) * 0.28));
-      const barWidth = Math.max(24, editorWidth - 20 - valueWidth - 8);
-      return { x: rect.x + editorLeft + 10, y: rect.y + rect.height / 2 - 4, width: barWidth, height: 8 };
-    }
-    const valueWidth = Math.min(64, Math.max(42, (rect.width - 20) * 0.28));
-    return { x: rect.x + 10, y: rect.y + rect.height / 2 - 4, width: Math.max(24, rect.width - 20 - valueWidth - 8), height: 8 };
+    const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
+    const rect = this.#editorContentRect(hit);
+    return { ...rect, y: rect.y + rect.height / 2 - 4, width: numericLayout(rect.width, data).barWidth, height: 8 };
   }
 
   #clampRectToHost(rect, inset = 0) {

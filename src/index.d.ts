@@ -33,6 +33,10 @@ export type MetaRule = {
   max?: number;
   step?: number;
   integer?: boolean;
+  /** Display-only suffix for numeric values. Never appended to the model value. */
+  unit?: string;
+  /** Display decimal places (0–20). Editing retains the original precision. */
+  precision?: number;
   readonly?: boolean;
   disabled?: boolean;
   updated?: boolean;

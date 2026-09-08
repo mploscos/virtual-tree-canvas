@@ -197,7 +197,7 @@ tree.setModel(
   {
     'sensor.range': { min: 0, max: 120, step: 1, integer: true },
     'sensor.mode': { options: { Search: 'search', Track: 'track' } },
-    'tracks.*.speed': { min: 0, max: 900, step: 5 },
+    'tracks.*.speed': { min: 0, max: 900, step: 5, unit: 'm/s', precision: 2 },
     'tracks.*.id': { readonly: true },
   },
   { presentation: 'pane', flatRoot: true },
@@ -208,6 +208,15 @@ Choose `presentation: 'pane'` for a compact folder-and-controls view, or
 `presentation: 'table'` for Property / Value / Type / Description columns.
 Editors are inferred from data and metadata: checkbox, range, number, text,
 select, colour, button, object and array.
+
+Numeric metadata supports `unit` (a display-only string suffix) and `precision`
+(decimal places, 0–20). The unit has a reserved slot beside the number in both
+pane and table presentations, including range sliders. It stays visible while
+editing; the editor receives the full original numeric value and emits a number.
+Precision changes display only, not stored values, limits or step size. Omit both
+options to keep the existing formatting. Invalid precision values are ignored.
+Customize the suffix with `theme.unitFont` and `theme.colors.unit` (defaults to
+`textMuted`). Long units are truncated to fit the available cell width.
 
 Listen for user edits and actions with `valuechange`, `modelchange` and
 `action` events.

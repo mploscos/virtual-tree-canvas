@@ -271,3 +271,49 @@ test('inspector can add and remove array items', () => {
   assert.equal(controller.removeInspectorArrayItem('model:tracks'), true);
   assert.deepEqual(model.tracks, []);
 });
+
+test('numeric units and precision are display metadata, including live updates', () => {
+  const model = { speed: 12.345678, distance: 42, tiny: 0.00001234 };
+  const controller = new TreeViewController();
+  controller.setModel(model, {
+    speed: { unit: 'm/s', precision: 2 },
+    distance: { unit: 'm', precision: 2 },
+    tiny: { unit: 'rad', precision: 8 },
+  }, { flatRoot: true });
+  assert.equal(controller.model.index.getNode('model:speed').data.valueText, '12.35');
+  assert.equal(controller.model.index.getNode('model:distance').data.valueText, '42.00');
+  assert.equal(controller.model.index.getNode('model:tiny').data.valueText, '0.00001234');
+  assert.equal(model.speed, 12.345678);
+  controller.updateInspectorValue('model:speed', 98.7654321, 'number');
+  const updated = controller.model.index.getNode('model:speed').data;
+  assert.equal(updated.valueText, '98.77');
+  assert.equal(updated.value, 98.7654321);
+  assert.equal(updated.meta.unit, 'm/s');
+});
+
+test('precision is bounded and optional, and enum formatting takes precedence', () => {
+  const builder = new ModelInspectorBuilder();
+  for (const precision of [-1, 21, 1.5, '2', NaN, Infinity, undefined]) {
+    const [node] = builder.build({ n: 1.23456 }, { n: { precision } }, { flatRoot: true });
+    assert.equal(node.data.valueText, '1.235');
+  }
+  const [node] = builder.build({ n: 1 }, { n: { options: { Enabled: 1 }, unit: 'm', precision: 2 } }, { flatRoot: true });
+  assert.equal(node.data.valueText, 'Enabled');
+  for (const n of [NaN, Infinity, -Infinity]) {
+    const [node] = builder.build({ n }, { n: { precision: 2 } }, { flatRoot: true });
+    assert.equal(node.data.valueText, String(n));
+  }
+});
+
+test('range unit has a separate hit area in pane and table presentations', () => {
+  for (const presentation of ['pane', 'table']) {
+    const controller = new TreeViewController({ rowHeight: 28, headerHeight: 0 });
+    controller.resize(720, 200);
+    controller.setModel({ speed: 50 }, { speed: { min: 0, max: 100, unit: 'm/s', precision: 2 } }, { flatRoot: true, presentation });
+    const column = controller.columnModel.columns.find(c => c.kind === (presentation === 'pane' ? 'inspectorPane' : 'inspectorValue'));
+    const x = column.x + column.width - 15;
+    assert.equal(controller.hitTest(x, 14).part, 'unit', presentation);
+    assert.equal(controller.hitTest(x - 50, 14).part, 'number', presentation);
+    assert.equal(controller.hitTest(x - 120, 14).part, 'range', presentation);
+  }
+});
