@@ -56,6 +56,26 @@ export class TreeModel extends EventTarget {
     this.dispatchEvent(new Event('structurechange'));
   }
 
+  /** Move one node among siblings without resetting expansion or live values. */
+  moveNode(id, targetIndex) {
+    const node = this.index.getNode(id);
+    if (!node || !Number.isInteger(targetIndex)) return null;
+    const parentId = node.parentId ?? null;
+    const siblings = this.index.getChildren(parentId);
+    const fromIndex = siblings.indexOf(id);
+    const toIndex = Math.max(0, Math.min(siblings.length - 1, targetIndex));
+    if (fromIndex === toIndex) return null;
+    const siblingOrder = siblings.slice();
+    siblingOrder.splice(fromIndex, 1);
+    siblingOrder.splice(toIndex, 0, id);
+    const orderedNodes = siblingOrder.map(nodeId => this.index.getNode(nodeId));
+    let position = 0;
+    this.nodes = this.nodes.map(item => (item.parentId ?? null) === parentId ? orderedNodes[position++] : item);
+    this.index.rebuild(this.nodes);
+    this.dispatchEvent(new Event('structurechange'));
+    return { nodeId: id, parentId, fromIndex, toIndex, siblingOrder, order: this.nodes.map(item => item.id) };
+  }
+
   /** @param {string} id */
   collapse(id) {
     this.expanded.delete(id);

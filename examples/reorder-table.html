@@ -1,0 +1,33 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Orden manual · virtual-tree-canvas</title>
+<style>*{box-sizing:border-box}body{font:15px system-ui;background:#0b1020;color:#e2e8f0;padding:30px;max-width:1100px;margin:auto}h1{font-size:26px;margin-bottom:8px}p{line-height:1.5;color:#aabbd1}button,input{background:#172339;color:inherit;border:1px solid #64748b;border-radius:6px;padding:8px 12px;font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}header{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}#host{position:relative;height:390px;border:1px solid #334155;border-radius:8px;overflow:hidden}canvas{position:absolute;inset:0;width:100%;height:100%}output{display:block;min-height:28px;margin-top:16px;color:#67e8f9}code{font-size:13px}#order{color:#94a3b8;overflow-wrap:anywhere}</style>
+<h1>Tabla con orden manual</h1><p>Arrastra el asa de una fila o usa sus flechas. Con la tabla enfocada, <kbd>Alt</kbd> + <kbd>↑</kbd>/<kbd>↓</kbd> mueve la fila. <kbd>Esc</kbd> cancela el arrastre. Los valores siguen actualizándose.</p>
+<header><button id="clear">Quitar filtro y ordenación</button><button id="pause">Pausar valores</button><button id="reset">Restablecer orden</button></header>
+<div id="host"></div><output id="status" aria-live="polite">Orden manual activo</output><p id="order"></p>
+<script type="module">
+import { TreeView } from '../src/index.js';
+const host=document.querySelector('#host');
+const rows=[
+{id:'altitude',label:'Altitud',icon:'aircraft',data:{unit:'m'}},
+{id:'speed',label:'Velocidad',icon:'car',data:{unit:'m/s'}},
+{id:'temperature',label:'Temperatura',icon:'thermometer',data:{unit:'°C'}},
+{id:'wind',label:'Viento',icon:'wind',data:{unit:'m/s'}},
+{id:'power',label:'Potencia',icon:'sensor',data:{unit:'W'}},
+{id:'signal',label:'Señal del bus de datos',icon:'data-bus',data:{unit:'dB'}},
+{id:'people',label:'Personas detectadas',icon:'people',data:{unit:''}},
+{id:'range',label:'Distancia',icon:'radar',data:{unit:'m'}}];
+const view=new TreeView(host,{rowReorder:true,editable:false,iconsBaseUrl:'../resources/icons/',columns:[{id:'name',kind:'tree',label:'Propiedad',width:380,value:n=>n.label},{id:'value',label:'Valor',width:160,value:(_n,s)=>s.value??'—'},{id:'unit',label:'Unidad',width:120,value:n=>n.data?.unit??''}]});
+const controller=view.controller;
+window.demoView=view;window.demoController=controller;window.reorderEvents=[];
+const key='vtc-demo-manual-order';
+function install(order){const byId=new Map(rows.map(n=>[n.id,n]));const ordered=order.map(id=>byId.get(id)).filter(Boolean);const seen=new Set(ordered.map(n=>n.id));view.setData([...ordered,...rows.filter(n=>!seen.has(n.id))]);showOrder();}
+function showOrder(){document.querySelector('#order').textContent='Orden: '+controller.getRowOrder().join(' → ');}
+let saved=[];try{saved=JSON.parse(localStorage.getItem(key)||'[]');}catch{}install(Array.isArray(saved)?saved:[]);
+controller.on('rowreorder',({detail})=>{window.reorderEvents.push(detail);localStorage.setItem(key,JSON.stringify(detail.order));document.querySelector('#status').textContent=`${detail.nodeId}: posición ${detail.toIndex+1}`;showOrder();});
+function mode(){document.querySelector('#status').textContent=controller.canReorderRows()?'Orden manual activo':'Quita el filtro y la ordenación para mover filas.';}
+controller.on('filterchange',mode);controller.on('sortchange',mode);
+document.querySelector('#clear').onclick=()=>{controller.clearFilter();controller.clearSort();};
+document.querySelector('#reset').onclick=()=>{localStorage.removeItem(key);install([]);};
+let paused=false,tick=0;document.querySelector('#pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Reanudar valores':'Pausar valores';};
+const timer=setInterval(()=>{if(paused)return;tick++;controller.setDynamicState(rows.map((n,i)=>({id:n.id,state:{value:n.id==='people'?Math.floor(tick/20)%8:(100+i*20+Math.sin(tick/8+i)*5).toFixed(2)}})));},150);
+window.addEventListener('pagehide',()=>{clearInterval(timer);view.destroy();});
+</script></html>

@@ -1,0 +1,380 @@
+[
+  {
+    "id": "person",
+    "label": "Persona",
+    "category": "Personas y organización",
+    "available": true
+  },
+  {
+    "id": "people",
+    "label": "Grupo",
+    "category": "Personas y organización",
+    "available": true
+  },
+  {
+    "id": "child",
+    "label": "Infancia",
+    "category": "Personas y organización",
+    "available": true
+  },
+  {
+    "id": "dog",
+    "label": "Perro",
+    "category": "Animales",
+    "available": true
+  },
+  {
+    "id": "cat",
+    "label": "Gato",
+    "category": "Animales",
+    "available": true
+  },
+  {
+    "id": "bird",
+    "label": "Ave",
+    "category": "Animales",
+    "available": true
+  },
+  {
+    "id": "fish",
+    "label": "Pez",
+    "category": "Animales",
+    "available": true
+  },
+  {
+    "id": "insect",
+    "label": "Insecto",
+    "category": "Animales",
+    "available": true
+  },
+  {
+    "id": "tree",
+    "label": "Árbol",
+    "category": "Plantas y ecosistemas",
+    "available": true
+  },
+  {
+    "id": "leaf",
+    "label": "Hoja",
+    "category": "Plantas y ecosistemas",
+    "available": true
+  },
+  {
+    "id": "flower",
+    "label": "Flor",
+    "category": "Plantas y ecosistemas",
+    "available": true
+  },
+  {
+    "id": "seedling",
+    "label": "Brote",
+    "category": "Plantas y ecosistemas",
+    "available": true
+  },
+  {
+    "id": "sun",
+    "label": "Sol",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "moon",
+    "label": "Luna",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "cloud",
+    "label": "Nube",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "rain",
+    "label": "Lluvia",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "snow",
+    "label": "Nieve",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "wind",
+    "label": "Viento",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "storm",
+    "label": "Tormenta",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "fog",
+    "label": "Niebla",
+    "category": "Tiempo atmosférico",
+    "available": true
+  },
+  {
+    "id": "ground",
+    "label": "Dominio terrestre",
+    "category": "Terreno y agua",
+    "available": true
+  },
+  {
+    "id": "surface",
+    "label": "Dominio de superficie",
+    "category": "Terreno y agua",
+    "available": true
+  },
+  {
+    "id": "subsurface",
+    "label": "Dominio submarino",
+    "category": "Terreno y agua",
+    "available": true
+  },
+  {
+    "id": "car",
+    "label": "Coche",
+    "category": "Transporte terrestre",
+    "available": true
+  },
+  {
+    "id": "bicycle",
+    "label": "Bicicleta",
+    "category": "Transporte terrestre",
+    "available": true
+  },
+  {
+    "id": "bus-vehicle",
+    "label": "Autobús de pasajeros",
+    "category": "Transporte terrestre",
+    "available": true
+  },
+  {
+    "id": "aircraft",
+    "label": "Avión",
+    "category": "Aviación y espacio",
+    "available": true
+  },
+  {
+    "id": "helicopter",
+    "label": "Helicóptero",
+    "category": "Aviación y espacio",
+    "available": true
+  },
+  {
+    "id": "drone",
+    "label": "Dron",
+    "category": "Aviación y espacio",
+    "available": true
+  },
+  {
+    "id": "space",
+    "label": "Dominio espacial",
+    "category": "Aviación y espacio",
+    "available": true
+  },
+  {
+    "id": "ship",
+    "label": "Buque",
+    "category": "Entorno marítimo",
+    "available": true
+  },
+  {
+    "id": "box",
+    "label": "Caja",
+    "category": "Objetos e instalaciones",
+    "available": true
+  },
+  {
+    "id": "building",
+    "label": "Edificio",
+    "category": "Objetos e instalaciones",
+    "available": true
+  },
+  {
+    "id": "data-bus",
+    "label": "Bus de datos",
+    "category": "Datos y redes",
+    "available": true
+  },
+  {
+    "id": "network",
+    "label": "Red",
+    "category": "Datos y redes",
+    "available": true
+  },
+  {
+    "id": "server",
+    "label": "Servidor",
+    "category": "Datos y redes",
+    "available": true
+  },
+  {
+    "id": "database",
+    "label": "Base de datos",
+    "category": "Datos y redes",
+    "available": true
+  },
+  {
+    "id": "link",
+    "label": "Enlace",
+    "category": "Datos y redes",
+    "available": true
+  },
+  {
+    "id": "sensor",
+    "label": "Sensor genérico",
+    "category": "Sensores y mediciones",
+    "available": true
+  },
+  {
+    "id": "radar",
+    "label": "Radar",
+    "category": "Sensores y mediciones",
+    "available": true
+  },
+  {
+    "id": "thermometer",
+    "label": "Termómetro",
+    "category": "Sensores y mediciones",
+    "available": true
+  },
+  {
+    "id": "globe",
+    "label": "Globo terrestre",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "point",
+    "label": "Punto",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "track",
+    "label": "Traza",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "folder",
+    "label": "Carpeta",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "inspector-object",
+    "label": "Objeto de datos",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "inspector-array",
+    "label": "Array",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "inspector-value",
+    "label": "Valor escalar",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "warning",
+    "label": "Advertencia",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "error",
+    "label": "Error",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "placeholder",
+    "label": "Tipo desconocido",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "damage",
+    "label": "Daño",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "situation",
+    "label": "Situación",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "lock",
+    "label": "Bloqueado",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "control",
+    "label": "Control",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "task",
+    "label": "Tarea",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "star",
+    "label": "Favorito",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "pin",
+    "label": "Fijado",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "heart",
+    "label": "Preferencia afectiva",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "grip",
+    "label": "Asa de arrastre",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "clock",
+    "label": "Reloj",
+    "category": "Tiempo y simulación",
+    "available": true
+  },
+  {
+    "id": "calendar",
+    "label": "Calendario",
+    "category": "Tiempo y simulación",
+    "available": true
+  },
+  {
+    "id": "munition",
+    "label": "Munición",
+    "category": "Tiempo y simulación",
+    "available": true
+  }
+]

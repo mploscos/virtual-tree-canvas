@@ -1,4 +1,4 @@
-import { builtinIconUrls } from '../assets/icons.js';
+import { createBuiltinIconUrls } from '../assets/icons.js';
 
 /**
  * Icon source registry for the Canvas2D tree renderer.
@@ -8,11 +8,11 @@ import { builtinIconUrls } from '../assets/icons.js';
  * colour combination. The render hot path is therefore a single drawImage.
  */
 export class IconRegistry {
-  constructor({ pixelRatio } = {}) {
+  constructor({ pixelRatio, iconsBaseUrl } = {}) {
     this.icons = new Map();
     this.listeners = new Set();
     this.pixelRatio = pixelRatio ?? devicePixelRatio();
-    this.#registerBuiltIns();
+    this.#registerBuiltIns(iconsBaseUrl);
   }
 
   /** Register an SVG string/URL, an image URL, ImageBitmap, or legacy Canvas draw function. */
@@ -91,9 +91,7 @@ export class IconRegistry {
       error: null,
     };
     this.icons.set(name, entry);
-    // Fetching source eagerly moves network and SVG parsing out of scrolling.
-    // Avoid file-URL fetch attempts while the package is exercised in Node.
-    if (typeof window !== 'undefined') this.#loadSvg(entry);
+    // Load on prepare()/draw(): unused catalog icons do not make network requests.
     return entry;
   }
 
@@ -162,8 +160,8 @@ export class IconRegistry {
     for (const listener of this.listeners) listener();
   }
 
-  #registerBuiltIns() {
-    for (const [name, url] of Object.entries(builtinIconUrls)) this.register(name, url);
+  #registerBuiltIns(iconsBaseUrl) {
+    for (const [name, url] of Object.entries(createBuiltinIconUrls(iconsBaseUrl))) this.register(name, url);
   }
 }
 

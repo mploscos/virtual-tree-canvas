@@ -36,7 +36,7 @@ export const darkTheme = {
     root: { icon: 'folder', color: '#38bdf8' },
     system: { icon: 'folder', color: '#818cf8' },
     platform: { icon: 'aircraft', color: '#60a5fa' },
-    air: { icon: 'air', color: '#60a5fa' },
+    air: { icon: 'aircraft', color: '#60a5fa' },
     ground: { icon: 'ground', color: '#a3e635' },
     surface: { icon: 'surface', color: '#22d3ee' },
     subsurface: { icon: 'subsurface', color: '#38bdf8' },
@@ -51,7 +51,7 @@ export const darkTheme = {
     warning: { icon: 'warning', color: '#facc15' },
     error: { icon: 'error', color: '#ef4444' },
     task: { icon: 'task', color: '#f97316' },
-    bus: { icon: 'bus', color: '#22d3ee' },
+    bus: { icon: 'data-bus', color: '#22d3ee' },
     object: { icon: 'inspector-object', color: '#7dd3fc' },
     array: { icon: 'inspector-array', color: '#a78bfa' },
     string: { icon: 'inspector-value', color: '#94a3b8' },
@@ -129,7 +129,7 @@ export const tacticalTheme = {
     ...darkTheme.types,
     root: { icon: 'folder', color: '#7ddc92' },
     platform: { icon: 'aircraft', color: '#93c572' },
-    air: { icon: 'air', color: '#93c572' },
+    air: { icon: 'aircraft', color: '#93c572' },
     ground: { icon: 'ground', color: '#c7f36f' },
     surface: { icon: 'surface', color: '#67e8f9' },
     subsurface: { icon: 'subsurface', color: '#7dd3fc' },
@@ -143,7 +143,7 @@ export const tacticalTheme = {
     damage: { icon: 'damage', color: '#ff8fab' },
     warning: { icon: 'warning', color: '#ffd166' },
     error: { icon: 'error', color: '#ff5c5c' },
-    bus: { icon: 'bus', color: '#67e8f9' },
+    bus: { icon: 'data-bus', color: '#67e8f9' },
   },
 };
 
@@ -188,7 +188,17 @@ export class ThemeManager extends EventTarget {
   }
 }
 
+export function resolveTheme(theme = {}) {
+  if (typeof theme === 'string') {
+    if (!Object.hasOwn(themes, theme)) throw new TypeError(`Unknown virtual tree theme: ${theme}`);
+    return themes[theme];
+  }
+  if (!theme || typeof theme !== 'object' || Array.isArray(theme)) throw new TypeError('theme must be a theme name or object');
+  return theme;
+}
+
 function normalizeTheme(theme = {}) {
+  theme = resolveTheme(theme);
   const base = mergeTheme(darkTheme, theme);
   return {
     ...base,

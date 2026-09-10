@@ -1,0 +1,11 @@
+<!doctype html><html><meta charset="utf-8"><style>.host{width:900px;height:360px}</style><body><script type="module">
+import {TreeView} from '../../src/index.js';
+import {runViewContract} from './view-contract.js';
+try {
+ window.testResult=await runViewContract(async()=>{
+  const host=document.createElement('div');host.className='host';document.body.append(host);
+  const widget=new TreeView(host,{rowReorder:true,initialExpandDepth:Number.MAX_SAFE_INTEGER,nodes:[{id:'a',label:'Alpha'},{id:'b',label:'Bravo'},{id:'c',label:'Charlie'}]});
+  return {widget,root:host,configure:patch=>widget.configure(patch),subscribe:(type,fn)=>widget.on(type,fn),silentWrite:(path,value)=>widget.setInspectorValue(path,value,{emit:false}),destroy:async()=>{widget.destroy();host.remove();}};
+ });
+} catch(error){window.testResult={error:error.stack};}
+</script></body></html>

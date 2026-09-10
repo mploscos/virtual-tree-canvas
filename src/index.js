@@ -4,3 +4,6 @@ export * from './inspector/index.js';
 export * from './renderers/index.js';
 export * from './tree-view-controller.js';
 export * from './benchmark/index.js';
+export { builtinIconNames } from './assets/icons.js';
+export { TreeView } from './tree-view.js';
+export { treeViewOptionNames, validateTreeViewOptions } from './core/view-options.js';

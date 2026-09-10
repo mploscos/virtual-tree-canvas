@@ -4,21 +4,20 @@
 body{margin:24px;background:#0a0f1c;color:#e8edf4;font:14px system-ui}h1{font-size:21px}p{color:#8ea0b5}.host{position:relative;height:230px;border:1px solid #2b3b52;border-radius:8px;overflow:hidden;margin:16px 0;max-width:1050px}canvas{display:block;width:100%;height:100%}#result{font-family:monospace}
 </style>
 <h1>Values with units</h1><p>Units remain visible while editing. Display precision never changes the stored numeric value.</p>
-<div id="pane" class="host"><canvas></canvas></div><div id="table" class="host"><canvas></canvas></div><div id="result"></div>
+<div id="pane" class="host"></div><div id="table" class="host"></div><div id="result"></div>
 <script type="module">
-import { TreeViewController } from '../src/index.js';
-const controllers=[];
+import { TreeView } from '../src/index.js';
+const controllers=[], views=[];
 for (const presentation of ['pane','table']) {
- const host=document.getElementById(presentation),canvas=host.querySelector('canvas');
- const c=new TreeViewController({canvas,host,headerHeight:28});
- c.initialize(canvas); c.attachCellEditor({host}); c.attachInput({cellEditor:c.cellEditor});
- c.resize(host.clientWidth,host.clientHeight);
- c.setModel({speed:125.45678,altitude:1250.25,acceleration:-9.80665,temperature:21.125,tiny:0.00001234,legacy:12.34567},{
+ const host=document.getElementById(presentation);
+ const view=new TreeView(host,{mode:'inspector',presentation,filter:false,initialExpandDepth:3});
+ const c=view.controller;
+ view.setModel({speed:125.45678,altitude:1250.25,acceleration:-9.80665,temperature:21.125,tiny:0.00001234,legacy:12.34567},{
  speed:{unit:'m/s',precision:2,min:0,max:300},altitude:{unit:'m',precision:1},acceleration:{unit:'m/s²',precision:3,readonly:true},temperature:{unit:'°C',precision:2},tiny:{unit:'rad',precision:8},legacy:{}
- },{presentation,flatRoot:true});c.render();controllers.push(c);
- new ResizeObserver(()=>{c.resize(host.clientWidth,host.clientHeight);c.render()}).observe(host);
+ });controllers.push(c);views.push(view);
 }
 window.unitControllers=controllers;
+window.addEventListener('pagehide',()=>views.forEach(view=>view.destroy()));
 // Small browser integration check, activated explicitly for automated validation.
 if (new URLSearchParams(location.search).has('test')) {
  const assert=(v,m)=>{if(!v)throw Error(m)};

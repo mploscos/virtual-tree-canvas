@@ -7,13 +7,24 @@ export class CellEditorManager {
     this.controller = controller;
     this.canvas = controller.canvas;
     this.host = host ?? controller.canvas.parentElement ?? document.body;
+    this.editable = true;
     this.overlay = null;
     this.rangeDrag = null;
+    this.overlayKind = null;
+    this.stopFilter = controller.on('filterchange', ({ detail }) => {
+      if (this.overlayKind === 'filter' && this.overlay) this.overlay.value = detail.query;
+    });
     this.onMouseMove = this.#onMouseMove.bind(this);
     this.onMouseUp = this.#onMouseUp.bind(this);
   }
 
+  setEditable(enabled) {
+    this.editable = enabled;
+    if (!enabled) this.close();
+  }
+
   destroy() {
+    this.stopFilter();
     this.#removeOverlay();
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('mouseup', this.onMouseUp);
@@ -27,7 +38,7 @@ export class CellEditorManager {
   }
 
   handlePointerDown(event, hit) {
-    if (!this.#isEditableHit(hit)) return false;
+    if (!this.editable || !this.#isEditableHit(hit)) return false;
     const data = hit.row ? this.controller.model.nodes[hit.row.nodeIndex]?.data : null;
     if (!data || data.readonly || data.disabled) return false;
     if (data.editorType === 'range' && hit.part === 'range') {
@@ -46,7 +57,7 @@ export class CellEditorManager {
   }
 
   handleClick(event, hit) {
-    if (!this.#isEditableHit(hit)) return false;
+    if (!this.editable || !this.#isEditableHit(hit)) return false;
     const node = this.controller.model.nodes[hit.row.nodeIndex];
     const data = node?.data;
     if (!data || data.disabled) return false;
@@ -108,7 +119,7 @@ export class CellEditorManager {
     });
     let committed = false;
     const commit = () => {
-      if (committed) return;
+      if (committed || this.overlay !== element) return;
       committed = true;
       const nextValue = parseEditorValue(element, data);
       this.controller.updateInspectorValue(node.id, nextValue, data.editorType);
@@ -125,6 +136,7 @@ export class CellEditorManager {
     ensureOverlayHost(this.host);
     this.host.append(element);
     this.overlay = element;
+    this.overlayKind = 'value';
     element.focus({ preventScroll: true });
     element.select?.();
     if (options.showPicker && element.showPicker) {
@@ -180,6 +192,7 @@ export class CellEditorManager {
     ensureOverlayHost(this.host);
     this.host.append(element);
     this.overlay = element;
+    this.overlayKind = 'filter';
     element.focus({ preventScroll: true });
     element.select();
   }
@@ -257,8 +270,10 @@ export class CellEditorManager {
   }
 
   #removeOverlay() {
-    this.overlay?.remove();
+    const overlay = this.overlay;
     this.overlay = null;
+    this.overlayKind = null;
+    overlay?.remove();
   }
 
   #toggleRangeMinMax(node, data) {

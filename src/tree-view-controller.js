@@ -1,3 +1,6 @@
+import { validateTreeViewOptions } from './core/view-options.js';
+import { RowReorderInput } from './input/row-reorder-input.js';
+import { TreeTooltip } from './input/tree-tooltip.js';
 import {
   EventEmitter,
   IconRegistry,
@@ -14,12 +17,17 @@ import {
 } from './core/index.js';
 import { numericLayout } from './inspector/numeric-layout.js';
 import { CellEditorManager } from './inspector/cell-editor-manager.js';
-import { formatInspectorValue, getAtPath, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath } from './inspector/index.js';
+import { formatInspectorValue, getAtPath, inspectorNodeId, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath } from './inspector/index.js';
 import { TreeViewInputController } from './input/tree-view-input-controller.js';
 import { TreeRowRenderer } from './renderers/index.js';
 
 export class TreeViewController {
   constructor(options = {}) {
+    validateTreeViewOptions(options);
+    this.layoutOverrides = { rowHeight: options.rowHeight, indentWidth: options.indentWidth };
+    this.rawNodes = new Map();
+    this.editable = options.editable !== false;
+    this.destroyed = false;
     this.events = new EventEmitter();
     this.model = new TreeModel();
     this.expansion = new TreeExpansionManager(this.model);
@@ -37,11 +45,18 @@ export class TreeViewController {
     this.viewport.renderInsetX = options.renderInsetX ?? 0;
     this.viewport.renderInsetY = options.renderInsetY ?? 0;
     this.columnModel = new TreeColumnModel(options.columns);
+    this.rowReorder = Boolean(options.rowReorder);
+    this.columnModel.setRowReorder(this.rowReorder);
+    this.rowDrop = null;
+    this.autoRender = Boolean(options.autoRender);
+    this.renderFrame = null;
+    this.tooltipEnabled = Boolean(options.tooltip);
+    this.host = options.host ?? null;
     this.searchIndex = new TreeSearchIndex();
     this.selection = new TreeSelectionManager();
     this.patchBatcher = new PatchBatcher();
-    this.themeManager = options.themeManager ?? new ThemeManager();
-    this.iconRegistry = options.iconRegistry ?? new IconRegistry();
+    this.themeManager = options.themeManager ?? new ThemeManager(options.theme);
+    this.iconRegistry = options.iconRegistry ?? new IconRegistry({ iconsBaseUrl: options.iconsBaseUrl });
     this.renderer = options.renderer ?? new TreeRowRenderer({ themeManager: this.themeManager, iconRegistry: this.iconRegistry });
     this.nativeScrollbars = options.nativeScrollbars !== false;
     this.initialExpandDepth = options.initialExpandDepth ?? 1;
@@ -64,10 +79,17 @@ export class TreeViewController {
     this.inspector = null;
     this.inputController = null;
     this.cellEditor = null;
+    const initialTheme = this.themeManager.get();
+    this.rowModel.rowHeight = this.viewport.rowHeight = options.rowHeight ?? initialTheme.rowHeight;
+    this.rowModel.indentWidth = this.viewport.indentWidth = options.indentWidth ?? initialTheme.indentWidth;
     this.scene = this.createRenderScene();
+    this.renderer.setInvalidationHandler?.(() => this.requestRender(true));
 
+    for (const type of ['viewportchange', 'columnschange', 'sortchange', 'filterchange', 'themechange', 'layoutchange', 'expand', 'collapse', 'searchchange', 'nodehover', 'selectionchange', 'focuschange', 'rowreorder', 'rowdrag', 'rowreorderchange', 'modelchange']) {
+      this.events.on(type, () => this.requestRender());
+    }
     if (options.canvas) this.initialize(options.canvas);
-    if (options.editable !== false && (options.host || options.editable)) this.attachCellEditor({ host: options.host });
+    if (options.canvas && (options.host || options.editable)) this.attachCellEditor({ host: options.host });
     if (options.canvas && options.input !== false) this.attachInput();
   }
 
@@ -81,6 +103,8 @@ export class TreeViewController {
     this.#resizeToCanvasClientSize();
     this.#observeCanvasSize();
     this.#setupNativeScrollbars();
+    if (this.tooltipEnabled) this.attachTooltip({ host: this.host });
+    this.requestRender();
     return this;
   }
 
@@ -91,12 +115,32 @@ export class TreeViewController {
       controller: this,
       host: options.host,
     });
+    this.cellEditor.setEditable(this.editable);
+    if (this.inputController) this.inputController.cellEditor = this.cellEditor;
     return this.cellEditor;
   }
+
+  setEditable(enabled) {
+    validateTreeViewOptions({ editable: enabled });
+    if (this.editable === enabled) return;
+    this.editable = enabled;
+    if (!this.cellEditor && this.canvas) this.attachCellEditor({ host: this.host });
+    this.cellEditor?.setEditable(enabled);
+    this.events.emit('editablechange', { editable: enabled });
+    this.requestRender();
+  }
+
+  setInitialExpandDepth(depth) {
+    validateTreeViewOptions({ initialExpandDepth: depth });
+    this.initialExpandDepth = depth;
+  }
+
 
   attachInput(options = {}) {
     if (!this.canvas) throw new Error('TreeViewController.attachInput requires an initialized canvas');
     this.inputController?.destroy?.();
+    this.rowReorderInput?.destroy();
+    this.rowReorderInput = new RowReorderInput(this);
     this.inputController = new TreeViewInputController({
       controller: this,
       cellEditor: options.cellEditor ?? this.cellEditor,
@@ -105,6 +149,12 @@ export class TreeViewController {
   }
 
   destroy() {
+    this.destroyed = true;
+    this.rowReorderInput?.destroy();
+    this.rowReorderInput = null;
+    this.tooltip?.destroy();
+    this.tooltip = null;
+    this.cancelRender();
     this.inputController?.destroy?.();
     this.cellEditor?.destroy?.();
     this.disableWorkers();
@@ -116,6 +166,7 @@ export class TreeViewController {
     this.cellEditor = null;
     this.renderer?.destroy?.();
     this.canvas = null;
+    this.events.listeners.clear();
   }
 
   on(type, listener) {
@@ -126,9 +177,16 @@ export class TreeViewController {
     this.events.off(type, listener);
   }
 
-  setData(nodes) {
+  setData(nodes, options = {}) {
+    if (!Array.isArray(nodes)) throw new TypeError('nodes must be an array');
+    validateTreeViewOptions({ iconResolver: options.iconResolver ?? null });
+    const resolved = resolveNodeIcons(nodes, options.iconResolver);
+    this.closeEditor();
+    this.rawNodes = new Map(nodes.map(node => [node.id, node]));
+    nodes = resolved;
     this.inspector = null;
-    if (this.columnModel.columns.length === 1 && this.columnModel.columns[0]?.kind === 'inspectorPane') {
+    this.columnModel.setRowReorder(this.rowReorder);
+    if (this.columnModel.columns.some(column => column.kind?.startsWith('inspector'))) {
       this.columnModel.setColumns([]);
     }
     this.model.setTree(nodes);
@@ -136,13 +194,134 @@ export class TreeViewController {
     this.searchIndex.rebuild(this.model);
     this.workerClient?.setData(this.model.nodes);
     this.#rebuildRows();
+    this.events.emit('datachange', {});
+  }
+
+  setIconResolver(resolver) {
+    validateTreeViewOptions({ iconResolver: resolver });
+    if (this.inspector) return;
+    const source = this.model.nodes.map(node => this.rawNodes.get(node.id) ?? node);
+    const nodes = resolveNodeIcons(source, resolver);
+    this.model.nodes = nodes;
+    this.model.index.rebuild(nodes);
+    this.searchIndex.rebuild(this.model);
+    this.workerClient?.setData(nodes);
+    this.#rebuildRows();
+  }
+
+  setHeaderFilter(enabled) {
+    if (this.headerFilter !== Boolean(enabled)) this.closeEditor();
+    this.headerFilter = Boolean(enabled);
+    this.requestRender();
+  }
+
+  setInspectorOptions(options = {}) {
+    validateTreeViewOptions(options);
+    if (!this.inspector) return;
+    for (const key of ['filter', 'markUpdated']) {
+      if (options[key] !== undefined) this.inspector.options[key] = options[key];
+    }
+    this.requestRender();
+  }
+
+  setRowReorder(enabled) {
+    validateTreeViewOptions({ rowReorder: enabled });
+    this.rowReorder = Boolean(enabled);
+    this.rowDrop = null;
+    this.columnModel.setRowReorder(this.rowReorder && !this.inspector);
+    this.#syncContentSize();
+    this.events.emit('rowreorderchange', { enabled: this.rowReorder });
+  }
+
+  canReorderRows() {
+    return this.rowReorder && !this.inspector && !this.columnModel.sort.direction && !this.rowModel.filterPredicate;
+  }
+
+  getRowOrder(parentId = null) {
+    return this.model.index.getChildren(parentId).slice();
+  }
+
+  moveRow(nodeId, targetIndex, options = {}) {
+    if (!this.canReorderRows()) return false;
+    const anchorId = this.rowModel.getRow(this.anchorRowIndex)?.nodeId;
+    const detail = this.model.moveNode(nodeId, targetIndex);
+    if (!detail) return false;
+    this.workerRevision++;
+    this.workerClient?.setData(this.model.nodes);
+    this.searchIndex.rebuild(this.model);
+    this.#rebuildRows();
+    this.anchorRowIndex = this.rowModel.getRowById(anchorId)?.rowIndex ?? null;
+    this.focusedId = nodeId;
+    this.selection.focused = nodeId;
+    this.cellEditor?.close?.();
+    this.scrollToNode(nodeId);
+    this.events.emit('rowreorder', { ...detail, source: options.source ?? 'api' });
+    this.events.emit('focuschange', { nodeId });
+    return true;
+  }
+
+  moveRowBy(nodeId, offset, options = {}) {
+    const node = this.model.index.getNode(nodeId);
+    if (!node || !Number.isInteger(offset)) return false;
+    const siblings = this.model.index.getChildren(node.parentId ?? null);
+    return this.moveRow(nodeId, siblings.indexOf(nodeId) + offset, options);
+  }
+
+  getRowDropTarget(nodeId, clientX, clientY) {
+    if (!this.canReorderRows()) return null;
+    const x = clientX - this.viewport.renderInsetX;
+    const y = clientY - this.viewport.renderInsetY;
+    if (x < 0 || x >= this.viewport.contentViewportWidth || y < this.viewport.headerHeight
+        || y >= this.viewport.headerHeight + this.viewport.rowViewportHeight) return null;
+    const contentY = y - this.viewport.headerHeight + this.viewport.scrollY;
+    const row = this.rowModel.getRow(Math.min(this.rowModel.rows.length - 1, Math.floor(contentY / this.rowModel.rowHeight)));
+    const source = this.model.index.getNode(nodeId);
+    const target = row && this.model.index.getNode(row.nodeId);
+    if (!source || !target || (source.parentId ?? null) !== (target.parentId ?? null)) return null;
+    const siblings = this.model.index.getChildren(source.parentId ?? null);
+    const after = contentY >= row.y + row.height / 2;
+    const from = siblings.indexOf(nodeId);
+    let index = siblings.indexOf(target.id) + Number(after);
+    if (index > from) index--;
+    return index === from ? null : { nodeId, targetId: target.id, index, y: row.y + (after ? row.height : 0) };
+  }
+
+  setRowDrop(target) {
+    this.rowDrop = target;
+    this.events.emit('rowdrag', { target });
+  }
+
+  requestRender(force = false) {
+    if (this.destroyed || (!this.autoRender && !force) || !this.canvas || this.renderFrame !== null) return;
+    const view = this.canvas.ownerDocument?.defaultView ?? globalThis;
+    const schedule = view.requestAnimationFrame?.bind(view) ?? (callback => setTimeout(callback, 0));
+    this.renderFrame = schedule(() => {
+      this.renderFrame = null;
+      if (this.canvas) this.render();
+    });
+  }
+
+  cancelRender() {
+    if (this.renderFrame === null) return;
+    const view = this.canvas?.ownerDocument?.defaultView ?? globalThis;
+    (view.cancelAnimationFrame?.bind(view) ?? clearTimeout)(this.renderFrame);
+    this.renderFrame = null;
+  }
+
+  attachTooltip(options = {}) {
+    this.tooltip?.destroy();
+    this.tooltip = new TreeTooltip({ controller: this, host: options.host ?? this.canvas?.parentElement });
+    return this.tooltip;
   }
 
   setModel(model, meta = {}, options = {}) {
+    validateTreeViewOptions({ ...options, mode: 'inspector', model, meta, presentation: options.presentation ?? options.mode ?? 'table' });
+    this.closeEditor();
+    this.columnModel.setRowReorder(false);
     const builder = new ModelInspectorBuilder();
     const presentation = options.presentation ?? options.mode ?? 'table';
     const previousExpanded = new Set(this.model.expanded);
-    const shouldPreserveExpansion = Boolean(this.inspector);
+    const previousBranches = new Set(this.inspector ? this.model.nodes.filter(node => this.expansion.hasChildren(node.id)).map(node => node.id) : []);
     const inspectorOptions = {
       presentation,
       flatRoot: Boolean(options.flatRoot),
@@ -151,17 +330,23 @@ export class TreeViewController {
       markUpdated: options.markUpdated !== false,
     };
     const nodes = builder.build(model, meta, inspectorOptions);
+    this.rawNodes.clear();
     this.inspector = { model, meta, builder, presentation, options: inspectorOptions };
     this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
     this.model.setTree(nodes);
-    if (shouldPreserveExpansion) this.#restoreExpansion(previousExpanded);
-    else this.expansion.expandToDepth(this.initialExpandDepth);
+    this.expansion.expandToDepth(this.initialExpandDepth);
+    for (const id of previousBranches) {
+      if (!this.model.index.getNode(id)) continue;
+      if (previousExpanded.has(id)) this.model.expanded.add(id);
+      else this.model.expanded.delete(id);
+    }
     this.searchIndex.rebuild(this.model);
     this.#rebuildRows();
+    this.events.emit('datachange', {});
     this.events.emit('modelchange', { model, meta, structural: true });
   }
 
-  updateInspectorValue(nodeId, newValue, editorType = 'unknown') {
+  updateInspectorValue(nodeId, newValue, editorType = 'unknown', options = {}) {
     const node = this.model.index.getNode(nodeId);
     if (!node?.data?.inspector || !this.inspector) return false;
     const data = node.data;
@@ -175,17 +360,25 @@ export class TreeViewController {
     if (this.inspector.options.markUpdated !== false) {
       this.setDynamicState([{ id: nodeId, state: { updated: true } }]);
     }
-    const detail = { path: data.path, oldValue, newValue, nodeId, editorType };
-    this.events.emit('valuechange', detail);
-    this.events.emit('modelchange', { model: this.inspector.model, path: data.path, oldValue, newValue, nodeId });
+    const detail = { path: data.path, oldValue, newValue, nodeId, editorType, model: this.inspector.model, source: options.source ?? 'user' };
+    if (options.emit !== false) {
+      this.events.emit('valuechange', detail);
+      this.events.emit('modelchange', { ...detail });
+    }
+    this.requestRender();
     return true;
+  }
+
+  setInspectorValue(path, value, options = {}) {
+    if (typeof path !== 'string') throw new TypeError('path must be a string');
+    return this.updateInspectorValue(inspectorNodeId(path === '$' ? '' : path), value, 'api', { ...options, source: 'api' });
   }
 
   triggerInspectorAction(nodeId) {
     const node = this.model.index.getNode(nodeId);
     if (!node?.data?.inspector) return false;
     const label = node.data.meta?.button ?? node.label;
-    this.events.emit('action', { path: node.data.path, label, nodeId });
+    this.events.emit('action', { path: node.data.path, label, nodeId, model: this.inspector?.model, source: 'user' });
     return true;
   }
 
@@ -230,7 +423,11 @@ export class TreeViewController {
   }
 
   setColumns(columns) {
+    if (columns == null) columns = this.inspector ? (this.inspector.presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns()) : [];
+    if (!Array.isArray(columns)) throw new TypeError('columns must be an array or null');
+    this.closeEditor();
     this.columnModel.setColumns(columns);
+    this.columnModel.setRowReorder(this.rowReorder && !this.inspector);
     this.#syncContentSize();
     this.events.emit('columnschange', { columns: this.columnModel.columns });
   }
@@ -281,6 +478,8 @@ export class TreeViewController {
   }
 
   setFilter(queryOrPredicate = '', options = {}) {
+    if (typeof queryOrPredicate !== 'string' && typeof queryOrPredicate !== 'function') throw new TypeError('filter must be a string or predicate');
+    if (this.cellEditor?.overlayKind !== 'filter') this.closeEditor();
     this.filterQuery = typeof queryOrPredicate === 'string' ? queryOrPredicate : '';
     this.filterOptions = typeof queryOrPredicate === 'string'
       ? { caseSensitive: Boolean(options.caseSensitive), wholeWord: Boolean(options.wholeWord) }
@@ -320,10 +519,12 @@ export class TreeViewController {
   }
 
   setDynamicState(patches) {
+    if (!Array.isArray(patches)) throw new TypeError('patches must be an array');
     this.lastPatchCount = patches.length;
     this.lastDirtyNodeCount = new Set(patches.map((patch) => patch.id)).size;
     this.model.applyDynamicPatches(patches);
     this.renderer.updateDynamicState(patches);
+    this.requestRender();
   }
 
   setTheme(theme) {
@@ -331,11 +532,10 @@ export class TreeViewController {
     const beforeIndentWidth = this.rowModel.indentWidth;
     this.themeManager.setTheme(theme);
     const nextTheme = this.themeManager.get();
-    this.rowModel.rowHeight = nextTheme.rowHeight;
-    this.rowModel.indentWidth = nextTheme.indentWidth;
-    this.viewport.rowHeight = nextTheme.rowHeight;
-    this.viewport.indentWidth = nextTheme.indentWidth;
-    if (beforeRowHeight !== nextTheme.rowHeight || beforeIndentWidth !== nextTheme.indentWidth) {
+    this.rowModel.rowHeight = this.viewport.rowHeight = this.layoutOverrides.rowHeight ?? nextTheme.rowHeight;
+    this.rowModel.indentWidth = this.viewport.indentWidth = this.layoutOverrides.indentWidth ?? nextTheme.indentWidth;
+    if (beforeRowHeight !== this.rowModel.rowHeight || beforeIndentWidth !== this.rowModel.indentWidth) {
+      this.closeEditor();
       this.#rebuildRows();
     }
     this.#nativeScroll?.applyTheme?.(nextTheme);
@@ -343,13 +543,17 @@ export class TreeViewController {
   }
 
   setLayoutMetrics(options = {}) {
-    const rowHeight = options.rowHeight ?? this.rowModel.rowHeight;
-    const indentWidth = options.indentWidth ?? this.rowModel.indentWidth;
+    const rowHeight = Object.hasOwn(options, 'rowHeight') ? options.rowHeight ?? this.themeManager.get().rowHeight : this.rowModel.rowHeight;
+    const indentWidth = Object.hasOwn(options, 'indentWidth') ? options.indentWidth ?? this.themeManager.get().indentWidth : this.rowModel.indentWidth;
     const headerHeight = options.headerHeight ?? this.viewport.headerHeight;
     assertPositiveNumber(rowHeight, 'rowHeight');
     assertPositiveNumber(indentWidth, 'indentWidth');
     assertNonNegativeNumber(headerHeight, 'headerHeight');
+    for (const key of ['rowHeight', 'indentWidth']) {
+      if (Object.hasOwn(options, key)) this.layoutOverrides[key] = options[key];
+    }
     const rowsChanged = this.rowModel.rowHeight !== rowHeight || this.rowModel.indentWidth !== indentWidth;
+    if (rowsChanged || headerHeight !== this.viewport.headerHeight) this.closeEditor();
     this.rowModel.rowHeight = rowHeight;
     this.rowModel.indentWidth = indentWidth;
     this.viewport.rowHeight = rowHeight;
@@ -543,6 +747,7 @@ export class TreeViewController {
   }
 
   setSelection(ids) {
+    if (!Array.isArray(ids)) throw new TypeError('ids must be an array');
     this.selection.selected.clear();
     for (const id of ids) this.selection.selected.add(id);
     this.selection.focused = ids[ids.length - 1] ?? null;
@@ -578,6 +783,7 @@ export class TreeViewController {
     if (this.activeId === nodeId && this.activePart === part) return;
     this.activeId = nodeId;
     this.activePart = part;
+    this.requestRender();
   }
 
   clickNode(nodeId, event = {}) {
@@ -621,6 +827,11 @@ export class TreeViewController {
 
   handleKey(event) {
     if (!this.rowModel.rows.length) return false;
+    if (this.rowReorder && event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+      const id = this.focusedId ?? this.rowModel.getRow(this.#focusedRowIndex())?.nodeId;
+      this.moveRowBy(id, event.key === 'ArrowUp' ? -1 : 1, { source: 'keyboard' });
+      return true;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       this.selection.selected.clear();
       for (const row of this.rowModel.rows) this.selection.selected.add(row.nodeId);
@@ -692,9 +903,13 @@ export class TreeViewController {
   createRenderScene() {
     const visibleRange = this.rowModel.getVisibleRange(this.viewport, 4);
     return {
+      rowReorder: this.rowReorder,
+      canReorderRows: this.canReorderRows(),
+      rowDrop: this.rowDrop,
+      childrenByParent: this.model.index.childrenByParent,
       rows: this.rowModel.rows,
       visibleRange,
-      stickyRows: this.rowModel.getStickyRows(this.viewport),
+      stickyRows: this.rowReorder ? [] : this.rowModel.getStickyRows(this.viewport),
       viewport: this.viewport,
       columns: this.columnModel.columns,
       theme: this.themeManager.get(),
@@ -711,12 +926,13 @@ export class TreeViewController {
       sortValues: this.sortValueSnapshot ? Array.from(this.sortValueSnapshot) : null,
       inspectorPaneLabelEnd: this.#computeInspectorPaneLabelEnd(visibleRange),
       filterQuery: this.filterQuery,
-      headerFilter: Boolean(this.inspector?.options?.filter),
+      headerFilter: this.headerFilter ?? Boolean(this.inspector?.options?.filter),
       stats: this.getStats(),
     };
   }
 
   closeEditor() {
+    this.cellEditor?.close?.();
     this.events.emit('editorclose', {});
   }
 
@@ -730,7 +946,7 @@ export class TreeViewController {
       const resizeColumn = this.columnModel.getResizeHandleAt(x);
       if (resizeColumn) return { area: 'header', part: 'resize', column: resizeColumn, x, y: localY };
       const column = this.columnModel.getColumnAt(x);
-      if (column?.kind === 'inspectorPane' && this.inspector?.options?.filter) {
+      if (column && (this.headerFilter ?? Boolean(this.inspector?.options?.filter)) && column === this.columnModel.columns.find(item => item.kind !== 'rowOrder')) {
         return { area: 'header', part: 'filter', column, x, y: localY };
       }
       return column ? { area: 'header', part: 'label', column, x, y: localY } : { area: 'header', part: 'header', column: null, x, y: localY };
@@ -744,6 +960,10 @@ export class TreeViewController {
     const column = this.columnModel.getColumnAt(x);
     if (!column) return { area: 'row', part: 'row', row, column: null, x, y: rowY };
 
+    if (column.kind === 'rowOrder') {
+      const offset = x - column.x;
+      return { area: 'row', part: offset < 24 ? 'rowDrag' : offset < 48 ? 'rowUp' : 'rowDown', row, column, x, y: rowY };
+    }
     let part = 'cell';
     if (column.kind === 'inspectorPane') {
       const localX = x - column.x;
@@ -880,6 +1100,7 @@ export class TreeViewController {
   }
 
   resize(width, height) {
+    if (width !== this.viewport.viewportWidth || height !== this.viewport.viewportHeight) this.closeEditor();
     this.viewport.resize(width, height);
     this.#fitInspectorPaneColumn(width);
     this.#syncContentSize();
@@ -921,6 +1142,7 @@ export class TreeViewController {
     this.#syncContentSize();
     this.#restoreScrollAnchor(scrollAnchor);
     this.rebuildCount++;
+    this.requestRender();
   }
 
   #syncContentSize() {
@@ -936,13 +1158,6 @@ export class TreeViewController {
     }
     for (const id of this.selection.selected) this.patchBatcher.set(id, { selected: true });
     this.setDynamicState(this.patchBatcher.flush());
-  }
-
-  #restoreExpansion(expandedIds) {
-    this.model.expanded.clear();
-    for (const id of expandedIds) {
-      if (this.model.index.getNode(id) && this.expansion.hasChildren(id)) this.model.expanded.add(id);
-    }
   }
 
   #focusedRowIndex() {
@@ -1449,4 +1664,15 @@ function isProbablyTruncated(text, width) {
 
 function now() {
   return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function resolveNodeIcons(nodes, resolver) {
+  if (!resolver) return nodes;
+  return nodes.map(node => {
+    const visual = resolver(node);
+    if (typeof visual === 'string') return { ...node, icon: visual };
+    if (!visual || typeof visual !== 'object') return node;
+    if ((visual.id !== undefined && visual.id !== node.id) || (visual.parentId !== undefined && visual.parentId !== node.parentId)) throw new TypeError('iconResolver cannot change node identity or parent');
+    return { ...node, ...visual };
+  });
 }

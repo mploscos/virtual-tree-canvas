@@ -1,6 +1,55 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IconRegistry, ThemeManager, TreeViewController, darkTheme } from '../src/index.js';
+import { readFile } from 'node:fs/promises';
+import { IconRegistry, ThemeManager, TreeViewController, darkTheme, builtinIconNames } from '../src/index.js';
+
+test('all built-in SVGs resolve to the published resources directory by default', async () => {
+  const registry = new IconRegistry();
+  assert.equal(registry.icons.size, builtinIconNames.length);
+  for (const [name, icon] of registry.icons) {
+    const expected = new URL(`../resources/icons/${name}.svg`, import.meta.url);
+    assert.equal(icon.url, expected.href);
+    assert.match(await readFile(expected, 'utf8'), /<svg/);
+  }
+});
+
+test('icon registries keep independent configurable base URLs', () => {
+  for (const base of ['/app/icons', 'node_modules/widget/resources/icons/', 'https://cdn.example.test/v1/icons/']) {
+    const registry = new IconRegistry({ iconsBaseUrl: base });
+    assert.equal(registry.get('folder').url, `${base.replace(/\/$/, '')}/folder.svg`);
+  }
+  const first = new TreeViewController({ iconsBaseUrl: new URL('https://cdn.example.test/first/') });
+  const second = new TreeViewController({ iconsBaseUrl: '/second/' });
+  assert.equal(first.iconRegistry.get('radar').url, 'https://cdn.example.test/first/radar.svg');
+  assert.equal(second.iconRegistry.get('radar').url, '/second/radar.svg');
+  const custom = new IconRegistry({ iconsBaseUrl: '/custom/' });
+  const third = new TreeViewController({ iconRegistry: custom, iconsBaseUrl: '/ignored/' });
+  assert.equal(third.iconRegistry, custom);
+});
+
+test('browser icon loading is lazy, cached and uses the configured base', async () => {
+  const previousWindow = globalThis.window;
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.window = {};
+  globalThis.fetch = async url => {
+    requests.push(url);
+    return { ok: true, text: async () => '<svg xmlns="http://www.w3.org/2000/svg"/>' };
+  };
+  try {
+    const registry = new IconRegistry({ iconsBaseUrl: '/application/icons/' });
+    assert.equal(requests.length, 0);
+    await registry.prepare({ icons: ['folder', 'radar'] });
+    assert.equal(requests.length, 2);
+    await registry.prepare({ icons: ['folder', 'radar'], size: 20 });
+    assert.equal(requests.length, 2);
+    assert.ok(requests.every(url => url.startsWith('/application/icons/')));
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+    globalThis.fetch = previousFetch;
+  }
+});
 
 test('ThemeManager resolves type styles correctly', () => {
   const manager = new ThemeManager(darkTheme);

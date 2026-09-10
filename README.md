@@ -19,50 +19,80 @@ grow.
 - **Easy to style.** Built-in dark, light and tactical themes, type-based styling, and editable SVG icons.
 - **Ready for inspectors.** Turn plain JavaScript objects into compact editable forms or property tables.
 
+See [the changelog](./CHANGELOG.md) for the 0.6.0 migration notes and additions.
+
 ## Install
 
 ```bash
 npm install virtual-tree-canvas
 ```
 
-## Quick start
+## Quick start: complete DOM view
+
+Give the host an explicit height. `TreeView` mounts its canvas, filter, tooltip
+and editors, observes size changes and schedules rendering itself.
 
 ```html
-<canvas id="assets-tree"></canvas>
-```
-
-```css
-#assets-tree {
-  display: block;
-  width: 100%;
-  height: 480px;
-}
+<div id="assets-tree" style="height:480px"></div>
 ```
 
 ```js
-import { TreeViewController } from 'virtual-tree-canvas';
+import { TreeView } from 'virtual-tree-canvas';
 
-const tree = new TreeViewController({
-  canvas: document.querySelector('#assets-tree'),
+const view = new TreeView(document.querySelector('#assets-tree'), {
   initialExpandDepth: 2,
+  rowReorder: true,
+  iconsBaseUrl: '/node_modules/virtual-tree-canvas/resources/icons/'
 });
-
-tree.setData([
-  { id: 'fleet', label: 'Fleet', type: 'root' },
-  { id: 'radar-1', parentId: 'fleet', label: 'Forward radar', type: 'sensor' },
-  { id: 'track-100', parentId: 'radar-1', label: 'Track T-100', type: 'track' },
+view.setData([
+  { id: 'fleet', label: 'Fleet', icon: 'folder' },
+  { id: 'radar-1', parentId: 'fleet', label: 'Forward radar', icon: 'radar' },
+  { id: 'track-100', parentId: 'radar-1', label: 'Track T-100', icon: 'track' }
 ]);
-
-tree.setDynamicState([
-  { id: 'radar-1', state: { status: 0, progress: 0.72 } },
-  { id: 'track-100', state: { status: 1, value: 430 } },
-]);
-
-tree.render();
+view.setDynamicState([{ id: 'track-100', state: { value: 430 } }]);
+view.configure({ editable: false, rowHeight: 32 });
+view.on('rowreorder', ({ detail }) => console.log(detail.order));
+const tree = view.controller; // optional lower-level operations
+// On permanent unmount: view.destroy();
 ```
 
-The controller observes the canvas size. Call `tree.render()` from your own
-animation loop when the data is live, or after changing data in a static view.
+`configure(patch)` batches changes in a microtask. Public operations and reading
+`view.controller` flush pending configuration first; `view.flush()` is also
+available. Editability, theme, filter visibility and icon resolution preserve
+manual order, selection, expansion and live values. `setData` and `setModel`
+explicitly reinstall data even when the same mutated reference is supplied.
+
+- `mode`: `tree` (default) or `inspector`; `presentation`: `pane` or `table`.
+- `filterPlacement`: `auto` (bar in tree/pane, first-column header in inspector
+  table), `bar` or `header`. Set `filter: false` to hide it. Hiding the control
+  preserves its query; call `clearFilter()` to clear the query.
+- `columns: null` restores defaults for the current presentation.
+- Explicit `rowHeight` and `indentWidth` override the theme; configure them as
+  `undefined` to resume theme defaults. `initialExpandDepth` applies to future
+  data installations; it does not expand or collapse the current tree.
+- `fontFamily: 'inherit'` follows the host font and refreshes after fonts load.
+- `iconsBaseUrl`, `iconRegistry` and `nativeScrollbars` are construction options.
+- `setInspectorValue(path, value, {emit: false})` updates a value without emitting
+  `valuechange` or `modelchange`. Normal writes include `source: 'api'`; editor
+  writes use `source: 'user'`. Both include the model in their event details.
+
+Use `view.configure` for view configuration. Direct controller operations are
+available for interaction state (filtering, selection, sorting, navigation);
+changing data or presentation through the view keeps its configuration coherent.
+
+## Low-level canvas integration
+
+Existing applications can keep `TreeViewController` and manage their own DOM:
+
+```js
+import { TreeViewController } from 'virtual-tree-canvas';
+const tree = new TreeViewController({ canvas, host, autoRender: true });
+tree.setData(rows);
+```
+
+The controller owns state and editing, including `setEditable`,
+`setInspectorValue`, `closeEditor` and layout precedence. With `autoRender`
+omitted, use your existing explicit `tree.render()` loop.
 
 ![Virtual tree-table with status, progress and SVG icons](./docs/tree-demo.png)
 
@@ -166,10 +196,23 @@ tree.setTheme({
 });
 ```
 
-Built-in icons are editable SVG files in [`src/assets/icons`](./src/assets/icons).
-They are preloaded and rasterized once per icon, colour, CSS size and device
+Built-in icons are editable SVG files in [`resources/icons`](./resources/icons).
+They are loaded on demand and rasterized once per icon, colour, CSS size and device
 pixel ratio. Rendering rows then uses a cached `drawImage`, not SVG parsing or
 path drawing.
+
+When bundling the library, configure the public directory containing its built-in SVGs:
+
+```js
+const tree = new TreeViewController({
+  canvas,
+  iconsBaseUrl: '/node_modules/virtual-tree-canvas/resources/icons/'
+});
+```
+
+`iconsBaseUrl` also works with `new IconRegistry({ iconsBaseUrl })`. It accepts an absolute URL (including a CDN), a root-relative path, or a document-relative path. A trailing slash is optional. Supply it when constructing the controller or registry, before built-in icons begin loading. A custom `iconRegistry` takes precedence over the controller's `iconsBaseUrl`.
+
+Without this option, unbundled modules load the icons from the package's `resources/icons/` directory. Publish that directory alongside the package; the bundler does not need to extract or rename its SVGs.
 
 Register application icons from an SVG URL, inline SVG or an image:
 
@@ -282,3 +325,38 @@ Open <http://localhost:4173/demo/> for the large-tree benchmark, or
 ```bash
 npm test
 ```
+
+## Manual row order
+
+`rowReorder: true` adds a dedicated handle and Up/Down controls to a data table. Dragging commits only on drop; Escape or dropping outside cancels. Alt+Up / Alt+Down moves the focused row. Edge scrolling works while dragging.
+
+```js
+const tree = new TreeViewController({
+  canvas, host,
+  iconsBaseUrl: '/node_modules/virtual-tree-canvas/resources/icons/',
+  rowReorder: true,
+  autoRender: true,
+  tooltip: true,
+  columns: [
+    { id: 'name', kind: 'tree', label: 'Property', width: 300 },
+    { id: 'value', label: 'Value', width: 120, value: (_node, state) => state.value }
+  ]
+});
+tree.setData(favoriteRows);
+tree.on('rowreorder', ({ detail }) => saveOrder(detail.order));
+```
+
+- `moveRow(id, targetIndex)` uses a zero-based index among siblings. `moveRowBy(id, offset)` and `getRowOrder(parentId = null)` are also available.
+- Reordering preserves IDs, parent relationships, expansion, selected IDs and live dynamic state. `setDynamicState()` does not change order. `setData()` intentionally installs the order supplied by the host; restore a saved order before calling it.
+- Reordering is disabled during sorting/filtering and for object-inspector models (`setModel`). It does not reorder JavaScript object properties or mutate inspected arrays. Use data rows (`setData`) for favorites, with stable IDs and dynamic value columns.
+- The `rowreorder` detail contains `nodeId`, `parentId`, `fromIndex`, `toIndex`, `siblingOrder`, `order` and `source`. The host owns persistence and live subscriptions. One row is moved at a time, including its subtree, without reparenting.
+- The order column is fixed at 72 CSS px (three 24 px targets) and cannot be sorted, resized or moved. The mode can be toggled with `setRowReorder(enabled)`. Sticky ancestor rows are omitted in this mode.
+- `autoRender` coalesces rendering into an animation frame and cancels pending work on `destroy()`. It is opt-in so existing hosts with their own render loop continue to work.
+- `tooltip: true` creates a reusable tooltip in `host` (or the canvas parent). The host must provide a positioned container. `attachTooltip({ host })` is also available.
+- `setData(nodes, { iconResolver })` allows host-independent visual mapping without mutating the input nodes.
+
+Open [the reorder demo](./examples/reorder-table.html) through a local HTTP server to try a table with live values. The demo's localStorage is illustrative; the library never persists user data itself.
+
+## Icon catalogue
+
+63 SVGs are included, with a [visual sheet](./docs/icon-catalog.html) and a [reference of available icons](./docs/icon-catalog.md). `builtinIconNames` exposes available IDs.

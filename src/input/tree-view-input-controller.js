@@ -43,6 +43,7 @@ export class TreeViewInputController {
   };
 
   #onMouseMove = (event) => {
+    if (this.controller.rowReorderInput?.gesture) return;
     if (this.resizeDrag) {
       const rect = this.canvas.getBoundingClientRect();
       const clientX = event.clientX - rect.left;
@@ -73,6 +74,7 @@ export class TreeViewInputController {
     this.canvas.focus();
     const hit = this.#hitTest(event);
     if (!hit) return;
+    if (['rowDrag', 'rowUp', 'rowDown'].includes(hit.part)) return;
     if (hit.area === 'header') {
       if (hit.part === 'filter' && this.cellEditor?.handleHeaderClick(event, hit)) return;
       if (!this.resizeDrag && hit.part === 'label' && hit.column) this.controller.sortBy(hit.column.id);
@@ -98,6 +100,7 @@ export class TreeViewInputController {
 
   #onMouseDown = (event) => {
     const hit = this.#hitTest(event);
+    if (['rowDrag', 'rowUp', 'rowDown'].includes(hit?.part)) return;
     this.controller.setActiveHit(hit);
     if (this.cellEditor?.handlePointerDown(event, hit)) {
       event.preventDefault();
@@ -135,6 +138,8 @@ export class TreeViewInputController {
 }
 
 function cursorForHit(hit) {
+  if (hit?.part === 'rowDrag') return 'grab';
+  if (hit?.part === 'rowUp' || hit?.part === 'rowDown') return 'pointer';
   if (hit?.area === 'header' && hit.part === 'resize') return 'col-resize';
   if (hit?.area === 'header' && hit.part === 'filter') return 'text';
   if (hit?.area !== 'row') return '';

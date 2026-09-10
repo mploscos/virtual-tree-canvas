@@ -69,6 +69,17 @@ export class TreeColumnModel {
     if (!this.columns.some((column) => column.kind === 'tree' || column.kind === 'inspectorPane')) {
       this.columns.unshift(normalizeColumn(builtInColumns.tree, 0));
     }
+    this.setRowReorder(this.rowReorder);
+    this.#layout();
+  }
+
+  setRowReorder(enabled) {
+    this.rowReorder = Boolean(enabled);
+    this.columns = this.columns.filter(column => column.id !== '__vtc_row_order');
+    if (this.rowReorder) this.columns.unshift(normalizeColumn({
+      id: '__vtc_row_order', label: '', kind: 'rowOrder', width: 72, minWidth: 72,
+      sortable: false, resizable: false
+    }, 0));
     this.#layout();
   }
 
@@ -83,17 +94,18 @@ export class TreeColumnModel {
 
   resizeColumn(id, width) {
     const column = this.getColumn(id);
-    if (!column) return false;
+    if (!column || column.resizable === false) return false;
     column.width = Math.max(column.minWidth, width);
     this.#layout();
     return true;
   }
 
   moveColumn(id, targetIndex) {
+    if (id === '__vtc_row_order') return false;
     const currentIndex = this.columns.findIndex((column) => column.id === id);
     if (currentIndex === -1) return false;
     const [column] = this.columns.splice(currentIndex, 1);
-    const nextIndex = Math.max(0, Math.min(this.columns.length, targetIndex));
+    const nextIndex = Math.max(this.rowReorder ? 1 : 0, Math.min(this.columns.length, targetIndex));
     this.columns.splice(nextIndex, 0, column);
     if (!this.columns.some((item) => item.kind === 'tree')) this.columns.unshift(normalizeColumn(builtInColumns.tree, 0));
     this.#layout();
@@ -107,7 +119,7 @@ export class TreeColumnModel {
   }
 
   getResizeHandleAt(x, tolerance = 5) {
-    return this.columns.find((column) => Math.abs(x - (column.x + column.width)) <= tolerance) ?? null;
+    return this.columns.find((column) => column.resizable !== false && Math.abs(x - (column.x + column.width)) <= tolerance) ?? null;
   }
 
   #layout() {
@@ -144,6 +156,7 @@ function normalizeColumn(column, index) {
     align: source.align ?? 'left',
     kind: source.kind ?? (index === 0 ? 'tree' : 'text'),
     sortable: source.sortable ?? true,
+    resizable: source.resizable ?? true,
     value: source.value ?? ((node) => node[source.id] ?? ''),
     render: source.render,
     x: 0,

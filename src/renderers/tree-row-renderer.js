@@ -10,7 +10,8 @@ export class TreeRowRenderer {
     this.scene = null;
     this.iconRegistry = iconRegistry ?? new IconRegistry();
     this.renderedRows = 0;
-    this.iconRenderQueued = false;
+    this.iconRenderFrame = null;
+    this.invalidate = null;
     this.preparedIconThemeKey = null;
     this.stopIconListener = this.iconRegistry.onChange?.(() => this.#scheduleIconRender()) ?? null;
   }
@@ -26,7 +27,15 @@ export class TreeRowRenderer {
     this.scene = scene;
   }
 
+  setInvalidationHandler(invalidate) { this.invalidate = invalidate; }
+
   destroy() {
+    if (this.iconRenderFrame !== null) {
+      const view = this.canvas?.ownerDocument?.defaultView ?? globalThis;
+      (view.cancelAnimationFrame?.bind(view) ?? clearTimeout)(this.iconRenderFrame);
+    }
+    this.iconRenderFrame = null;
+    this.invalidate = null;
     this.stopIconListener?.();
     this.stopIconListener = null;
     this.canvas = null;
@@ -65,15 +74,18 @@ export class TreeRowRenderer {
     this.#drawHeader(ctx);
     this.#drawRows(ctx);
     this.#drawStickyRows(ctx);
+    this.#drawRowDrop(ctx);
     ctx.restore();
   }
 
   #scheduleIconRender() {
-    if (this.iconRenderQueued) return;
-    this.iconRenderQueued = true;
-    const schedule = globalThis.requestAnimationFrame ?? ((callback) => setTimeout(callback, 0));
-    schedule(() => {
-      this.iconRenderQueued = false;
+    if (!this.canvas) return;
+    if (this.invalidate) return this.invalidate();
+    if (this.iconRenderFrame !== null) return;
+    const view = this.canvas.ownerDocument?.defaultView ?? globalThis;
+    const schedule = view.requestAnimationFrame?.bind(view) ?? (callback => setTimeout(callback, 0));
+    this.iconRenderFrame = schedule(() => {
+      this.iconRenderFrame = null;
       this.render();
     });
   }
@@ -107,7 +119,7 @@ export class TreeRowRenderer {
     ctx.textBaseline = 'middle';
 
     for (const column of columns) {
-      if (headerFilter && column.kind === 'inspectorPane') {
+      if (headerFilter && column === columns.find(item => item.kind !== 'rowOrder')) {
         this.#drawHeaderFilter(ctx, column, viewport, theme, filterQuery);
       } else {
         ctx.fillStyle = colors.textMuted;
@@ -145,7 +157,7 @@ export class TreeRowRenderer {
     ctx.strokeStyle = colors.border;
     ctx.stroke();
     ctx.fillStyle = filterQuery ? colors.text : colors.textMuted;
-    drawTruncatedText(ctx, filterQuery || 'Filter inspector', x + 8, viewport.headerHeight / 2, width - 16);
+    drawTruncatedText(ctx, filterQuery || 'Filter rows', x + 8, viewport.headerHeight / 2, width - 16);
   }
 
   #drawSortIndicator(ctx, x, y, direction, theme) {
@@ -268,7 +280,8 @@ export class TreeRowRenderer {
       cell.column.render(ctx, cell);
       return;
     }
-    if (cell.column.kind === 'tree') this.#drawTreeCell(ctx, cell);
+    if (cell.column.kind === 'rowOrder') this.#drawRowOrder(ctx, cell);
+    else if (cell.column.kind === 'tree') this.#drawTreeCell(ctx, cell);
     else if (cell.column.kind === 'inspectorPane') this.#drawInspectorPaneCell(ctx, cell);
     else if (cell.column.kind === 'inspectorValue') this.#drawInspectorValueCell(ctx, cell);
     else if (cell.column.kind === 'inspectorType') this.#drawInspectorTypeCell(ctx, cell);
@@ -276,6 +289,42 @@ export class TreeRowRenderer {
     else if (cell.column.kind === 'status') this.#drawStatusCell(ctx, cell);
     else if (cell.column.kind === 'progress') this.#drawProgressCell(ctx, cell);
     else this.#drawTextCell(ctx, cell);
+  }
+
+  #drawRowOrder(ctx, { node, row, rect, theme }) {
+    const siblings = this.scene.childrenByParent?.get(node.parentId ?? null) ?? [];
+    const enabled = this.scene.canReorderRows && siblings.length > 1;
+    const cy = rect.y + row.height / 2;
+    ctx.save();
+    ctx.strokeStyle = theme.colors.textMuted;
+    ctx.fillStyle = theme.colors.textMuted;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = enabled ? 1 : 0.3;
+    for (const dx of [10, 14]) for (const dy of [-4, 0, 4]) ctx.fillRect(rect.x + dx, cy + dy, 1.5, 1.5);
+    for (const [center, direction, available] of [[36, -1, siblings[0] !== node.id], [60, 1, siblings.at(-1) !== node.id]]) {
+      ctx.globalAlpha = enabled && available ? 1 : 0.3;
+      ctx.beginPath();
+      ctx.moveTo(rect.x + center - 4, cy - direction * 2);
+      ctx.lineTo(rect.x + center, cy + direction * 2);
+      ctx.lineTo(rect.x + center + 4, cy - direction * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  #drawRowDrop(ctx) {
+    const { rowDrop, viewport, theme } = this.scene;
+    if (!rowDrop) return;
+    const y = viewport.headerHeight + rowDrop.y - viewport.scrollY;
+    if (y < viewport.headerHeight || y > viewport.headerHeight + viewport.rowViewportHeight) return;
+    ctx.save();
+    ctx.strokeStyle = theme.colors.focus;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(3, y);
+    ctx.lineTo(viewport.contentViewportWidth - 3, y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   #drawInspectorPaneCell(ctx, { node, row, rect, theme, style, hovered, hoverPart, activePart }) {

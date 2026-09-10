@@ -1,10 +1,39 @@
+export const builtinIconNames: readonly string[];
+export interface RowReorderDetail {
+  nodeId: string;
+  parentId: string | null;
+  fromIndex: number;
+  toIndex: number;
+  siblingOrder: string[];
+  order: string[];
+  source: 'api' | 'pointer' | 'button' | 'keyboard';
+}
+
+export interface TreeViewOptions {
+  nativeScrollbars?: boolean;
+  iconsBaseUrl?: string | URL;
+  iconRegistry?: IconRegistry;
+  rowReorder?: boolean;
+  autoRender?: boolean;
+  tooltip?: boolean;
+  canvas?: HTMLCanvasElement;
+  host?: HTMLElement;
+  [key: string]: any;
+}
+
+export class TreeTooltip {
+  constructor(options: { controller: TreeViewController; host?: HTMLElement });
+  hide(): void;
+  destroy(): void;
+}
+
 export type TreeViewAlign = 'start' | 'center' | 'end' | 'nearest';
 
 export type IconDrawFunction = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => void;
 export type IconSource = string | CanvasImageSource | IconDrawFunction;
 
 export class IconRegistry {
-  constructor(options?: { pixelRatio?: number });
+  constructor(options?: { pixelRatio?: number; iconsBaseUrl?: string | URL });
   register(name: string, icon: IconSource): any;
   get(name: string): any;
   onChange(listener: () => void): () => void;
@@ -89,16 +118,46 @@ export class TreeViewController {
   rowModel: any;
   expansion: any;
   selection: any;
-  constructor(options?: Record<string, any> & { nativeScrollbars?: boolean });
+  constructor(options?: TreeViewOptions);
+  iconRegistry: IconRegistry;
+  tooltip?: TreeTooltip | null;
+  rowReorder: boolean;
+  editable: boolean;
+  initialExpandDepth: number;
+  filterOptions: {caseSensitive: boolean; wholeWord: boolean};
+  model: any;
+  inspector: any;
+  columnModel: any;
+  setEditable(enabled: boolean): void;
+  setInitialExpandDepth(depth: number): void;
+  setIconResolver(resolver: TreeViewConfiguration['iconResolver']): void;
+  setInspectorOptions(options: {filter?: boolean; markUpdated?: boolean}): void;
+  setHeaderFilter(enabled: boolean): void;
+  setInspectorValue(path: string, value: any, options?: InspectorWriteOptions): boolean;
+  updateInspectorValue(nodeId: string, value: any, editorType?: string, options?: InspectorWriteOptions): boolean;
+  closeEditor(): void;
+  clearSearch(): void;
+  getSearchState(): TreeSearchState;
+  nextSearchResult(): string | null;
+  previousSearchResult(): string | null;
+  setRowReorder(enabled: boolean): void;
+  canReorderRows(): boolean;
+  getRowOrder(parentId?: string | null): string[];
+  moveRow(nodeId: string, targetIndex: number, options?: {source?: RowReorderDetail["source"]}): boolean;
+  moveRowBy(nodeId: string, offset: number, options?: {source?: RowReorderDetail["source"]}): boolean;
+  requestRender(force?: boolean): void;
+  cancelRender(): void;
+  attachTooltip(options?: {host?: HTMLElement}): TreeTooltip;
   initialize(canvas: HTMLCanvasElement): this;
   attachCellEditor(options?: { host?: HTMLElement | null }): CellEditorManager;
   attachInput(options?: { cellEditor?: CellEditorManager | null }): TreeViewInputController;
   destroy(): void;
-  on(type: string, listener: (event: any) => void): any;
+  on<K extends keyof TreeViewEvents>(type: K, listener: (event: TreeViewEvent<K>) => void): () => void;
+  on(type: string, listener: (event: any) => void): () => void;
   off(type: string, listener: (event: any) => void): void;
-  setData(nodes: TreeNode[]): void;
+  setData(nodes: TreeNode[], options?: { iconResolver?: TreeViewConfiguration['iconResolver'] }): void;
   setModel(model: any, meta?: Record<string, MetaRule>, options?: Record<string, any>): void;
-  setColumns(columns: Column[]): void;
+  setColumns(columns: Column[] | null): void;
   setDynamicState(patches: DynamicPatch[]): void;
   setTheme(theme: any): void;
   setLayoutMetrics(options?: { rowHeight?: number; indentWidth?: number; headerHeight?: number }): void;
@@ -129,5 +188,103 @@ export class TreeViewInputController {
 export class CellEditorManager {
   constructor(options: { controller: TreeViewController; host?: HTMLElement | null });
   destroy(): void;
+  setEditable(enabled: boolean): void;
   close(): void;
 }
+
+export interface InspectorWriteOptions { emit?: boolean; source?: string }
+export interface TreeViewConfiguration {
+  mode?: 'tree' | 'inspector';
+  presentation?: 'pane' | 'table';
+  nodes?: TreeNode[];
+  model?: any;
+  meta?: Record<string, MetaRule> | null;
+  columns?: Column[] | null;
+  theme?: string | Record<string, any>;
+  flatRoot?: boolean;
+  enforceMeta?: boolean;
+  filter?: boolean;
+  filterPlacement?: 'auto' | 'bar' | 'header';
+  markUpdated?: boolean;
+  editable?: boolean;
+  rowReorder?: boolean;
+  initialExpandDepth?: number;
+  rowHeight?: number;
+  indentWidth?: number;
+  headerHeight?: number;
+  iconResolver?: ((node: TreeNode) => string | Partial<TreeNode> | null | undefined) | null;
+  fontFamily?: string | null;
+}
+export const treeViewOptionNames: readonly (keyof TreeViewConfiguration)[];
+export function validateTreeViewOptions(options: TreeViewConfiguration): void;
+
+export class TreeView {
+  constructor(host: HTMLElement, options?: TreeViewConfiguration & Pick<TreeViewOptions, 'iconsBaseUrl' | 'iconRegistry' | 'nativeScrollbars'>);
+  readonly controller: TreeViewController;
+  readonly element: HTMLDivElement;
+  readonly canvas: HTMLCanvasElement;
+  readonly destroyed: boolean;
+  configure(options: TreeViewConfiguration): this;
+  flush(): void;
+  destroy(): void;
+  setData(nodes: TreeNode[]): void;
+  setModel(model: any, meta?: Record<string, MetaRule>): void;
+  setColumns(columns: Column[] | null): void;
+  setTheme(theme: string | Record<string, any>): void;
+  setDynamicState(patches: DynamicPatch[]): void;
+  setInspectorValue(path: string, value: any, options?: InspectorWriteOptions): boolean;
+  on<K extends keyof TreeViewEvents>(type: K, listener: (event: TreeViewEvent<K>) => void): () => void;
+  on(type: string, listener: (event: any) => void): () => void;
+  off(type: string, listener: (event: any) => void): void;
+  setFilter(query?: string | ((node: TreeNode, state: Record<string, any>) => boolean), options?: {caseSensitive?: boolean; wholeWord?: boolean}): void;
+  clearFilter(): void;
+  getRowOrder(parentId?: string | null): string[];
+  moveRow(id: string, index: number, options?: {source?: RowReorderDetail['source']}): boolean;
+  moveRowBy(id: string, offset: number, options?: {source?: RowReorderDetail['source']}): boolean;
+  getSelection(): string[];
+  setSelection(ids: string[]): void;
+  clearSelection(): void;
+  search(query: string, options?: Record<string, any>): any;
+  clearSearch(): void;
+  getSearchState(): TreeSearchState;
+  nextSearchResult(): string | null;
+  previousSearchResult(): string | null;
+  focusNode(id: string, options?: Record<string, any>): boolean;
+  scrollToNode(id: string, align?: TreeViewAlign): boolean;
+  expandAll(): void;
+  collapseAll(): void;
+  registerIcon(name: string, source: IconSource): any;
+}
+
+/** Public event details shared by the DOM view and the controller. */
+export interface InspectorValueChange {
+  path: string;
+  oldValue: any;
+  newValue: any;
+  model: any;
+  nodeId: string;
+  editorType: string;
+  source: string;
+}
+export interface TreeSearchState {
+  query: string;
+  results: string[];
+  cursor: number;
+  current: string | null;
+  count: number;
+}
+export interface TreeViewEvents {
+  valuechange: InspectorValueChange;
+  modelchange: {model: any; meta?: Record<string, MetaRule>; path?: string; structural?: boolean; action?: string; value?: any} & Partial<InspectorValueChange>;
+  action: {path: string; label: string; nodeId: string; model: any; source: string};
+  rowreorder: RowReorderDetail;
+  selectionchange: {selection: string[]; focusedId: string | null};
+  focuschange: {nodeId: string | null};
+  filterchange: {query: string; options: {caseSensitive: boolean; wholeWord: boolean}; visibleRows: number; worker?: boolean};
+  searchchange: Omit<TreeSearchState, 'count'>;
+  nodeclick: {nodeId: string; row: any; originalEvent: any};
+  nodedblclick: {nodeId: string; row: any; originalEvent: any};
+  editablechange: {editable: boolean};
+  rowreorderchange: {enabled: boolean};
+}
+export type TreeViewEvent<K extends keyof TreeViewEvents> = {type: K; detail: TreeViewEvents[K]};
