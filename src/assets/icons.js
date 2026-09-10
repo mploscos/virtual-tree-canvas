@@ -60,6 +60,8 @@ export const builtinIconNames = Object.freeze([
   'snow',
   'space',
   'star',
+  'star-filled',
+  'trash',
   'storm',
   'subsurface',
   'sun',

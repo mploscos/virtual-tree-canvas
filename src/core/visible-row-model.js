@@ -151,7 +151,7 @@ export class VisibleRowModel extends EventTarget {
   /** @param {import('./tree-view-viewport.js').TreeViewViewport} viewport */
   getStickyRows(viewport) {
     const rowViewportHeight = viewport.rowViewportHeight ?? viewport.viewportHeight;
-    if (rowViewportHeight < this.rowHeight * 2) return [];
+    if (viewport.scrollY <= 0 || rowViewportHeight < this.rowHeight * 2) return [];
     const max = Math.max(0, Math.min(6, Math.floor(rowViewportHeight / this.rowHeight) - 1));
     const first = Math.max(0, Math.floor(viewport.scrollY / this.rowHeight));
     let row = this.getRow(first);

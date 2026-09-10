@@ -18,7 +18,7 @@ export class TreeViewInputController {
     this.canvas.addEventListener('wheel', this.#onWheel, { passive: false });
     this.canvas.addEventListener('mousedown', this.#onMouseDown);
     this.canvas.addEventListener('mousemove', this.#onMouseMove);
-    window.addEventListener('mouseup', this.#onMouseUp);
+    (this.canvas.ownerDocument.defaultView ?? window).addEventListener('mouseup', this.#onMouseUp);
     this.canvas.addEventListener('mouseleave', this.#onMouseLeave);
     this.canvas.addEventListener('click', this.#onClick);
     this.canvas.addEventListener('dblclick', this.#onDoubleClick);
@@ -29,7 +29,7 @@ export class TreeViewInputController {
     this.canvas.removeEventListener('wheel', this.#onWheel);
     this.canvas.removeEventListener('mousedown', this.#onMouseDown);
     this.canvas.removeEventListener('mousemove', this.#onMouseMove);
-    window.removeEventListener('mouseup', this.#onMouseUp);
+    (this.canvas.ownerDocument.defaultView ?? window).removeEventListener('mouseup', this.#onMouseUp);
     this.canvas.removeEventListener('mouseleave', this.#onMouseLeave);
     this.canvas.removeEventListener('click', this.#onClick);
     this.canvas.removeEventListener('dblclick', this.#onDoubleClick);
@@ -71,7 +71,7 @@ export class TreeViewInputController {
   };
 
   #onClick = (event) => {
-    this.canvas.focus();
+    if (this.controller.rowReorderInput?.suppressClick) { this.controller.rowReorderInput.suppressClick = false; event.preventDefault(); return; }
     const hit = this.#hitTest(event);
     if (!hit) return;
     if (['rowDrag', 'rowUp', 'rowDown'].includes(hit.part)) return;
@@ -85,6 +85,7 @@ export class TreeViewInputController {
       return;
     }
     if (this.cellEditor?.handleClick(event, hit)) return;
+    this.canvas.focus({ preventScroll: true });
     this.controller.clickNode(hit.row.nodeId, {
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
@@ -99,6 +100,7 @@ export class TreeViewInputController {
   };
 
   #onMouseDown = (event) => {
+    if (this.controller.rowReorderInput?.gesture) return;
     const hit = this.#hitTest(event);
     if (['rowDrag', 'rowUp', 'rowDown'].includes(hit?.part)) return;
     this.controller.setActiveHit(hit);

@@ -1,3 +1,6 @@
+import { treeCellLayout } from './core/tree-cell-layout.js';
+import { inspectorPaneLayout } from './inspector/pane-layout.js';
+import { RowActions } from './input/row-actions.js';
 import { validateTreeViewOptions } from './core/view-options.js';
 import { RowReorderInput } from './input/row-reorder-input.js';
 import { TreeTooltip } from './input/tree-tooltip.js';
@@ -45,6 +48,9 @@ export class TreeViewController {
     this.viewport.renderInsetX = options.renderInsetX ?? 0;
     this.viewport.renderInsetY = options.renderInsetY ?? 0;
     this.columnModel = new TreeColumnModel(options.columns);
+    this.rowActions = options.rowActions ?? [];
+    this.rowDrag = options.rowDrag ?? null;
+    this.columnModel.setRowActions(this.rowActions.length);
     this.rowReorder = Boolean(options.rowReorder);
     this.columnModel.setRowReorder(this.rowReorder);
     this.rowDrop = null;
@@ -100,6 +106,8 @@ export class TreeViewController {
     this.canvas = canvas;
     this.renderer.initialize(canvas);
     this.renderer.setScene(this.scene);
+    this.actionOverlay?.destroy();
+    this.actionOverlay = canvas.ownerDocument?.createElement && canvas.parentElement ? new RowActions(this) : null;
     this.#resizeToCanvasClientSize();
     this.#observeCanvasSize();
     this.#setupNativeScrollbars();
@@ -118,6 +126,22 @@ export class TreeViewController {
     this.cellEditor.setEditable(this.editable);
     if (this.inputController) this.inputController.cellEditor = this.cellEditor;
     return this.cellEditor;
+  }
+
+  setRowActions(actions) {
+    validateTreeViewOptions({ rowActions: actions });
+    this.rowActions = actions;
+    this.columnModel.setRowActions(actions.length);
+    this.columnModel.setRowReorder(this.rowReorder && !this.inspector);
+    this.#syncContentSize();
+    this.requestRender();
+  }
+
+  setRowDrag(resolver) {
+    validateTreeViewOptions({ rowDrag: resolver });
+    this.rowReorderInput?.cancel();
+    this.rowDrag = resolver;
+    this.rowReorderInput?.syncMode();
   }
 
   setEditable(enabled) {
@@ -150,6 +174,7 @@ export class TreeViewController {
 
   destroy() {
     this.destroyed = true;
+    this.actionOverlay?.destroy();
     this.rowReorderInput?.destroy();
     this.rowReorderInput = null;
     this.tooltip?.destroy();
@@ -184,17 +209,29 @@ export class TreeViewController {
     this.closeEditor();
     this.rawNodes = new Map(nodes.map(node => [node.id, node]));
     nodes = resolved;
+    const preserveExpansion = !this.inspector;
     this.inspector = null;
     this.columnModel.setRowReorder(this.rowReorder);
     if (this.columnModel.columns.some(column => column.kind?.startsWith('inspector'))) {
       this.columnModel.setColumns([]);
     }
-    this.model.setTree(nodes);
-    this.expansion.expandToDepth(this.initialExpandDepth);
+    this.#replaceTree(nodes, preserveExpansion);
     this.searchIndex.rebuild(this.model);
     this.workerClient?.setData(this.model.nodes);
     this.#rebuildRows();
     this.events.emit('datachange', {});
+  }
+
+  #replaceTree(nodes, preserveExpansion) {
+    const branches = preserveExpansion ? this.model.nodes.filter(node => this.expansion.hasChildren(node.id)).map(node => node.id) : [];
+    const expanded = new Set(this.model.expanded);
+    this.model.setTree(nodes);
+    this.expansion.expandToDepth(this.initialExpandDepth);
+    for (const id of branches) {
+      if (!this.model.index.getNode(id)) continue;
+      if (expanded.has(id)) this.model.expanded.add(id);
+      else this.model.expanded.delete(id);
+    }
   }
 
   setIconResolver(resolver) {
@@ -233,8 +270,9 @@ export class TreeViewController {
     this.events.emit('rowreorderchange', { enabled: this.rowReorder });
   }
 
-  canReorderRows() {
-    return this.rowReorder && !this.inspector && !this.columnModel.sort.direction && !this.rowModel.filterPredicate;
+  canReorderRows(nodeId) {
+    return this.rowReorder && !this.inspector && !this.columnModel.sort.direction && !this.rowModel.filterPredicate
+      && (nodeId == null || this.model.index.getNode(nodeId)?.reorderable !== false);
   }
 
   getRowOrder(parentId = null) {
@@ -242,7 +280,7 @@ export class TreeViewController {
   }
 
   moveRow(nodeId, targetIndex, options = {}) {
-    if (!this.canReorderRows()) return false;
+    if (!this.canReorderRows(nodeId)) return false;
     const anchorId = this.rowModel.getRow(this.anchorRowIndex)?.nodeId;
     const detail = this.model.moveNode(nodeId, targetIndex);
     if (!detail) return false;
@@ -268,7 +306,7 @@ export class TreeViewController {
   }
 
   getRowDropTarget(nodeId, clientX, clientY) {
-    if (!this.canReorderRows()) return null;
+    if (!this.canReorderRows(nodeId)) return null;
     const x = clientX - this.viewport.renderInsetX;
     const y = clientY - this.viewport.renderInsetY;
     if (x < 0 || x >= this.viewport.contentViewportWidth || y < this.viewport.headerHeight
@@ -316,12 +354,10 @@ export class TreeViewController {
 
   setModel(model, meta = {}, options = {}) {
     validateTreeViewOptions({ ...options, mode: 'inspector', model, meta, presentation: options.presentation ?? options.mode ?? 'table' });
-    this.closeEditor();
     this.columnModel.setRowReorder(false);
     const builder = new ModelInspectorBuilder();
     const presentation = options.presentation ?? options.mode ?? 'table';
-    const previousExpanded = new Set(this.model.expanded);
-    const previousBranches = new Set(this.inspector ? this.model.nodes.filter(node => this.expansion.hasChildren(node.id)).map(node => node.id) : []);
+    const preserveExpansion = Boolean(this.inspector);
     const inspectorOptions = {
       presentation,
       flatRoot: Boolean(options.flatRoot),
@@ -330,16 +366,14 @@ export class TreeViewController {
       markUpdated: options.markUpdated !== false,
     };
     const nodes = builder.build(model, meta, inspectorOptions);
+    const sameLayout = this.inspector?.presentation === presentation &&
+      nodes.length === this.model.nodes.length && nodes.every((node, index) => node.id === this.model.nodes[index].id);
+    if (!sameLayout) this.closeEditor();
+    else this.cellEditor?.reconcile(nodes);
     this.rawNodes.clear();
     this.inspector = { model, meta, builder, presentation, options: inspectorOptions };
-    this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
-    this.model.setTree(nodes);
-    this.expansion.expandToDepth(this.initialExpandDepth);
-    for (const id of previousBranches) {
-      if (!this.model.index.getNode(id)) continue;
-      if (previousExpanded.has(id)) this.model.expanded.add(id);
-      else this.model.expanded.delete(id);
-    }
+    if (!sameLayout) this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
+    this.#replaceTree(nodes, preserveExpansion);
     this.searchIndex.rebuild(this.model);
     this.#rebuildRows();
     this.events.emit('datachange', {});
@@ -895,6 +929,7 @@ export class TreeViewController {
     this.renderer.setScene(this.scene);
     const renderStart = performance.now();
     this.renderer.render(this.scene, time);
+    this.actionOverlay?.render(this.scene);
     const renderMs = performance.now() - renderStart;
     this.lastRenderedRows = this.renderer.renderedRows ?? 0;
     return { scene: this.scene, sceneMs, renderMs, renderedRows: this.lastRenderedRows };
@@ -903,6 +938,7 @@ export class TreeViewController {
   createRenderScene() {
     const visibleRange = this.rowModel.getVisibleRange(this.viewport, 4);
     return {
+      rowDrag: this.rowDrag,
       rowReorder: this.rowReorder,
       canReorderRows: this.canReorderRows(),
       rowDrop: this.rowDrop,
@@ -946,7 +982,7 @@ export class TreeViewController {
       const resizeColumn = this.columnModel.getResizeHandleAt(x);
       if (resizeColumn) return { area: 'header', part: 'resize', column: resizeColumn, x, y: localY };
       const column = this.columnModel.getColumnAt(x);
-      if (column && (this.headerFilter ?? Boolean(this.inspector?.options?.filter)) && column === this.columnModel.columns.find(item => item.kind !== 'rowOrder')) {
+      if (column && (this.headerFilter ?? Boolean(this.inspector?.options?.filter)) && column === this.columnModel.columns.find(item => item.kind !== 'rowOrder' && item.id !== '__vtc_actions')) {
         return { area: 'header', part: 'filter', column, x, y: localY };
       }
       return column ? { area: 'header', part: 'label', column, x, y: localY } : { area: 'header', part: 'header', column: null, x, y: localY };
@@ -995,10 +1031,10 @@ export class TreeViewController {
       }
     } else if (column.kind === 'tree') {
       const localX = x - column.x;
-      const treeX = row.depth * this.rowModel.indentWidth;
-      if (localX >= treeX + 4 && localX <= treeX + 22) part = 'chevron';
-      else if (localX >= treeX + 26 && localX <= treeX + 44) part = 'icon';
-      else if (localX >= treeX + 48) part = 'label';
+      const layout = treeCellLayout(row.depth, this.rowModel.indentWidth, this.model.index.childrenByParent.size > 1);
+      if (row.hasChildren && localX >= layout.chevronX - 6 && localX <= layout.chevronX + 12) part = 'chevron';
+      else if (localX >= layout.iconX - 1 && localX <= layout.iconX + 17) part = 'icon';
+      else if (localX >= layout.labelX - 2) part = 'label';
       else part = 'cell';
     } else if (column.kind === 'inspectorValue') {
       part = this.#inspectorEditorPart(row, x - column.x, column.width);
@@ -1076,7 +1112,7 @@ export class TreeViewController {
         width = Math.max(0, layout.editorWidth - 20);
       }
     } else if (hit.column.kind === 'tree') {
-      const labelX = hit.row.depth * this.rowModel.indentWidth + 50;
+      const { labelX } = treeCellLayout(hit.row.depth, this.rowModel.indentWidth, this.model.index.childrenByParent.size > 1);
       text = node.label ?? node.id;
       width = Math.max(0, hit.column.width - labelX - 6);
     } else if (hit.column.kind === 'inspectorValue') {
@@ -1090,7 +1126,7 @@ export class TreeViewController {
       width = Math.max(0, hit.column.width - 20);
     } else if (typeof hit.column.value === 'function') {
       const value = hit.column.value(node, state);
-      text = value == null ? '' : String(value);
+      text = hit.column.format ? hit.column.format(value, node, state) : value == null ? '' : String(value);
       width = Math.max(0, hit.column.width - 20);
     }
 
@@ -1175,7 +1211,10 @@ export class TreeViewController {
       const entry = entries[0];
       const width = Math.floor(entry?.contentRect?.width ?? 0);
       const height = Math.floor(entry?.contentRect?.height ?? 0);
-      if (width > 0 && height > 0) this.resize(width, height);
+      if (width > 0 && height > 0) {
+        this.resize(width, height);
+        if (this.autoRender) { this.cancelRender(); this.render(); }
+      }
     });
     this.#resizeObserver.observe(this.canvas);
   }
@@ -1366,7 +1405,9 @@ export class TreeViewController {
   }
 
   #fitInspectorPaneColumn(width) {
-    const column = this.columnModel.columns.length === 1 ? this.columnModel.columns[0] : null;
+    const columns = this.columnModel.columns.filter(c => !['__vtc_actions', '__vtc_row_order'].includes(c.id));
+    const column = columns.length === 1 ? columns[0] : null;
+    width -= this.columnModel.columns.filter(c => !columns.includes(c)).reduce((sum, c) => sum + c.width, 0);
     if (column?.kind !== 'inspectorPane' && column?.kind !== 'tree') return;
     if (column.kind === 'inspectorPane' && this.inspector?.options?.presentation !== 'pane') return;
     const nextWidth = Math.max(column.minWidth, Math.floor(width));
@@ -1571,21 +1612,6 @@ function assertNonNegativeNumber(value, name) {
   }
 }
 
-function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
-  const safeWidth = Math.max(1, width);
-  const rightPadding = 14;
-  if (editorType === 'checkbox') {
-    const editorWidth = 34;
-    return { editorLeft: Math.max(64, safeWidth - rightPadding - editorWidth), editorWidth };
-  }
-  const minEditor = Math.min(170, Math.max(96, safeWidth * 0.45));
-  const minLabelEnd = Math.max(88, depth * indentWidth + 104);
-  const preferredLeft = Math.max(minLabelEnd, labelEnd, safeWidth * 0.32);
-  const maxLeft = Math.max(64, safeWidth - rightPadding - minEditor);
-  const editorLeft = Math.max(64, Math.min(preferredLeft, maxLeft));
-  const editorWidth = Math.max(56, safeWidth - rightPadding - editorLeft);
-  return { editorLeft, editorWidth };
-}
 
 function createDefaultArrayItem(meta = {}) {
   if (meta.itemFactory) return meta.itemFactory();

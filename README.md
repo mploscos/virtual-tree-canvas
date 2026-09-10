@@ -19,7 +19,7 @@ grow.
 - **Easy to style.** Built-in dark, light and tactical themes, type-based styling, and editable SVG icons.
 - **Ready for inspectors.** Turn plain JavaScript objects into compact editable forms or property tables.
 
-See [the changelog](./CHANGELOG.md) for the 0.6.0 migration notes and additions.
+See [the changelog](./CHANGELOG.md) for migration notes and additions.
 
 ## Install
 
@@ -135,7 +135,15 @@ and may rebuild the visible row list. For very large datasets,
 `enableWorkers()` moves search and filtered row rebuilds off the main thread
 when Workers are available.
 
+Row actions can also use checkboxes styled like inspector controls. Set `kind: 'checkbox'` and provide
+`checked` as a boolean or a function of `(node, state)`. The `rowaction` event
+includes `checked`; update your application state in response. Checkbox actions
+support `visible` and `disabled` and do not select or drag the row.
+
 ## Columns
+
+Use `showHeader: false` to hide column headings while keeping the filter available.
+The configured `headerHeight` is preserved when the header is shown again.
 
 ```js
 tree.setColumns([
@@ -171,6 +179,11 @@ Available column kinds are `tree`, `status`, `value`, `progress`, `type`,
 Canvas2D content. Import `builtInColumns` or `defaultTreeTableColumns` to start
 from the default set.
 
+Text columns accept `format(value, node, state)` to customize displayed text and
+tooltips while sorting by the original `value`. For example,
+`format: value => value.toFixed(2)` displays two decimal places. By default,
+numeric text uses the same precision as inspector values (up to three decimals).
+
 ## Themes and icons
 
 Three themes are included:
@@ -180,6 +193,18 @@ import { darkTheme, lightTheme, tacticalTheme } from 'virtual-tree-canvas';
 
 tree.setTheme(tacticalTheme);
 ```
+
+Inspector values and columns with `kind: 'value'` use `theme.valueColors` to
+distinguish numbers, strings, booleans, enums and empty values. Read-only values
+retain their contrast; disabled controls remain dimmed. Override individual
+colors, for example `tree.setTheme({ valueColors: { number: '#8bd5ee' } })`.
+A value column can specify `valueType: 'enum'` or a
+`valueType(value, node, state)` callback when its semantic type differs from the
+raw value. Formatting and sorting are unaffected.
+
+Columns with `kind: 'status'` display compact pills using `theme.statuses`, for
+example `{ Live: { label: 'Live', color: '#56ba95' } }`. Their width adapts to
+the label within the column.
 
 Themes can map domain types to a colour and icon:
 
@@ -328,7 +353,7 @@ npm test
 
 ## Manual row order
 
-`rowReorder: true` adds a dedicated handle and Up/Down controls to a data table. Dragging commits only on drop; Escape or dropping outside cancels. Alt+Up / Alt+Down moves the focused row. Edge scrolling works while dragging.
+`rowReorder: true` adds a dedicated handle and Up/Down controls to a data table. Set `reorderable: false` on derived or fixed nodes to hide their ordering controls and prevent moving them manually; their parent can still move with its subtree. Dragging commits only on drop; Escape or dropping outside cancels. Alt+Up / Alt+Down moves the focused row. Edge scrolling works while dragging.
 
 ```js
 const tree = new TreeViewController({
@@ -359,4 +384,55 @@ Open [the reorder demo](./examples/reorder-table.html) through a local HTTP serv
 
 ## Icon catalogue
 
-63 SVGs are included, with a [visual sheet](./docs/icon-catalog.html) and a [reference of available icons](./docs/icon-catalog.md). `builtinIconNames` exposes available IDs.
+65 SVGs are included, with a [visual sheet](./docs/icon-catalog.html) and a [reference of available icons](./docs/icon-catalog.md). `builtinIconNames` exposes available IDs.
+
+## Row actions and data dragging
+
+Actions are optional accessible buttons on the right of visible rows. Their icon names use
+`IconRegistry`, including registered custom icons. The host handles the action;
+clicking a button does not select or expand the row.
+
+```js
+const favorites = new Set();
+const view = new TreeView(host, {
+  nodes,
+  rowActions: [{
+    id: 'favorite', preloadIcons: ['star', 'star-filled'], icon: node => favorites.has(node.id) ? 'star-filled' : 'star', label: 'Toggle favorite',
+    visible: node => !node.data?.group,
+    disabled: node => node.data?.unavailable === true,
+    pressed: node => favorites.has(node.id)
+  }],
+  rowDrag: node => node.data?.reference ?? null
+});
+view.on('rowaction', ({detail}) => {
+  if (favorites.has(detail.nodeId)) favorites.delete(detail.nodeId);
+  else favorites.add(detail.nodeId);
+  view.controller.requestRender();
+});
+```
+
+`rowActions` accepts unique `id` and accessible `label` strings. `icon`, `visible`,
+`disabled` and `pressed` may be functions receiving `(node, dynamicState)`.
+`visible`, `disabled` and `pressed` also accept booleans. Buttons remain focusable
+with Tab and work with Enter/Space. Only visible-row buttons are mounted; live
+value updates preserve their identity and focus.
+
+`rowDrag(node, dynamicState)` returns a payload, or `null` to disable dragging
+that row. Drag from a row label or the row-order handle. Editors, checkboxes,
+action buttons and expand/collapse controls retain their normal behavior.
+
+The controller emits `rowdragstart`, `rowdragmove`, `rowdragend` and
+`rowdragcancel`. Details contain `nodeId`, `payload`, `label` and, except on
+cancellation, `originalEvent` with client coordinates. Connect these events to
+your application's drop manager to highlight destinations and handle the drop.
+The payload is captured at pointer-down; use a stable reference instead of a
+snapshot of a live value. The library never moves or deletes exported data.
+
+Dragging uses Pointer Events within a document. Escape, pointer cancellation,
+loss of pointer capture, removal of the source row and destruction cancel the
+gesture. Live value refreshes preserve an ongoing drag. Sorting and filtering
+disable manual row reordering but still allow exporting rows. Clear the filter
+and cycle the column header through ascending, descending and unsorted to
+restore manual ordering. With `rowReorder: true`, Alt+Up/Down also reorders rows.
+
+For actions whose `icon` callback changes between variants, supply `preloadIcons: ['star', 'star-filled']`. The visible action layer prepares these icons in both normal and pressed colors at the current pixel ratio before interaction.

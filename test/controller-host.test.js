@@ -38,3 +38,16 @@ test('icon resolver applies strings and visual patches without mutating caller n
   assert.equal(controller.renderFrame, null);
   controller.destroy();
 });
+
+
+test('refreshing tree members retains existing branch expansion and initializes new branches', () => {
+  const controller = new TreeViewController({initialExpandDepth:0});
+  const nodes = [{id:'one'},{id:'property',parentId:'one'},{id:'two'},{id:'other',parentId:'two'}];
+  controller.setData(nodes);
+  controller.expand('one');
+  controller.setData([...nodes,{id:'three'},{id:'new',parentId:'three'}]);
+  assert.equal(controller.expansion.isExpanded('one'),true);
+  assert.equal(controller.expansion.isExpanded('two'),false);
+  assert.equal(controller.expansion.isExpanded('three'),false);
+  controller.destroy();
+});

@@ -1,6 +1,6 @@
 # Catálogo de iconos
 
-Los 63 iconos incluidos están disponibles en `resources/icons/`.
+Los 65 iconos incluidos están disponibles en `resources/icons/`.
 Consulta la [galería visual](./icon-catalog.html) para verlos sobre fondos claros
 u oscuros y comparar tamaños. `builtinIconNames` permite enumerar sus IDs desde JavaScript.
 
@@ -165,3 +165,7 @@ view.setData([{ id: 'operator-1', label: 'Operador', icon: 'person' }]);
 | `clock` | Reloj |
 | `calendar` | Calendario |
 | `munition` | Munición |
+
+- `trash`: eliminar un elemento o quitarlo de una lista.
+
+- `star-filled`: favorito activo; combina con `star` para el estado inactivo.

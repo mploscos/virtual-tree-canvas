@@ -1,3 +1,16 @@
+export interface RowAction {
+  kind?: 'button' | 'checkbox';
+  checked?: boolean | ((node: TreeNode, state: Record<string, any>) => boolean);
+  id: string;
+  label: string;
+  icon?: string | ((node: TreeNode, state: Record<string, any>) => string);
+  /** Icon variants to rasterize before the first action. */
+  preloadIcons?: string[];
+  visible?: boolean | ((node: TreeNode, state: Record<string, any>) => boolean);
+  disabled?: boolean | ((node: TreeNode, state: Record<string, any>) => boolean);
+  pressed?: boolean | ((node: TreeNode, state: Record<string, any>) => boolean);
+}
+export type RowDragResolver = ((node: TreeNode, state: Record<string, any>) => any | null) | null;
 export const builtinIconNames: readonly string[];
 export interface RowReorderDetail {
   nodeId: string;
@@ -14,6 +27,8 @@ export interface TreeViewOptions {
   iconsBaseUrl?: string | URL;
   iconRegistry?: IconRegistry;
   rowReorder?: boolean;
+  rowActions?: RowAction[];
+  rowDrag?: RowDragResolver;
   autoRender?: boolean;
   tooltip?: boolean;
   canvas?: HTMLCanvasElement;
@@ -49,6 +64,7 @@ export type TreeNode = {
   icon?: string;
   image?: string;
   tags?: string[];
+  reorderable?: boolean;
   data?: any;
 };
 
@@ -89,8 +105,12 @@ export type Column = {
   minWidth?: number;
   align?: 'left' | 'center' | 'right';
   kind?: string;
+  /** Optional semantic type for value-column coloring; defaults to the raw value type. */
+  valueType?: string | ((value: any, node: TreeNode, state: Record<string, any>) => string);
   sortable?: boolean;
   value?: (node: TreeNode, state: Record<string, any>) => string | number | boolean;
+  /** Formats displayed text and tooltips without changing sorting values. */
+  format?: (value: any, node: TreeNode, state: Record<string, any>) => string;
   render?: (ctx: CanvasRenderingContext2D, cell: any) => void;
 };
 
@@ -128,6 +148,10 @@ export class TreeViewController {
   model: any;
   inspector: any;
   columnModel: any;
+  setRowActions(actions: RowAction[]): void;
+  setRowDrag(resolver: RowDragResolver): void;
+  sortBy(id: string, direction?: string): boolean;
+  clearSort(): void;
   setEditable(enabled: boolean): void;
   setInitialExpandDepth(depth: number): void;
   setIconResolver(resolver: TreeViewConfiguration['iconResolver']): void;
@@ -141,7 +165,7 @@ export class TreeViewController {
   nextSearchResult(): string | null;
   previousSearchResult(): string | null;
   setRowReorder(enabled: boolean): void;
-  canReorderRows(): boolean;
+  canReorderRows(nodeId?: string): boolean;
   getRowOrder(parentId?: string | null): string[];
   moveRow(nodeId: string, targetIndex: number, options?: {source?: RowReorderDetail["source"]}): boolean;
   moveRowBy(nodeId: string, offset: number, options?: {source?: RowReorderDetail["source"]}): boolean;
@@ -176,6 +200,7 @@ export class TreeViewController {
   getSelection(): string[];
   setSelection(ids: string[]): void;
   clearSelection(): void;
+  toggle(nodeId: string): boolean;
   expandAll(): void;
   collapseAll(): void;
 }
@@ -208,9 +233,13 @@ export interface TreeViewConfiguration {
   markUpdated?: boolean;
   editable?: boolean;
   rowReorder?: boolean;
+  rowActions?: RowAction[];
+  rowDrag?: RowDragResolver;
   initialExpandDepth?: number;
   rowHeight?: number;
   indentWidth?: number;
+  /** Hide column headings without hiding the filter bar. Defaults to true; inspector panes may hide headings automatically. */
+  showHeader?: boolean;
   headerHeight?: number;
   iconResolver?: ((node: TreeNode) => string | Partial<TreeNode> | null | undefined) | null;
   fontFamily?: string | null;
@@ -273,7 +302,18 @@ export interface TreeSearchState {
   current: string | null;
   count: number;
 }
+export interface RowDragDetail {
+  nodeId: string;
+  payload: any;
+  label: string;
+  originalEvent: PointerEvent;
+}
 export interface TreeViewEvents {
+  rowaction: {checked?: boolean; actionId: string; nodeId: string; node: TreeNode; originalEvent: MouseEvent};
+  rowdragstart: RowDragDetail;
+  rowdragmove: RowDragDetail;
+  rowdragend: RowDragDetail;
+  rowdragcancel: Omit<RowDragDetail, 'originalEvent'>;
   valuechange: InspectorValueChange;
   modelchange: {model: any; meta?: Record<string, MetaRule>; path?: string; structural?: boolean; action?: string; value?: any} & Partial<InspectorValueChange>;
   action: {path: string; label: string; nodeId: string; model: any; source: string};
@@ -288,3 +328,10 @@ export interface TreeViewEvents {
   rowreorderchange: {enabled: boolean};
 }
 export type TreeViewEvent<K extends keyof TreeViewEvents> = {type: K; detail: TreeViewEvents[K]};
+
+/** Formats an inspector value using its options and precision. */
+export function formatInspectorValue(value: any, meta?: MetaRule): string;
+
+export class ModelInspectorBuilder {
+  build(model: any, meta?: Record<string, MetaRule>, options?: {flatRoot?: boolean; enforceMeta?: boolean}): TreeNode[];
+}

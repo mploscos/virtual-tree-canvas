@@ -147,3 +147,16 @@ test('up/down buttons provide movement without dragging', () => {
     assert.deepEqual(controller.getRowOrder(), ['b', 'a', 'c']);
   } finally { input.destroy(); }
 });
+
+
+test('derived children stay fixed while their parent can move', () => {
+  const controller = make();
+  controller.setData([...nodes, {id:'a2',parentId:'a',label:'Derived',reorderable:false}]);
+  assert.equal(controller.canReorderRows('a2'), false);
+  assert.equal(controller.moveRow('a2',0), false);
+  assert.equal(controller.moveRowBy('a2',-1), false);
+  assert.equal(controller.getRowDropTarget('a2',50,50), null);
+  assert.equal(controller.moveRow('a',2), true);
+  assert.deepEqual(controller.getRowOrder(), ['b','c','a']);
+  assert.deepEqual(controller.getRowOrder('a'), ['a1','a2']);
+});

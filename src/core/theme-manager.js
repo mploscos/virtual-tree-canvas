@@ -32,6 +32,7 @@ export const darkTheme = {
     borderStrong: '#2b3b52',
     shadow: 'rgba(0,0,0,.24)',
   },
+  valueColors: { number: '#8bd5ee', bigint: '#8bd5ee', string: '#dde5ef', boolean: '#86d6b5', enum: '#c4b5fd', null: '#9aa9bc', undefined: '#9aa9bc' },
   types: {
     root: { icon: 'folder', color: '#38bdf8' },
     system: { icon: 'folder', color: '#818cf8' },
@@ -68,6 +69,7 @@ export const darkTheme = {
 
 export const lightTheme = {
   ...darkTheme,
+  valueColors: { number: '#075985', bigint: '#075985', string: '#182438', boolean: '#176249', enum: '#6b3fa0', null: '#576579', undefined: '#576579' },
   colors: {
     background: '#f8fafc',
     row: '#ffffff',
@@ -228,6 +230,7 @@ function mergeTheme(base, override) {
     ...base,
     ...override,
     colors: { ...base.colors, ...(override.colors ?? {}) },
+    valueColors: { ...base.valueColors, ...(override.valueColors ?? {}) },
     types: { ...base.types, ...(override.types ?? {}) },
     statuses: { ...base.statuses, ...(override.statuses ?? {}) },
   };

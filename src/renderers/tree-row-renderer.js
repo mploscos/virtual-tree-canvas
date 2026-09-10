@@ -1,3 +1,7 @@
+import { drawCheckbox } from './checkbox.js';
+import { treeCellLayout } from '../core/tree-cell-layout.js';
+import { formatInspectorValue } from '../inspector/editor-resolver.js';
+import { inspectorPaneLayout } from '../inspector/pane-layout.js';
 import { numericLayout } from '../inspector/numeric-layout.js';
 import { IconRegistry } from '../core/icon-registry.js';
 
@@ -51,7 +55,7 @@ export class TreeRowRenderer {
     if (scene?.rows) this.scene = scene;
     if (!this.canvas || !this.ctx || !this.scene) return;
     const { viewport, theme } = this.scene;
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const dpr = Math.max(1, this.canvas.ownerDocument?.defaultView?.devicePixelRatio || 1);
     const viewportWidth = Math.max(0, viewport.viewportWidth);
     const viewportHeight = Math.max(0, viewport.viewportHeight);
     if (viewportWidth <= 0 || viewportHeight <= 0) return;
@@ -119,7 +123,7 @@ export class TreeRowRenderer {
     ctx.textBaseline = 'middle';
 
     for (const column of columns) {
-      if (headerFilter && column === columns.find(item => item.kind !== 'rowOrder')) {
+      if (headerFilter && column === columns.find(item => item.kind !== 'rowOrder' && item.id !== '__vtc_actions')) {
         this.#drawHeaderFilter(ctx, column, viewport, theme, filterQuery);
       } else {
         ctx.fillStyle = colors.textMuted;
@@ -212,6 +216,7 @@ export class TreeRowRenderer {
     }
     ctx.restore();
 
+    if (!stickyRows.some(row => row.stickyY > row.y - viewport.scrollY)) return;
     const bottom = viewport.headerHeight + height;
     ctx.strokeStyle = theme.colors.border;
     ctx.beginPath();
@@ -234,7 +239,8 @@ export class TreeRowRenderer {
     const visibleX = viewport.scrollX;
     const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
 
-    ctx.fillStyle = selected ? colors.rowSelected : highlighted ? colors.rowHighlighted : hovered ? colors.rowHover : colors.row;
+    const background = selected ? colors.rowSelected : highlighted ? colors.rowHighlighted : hovered ? colors.rowHover : colors.row;
+    ctx.fillStyle = background;
     ctx.fillRect(visibleX, y, visibleWidth, row.height);
 
     this.#drawIndentGuides(ctx, row, colors);
@@ -259,6 +265,12 @@ export class TreeRowRenderer {
       ctx.moveTo(column.x + column.width + 0.5, y);
       ctx.lineTo(column.x + column.width + 0.5, y + row.height);
       ctx.stroke();
+    }
+
+    const actions = columns.find(column => column.id === '__vtc_actions');
+    if (actions) {
+      ctx.fillStyle = background;
+      ctx.fillRect(visibleX + Math.max(0, visibleWidth - actions.width), y, actions.width, row.height);
     }
 
     ctx.strokeStyle = colors.border;
@@ -292,6 +304,7 @@ export class TreeRowRenderer {
   }
 
   #drawRowOrder(ctx, { node, row, rect, theme }) {
+    if (node.reorderable === false) return;
     const siblings = this.scene.childrenByParent?.get(node.parentId ?? null) ?? [];
     const enabled = this.scene.canReorderRows && siblings.length > 1;
     const cy = rect.y + row.height / 2;
@@ -299,7 +312,7 @@ export class TreeRowRenderer {
     ctx.strokeStyle = theme.colors.textMuted;
     ctx.fillStyle = theme.colors.textMuted;
     ctx.lineWidth = 1.5;
-    ctx.globalAlpha = enabled ? 1 : 0.3;
+    ctx.globalAlpha = enabled || this.scene.rowDrag?.(node, this.scene.dynamicState.get(node.id) ?? {}) != null ? 1 : 0.3;
     for (const dx of [10, 14]) for (const dy of [-4, 0, 4]) ctx.fillRect(rect.x + dx, cy + dy, 1.5, 1.5);
     for (const [center, direction, available] of [[36, -1, siblings[0] !== node.id], [60, 1, siblings.at(-1) !== node.id]]) {
       ctx.globalAlpha = enabled && available ? 1 : 0.3;
@@ -392,6 +405,7 @@ export class TreeRowRenderer {
     const meta = data.meta ?? {};
     const disabled = data.disabled;
     const readonly = data.readonly;
+    const valueColor = resolveValueColor(theme, data.value, data.editorType === 'select' ? 'enum' : data.valueType);
     const x = rect.x + 10;
     const y = rect.y + 5;
     const fullWidth = Math.max(24, rect.width - 20);
@@ -411,7 +425,7 @@ export class TreeRowRenderer {
     }
 
     if (data.editorType === 'checkbox') {
-      this.#drawCheckbox(ctx, x, rect.y + rect.height / 2 - 8, Boolean(data.value), theme);
+      drawCheckbox(ctx, x, rect.y + rect.height / 2 - 8, Boolean(data.value), theme);
     } else if (data.editorType === 'range') {
       this.#drawInspectorRange(ctx, x, rect.y + rect.height / 2 - 4, width, data, theme, {
         hoveredNumber: hovered && hoverPart === 'number',
@@ -422,7 +436,7 @@ export class TreeRowRenderer {
       ctx.fillRect(x, y + 2, 28, height - 4);
       ctx.strokeStyle = theme.colors.border;
       ctx.strokeRect(x + 0.5, y + 2.5, 28, height - 4);
-      this.#drawMutedText(ctx, String(data.value ?? ''), x + 38, rect.y + rect.height / 2, width - 38, theme);
+      this.#drawMutedText(ctx, String(data.value ?? ''), x + 38, rect.y + rect.height / 2, width - 38, theme, false, null, valueColor);
     } else if (data.editorType === 'button') {
       const buttonWidth = meta.fullWidthButton ? width : Math.min(width, 140);
       this.#drawControlSurface(ctx, x, y, buttonWidth, height, theme, {
@@ -441,17 +455,17 @@ export class TreeRowRenderer {
         active: activePart === 'editor',
         disabled: readonly || disabled,
       });
-      this.#drawMutedText(ctx, data.valueText, x + 8, rect.y + rect.height / 2, selectWidth - 30, theme);
+      this.#drawMutedText(ctx, data.valueText, x + 8, rect.y + rect.height / 2, selectWidth - 30, theme, false, null, valueColor);
       this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
     } else {
       if (numeric.unit) {
         ctx.font = theme.monoFont ?? theme.font;
-        ctx.fillStyle = readonly ? theme.colors.textMuted : theme.colors.text;
+        ctx.fillStyle = valueColor;
         ctx.textAlign = 'right';
         drawTruncatedText(ctx, data.valueText, x + width, rect.y + rect.height / 2, width);
         ctx.textAlign = 'left';
       } else {
-        this.#drawMutedText(ctx, data.valueText, x, rect.y + rect.height / 2, width, theme, readonly);
+        this.#drawMutedText(ctx, data.valueText, x, rect.y + rect.height / 2, width, theme, false, null, valueColor);
       }
     }
 
@@ -481,17 +495,6 @@ export class TreeRowRenderer {
     this.#drawMutedText(ctx, node.data?.meta?.description ?? '', rect.x + 10, rect.y + rect.height / 2, rect.width - 20, theme);
   }
 
-  #drawCheckbox(ctx, x, y, checked, theme) {
-    roundRect(ctx, x, y, 16, 16, 3);
-    ctx.fillStyle = theme.colors.progressTrack;
-    ctx.fill();
-    ctx.strokeStyle = checked ? theme.colors.progressFill : theme.colors.textMuted;
-    ctx.stroke();
-    if (!checked) return;
-    ctx.fillStyle = theme.colors.progressFill;
-    roundRect(ctx, x + 4, y + 4, 8, 8, 1.5);
-    ctx.fill();
-  }
 
   #drawInspectorRange(ctx, x, y, width, data, theme, state = {}) {
     const meta = data.meta ?? {};
@@ -506,7 +509,7 @@ export class TreeRowRenderer {
       hovered: Boolean(state.hoveredNumber),
       active: Boolean(state.activeNumber),
     });
-    ctx.fillStyle = theme.colors.text;
+    ctx.fillStyle = resolveValueColor(theme, data.value);
     ctx.font = theme.monoFont ?? theme.font;
     ctx.textAlign = 'right';
     drawTruncatedText(ctx, String(data.valueText ?? ''), x + barWidth + gap + valueWidth - 6, y + 4, valueWidth - 10);
@@ -548,8 +551,8 @@ export class TreeRowRenderer {
     ctx.fill();
   }
 
-  #drawMutedText(ctx, text, x, y, width, theme, readonly = false, font = null) {
-    ctx.fillStyle = readonly ? theme.colors.textMuted : theme.colors.text;
+  #drawMutedText(ctx, text, x, y, width, theme, readonly = false, font = null, color = null) {
+    ctx.fillStyle = color ?? (readonly ? theme.colors.textMuted : theme.colors.text);
     ctx.font = font ?? theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
@@ -558,19 +561,20 @@ export class TreeRowRenderer {
 
   #drawTreeCell(ctx, { node, row, rect, theme, style }) {
     const colors = theme.colors;
-    const x = rect.x + row.depth * theme.indentWidth;
+    const layout = treeCellLayout(row.depth, theme.indentWidth, this.scene.childrenByParent.size > 1);
     const cy = rect.y + rect.height / 2;
-    this.#drawChevron(ctx, x + 10, cy, row, colors);
-    this.iconRegistry.draw(ctx, style.icon, x + 27, rect.y + 6, 15, style.color);
+    if (row.hasChildren) this.#drawChevron(ctx, rect.x + layout.chevronX, cy, row, colors);
+    this.iconRegistry.draw(ctx, style.icon, rect.x + layout.iconX, rect.y + 6, 15, style.color);
     ctx.fillStyle = colors.text;
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    drawTruncatedText(ctx, node.label ?? node.id, x + 50, cy, Math.max(40, rect.x + rect.width - x - 56));
+    drawTruncatedText(ctx, node.label ?? node.id, rect.x + layout.labelX, cy, Math.max(0, rect.width - layout.labelX - 6));
   }
 
   #drawStatusCell(ctx, { rect, style, theme }) {
-    const badgeWidth = Math.min(58, rect.width - 12);
+    ctx.font = theme.font;
+    const badgeWidth = Math.max(0, Math.min(ctx.measureText(style.status.label).width + 18, rect.width - 12));
     const x = rect.x + (rect.width - badgeWidth) / 2;
     const y = rect.y + (rect.height - 17) / 2;
     const statusColor = style.status.color;
@@ -581,7 +585,7 @@ export class TreeRowRenderer {
     ctx.strokeStyle = mixColor(theme.colors.border, statusColor, 0.42);
     ctx.stroke();
     ctx.fillStyle = mixColor(theme.colors.text, statusColor, 0.36);
-    ctx.font = '10px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace';
+    ctx.font = theme.font;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     drawTruncatedText(ctx, style.status.label, x + badgeWidth / 2, y + 8.5, badgeWidth - 8);
@@ -623,10 +627,14 @@ export class TreeRowRenderer {
 
   #drawTextCell(ctx, { node, state, rect, column, theme }) {
     let value = column.value(node, state);
-    if (column.kind === 'updated' && typeof value === 'number') value = formatTime(value);
-    if (typeof value === 'number') value = Math.round(value).toString();
-    ctx.fillStyle = column.kind === 'type' ? resolveNodeStyle(theme, node, state).color : theme.colors.textMuted;
-    ctx.font = column.kind === 'type' || column.kind === 'updated' || typeof value === 'number' ? theme.monoFont ?? theme.font : theme.font;
+    const numeric = typeof value === 'number';
+    const valueType = typeof column.valueType === 'function' ? column.valueType(value, node, state) : column.valueType;
+    const valueColor = resolveValueColor(theme, value, valueType);
+    if (column.format) value = column.format(value, node, state);
+    else if (column.kind === 'updated' && numeric) value = formatTime(value);
+    else if (numeric) value = formatInspectorValue(value);
+    ctx.fillStyle = column.kind === 'type' ? resolveNodeStyle(theme, node, state).color : column.kind === 'value' ? valueColor : theme.colors.textMuted;
+    ctx.font = column.kind === 'type' || column.kind === 'updated' || numeric ? theme.monoFont ?? theme.font : theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = column.align;
     const x = column.align === 'right' ? rect.x + rect.width - 10 : column.align === 'center' ? rect.x + rect.width / 2 : rect.x + 10;
@@ -648,13 +656,8 @@ export class TreeRowRenderer {
   }
 
   #drawChevron(ctx, x, y, row, colors) {
-    ctx.fillStyle = row.hasChildren ? colors.chevron : colors.textMuted;
-    if (!row.hasChildren) {
-      ctx.beginPath();
-      ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
+    if (!row.hasChildren) return;
+    ctx.fillStyle = colors.chevron;
     ctx.beginPath();
     if (row.expanded) {
       ctx.moveTo(x - 5, y - 2);
@@ -681,21 +684,6 @@ function resolveNodeStyle(theme, node, state = {}) {
   };
 }
 
-function inspectorPaneLayout(width, depth = 0, indentWidth = 18, editorType = '', labelEnd = 0) {
-  const safeWidth = Math.max(1, width);
-  const rightPadding = 14;
-  if (editorType === 'checkbox') {
-    const editorWidth = 34;
-    return { editorLeft: Math.max(64, safeWidth - rightPadding - editorWidth), editorWidth };
-  }
-  const minEditor = Math.min(170, Math.max(96, safeWidth * 0.45));
-  const minLabelEnd = Math.max(88, depth * indentWidth + 104);
-  const preferredLeft = Math.max(minLabelEnd, labelEnd, safeWidth * 0.32);
-  const maxLeft = Math.max(64, safeWidth - rightPadding - minEditor);
-  const editorLeft = Math.max(64, Math.min(preferredLeft, maxLeft));
-  const editorWidth = Math.max(56, safeWidth - rightPadding - editorLeft);
-  return { editorLeft, editorWidth };
-}
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
@@ -792,4 +780,8 @@ function formatTime(value) {
   const time = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(time)) return '';
   return timeFormatter.format(time);
+}
+
+function resolveValueColor(theme, value, type) {
+  return theme.valueColors?.[type ?? (value === null ? 'null' : typeof value)] ?? theme.colors.text;
 }

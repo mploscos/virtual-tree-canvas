@@ -7,6 +7,7 @@
  * @property {string} [icon]
  * @property {string} [image]
  * @property {string[]} [tags]
+ * @property {boolean} [reorderable] Allow manual reordering of this node (defaults to true).
  * @property {any} [data]
  */
 

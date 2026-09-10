@@ -376,5 +376,17 @@
     "label": "Munición",
     "category": "Tiempo y simulación",
     "available": true
+  },
+  {
+    "id": "trash",
+    "label": "Eliminar",
+    "category": "Interfaz",
+    "available": true
+  },
+  {
+    "id": "star-filled",
+    "label": "Favorito activo",
+    "category": "Interfaz",
+    "available": true
   }
 ]

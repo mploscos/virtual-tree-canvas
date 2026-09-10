@@ -34,6 +34,7 @@ test('visible rows rebuild after expand and collapse', () => {
 test('scrollToNode supports alignment modes', () => {
   const controller = createController();
   controller.expandAll();
+  assert.deepEqual(controller.createRenderScene().stickyRows, [], 'no sticky overlay before scrolling');
   controller.scrollToNode('b1', 'start');
   assert.equal(controller.viewport.scrollY, 5 * 20);
 

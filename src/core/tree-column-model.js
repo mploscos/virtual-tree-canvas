@@ -69,6 +69,7 @@ export class TreeColumnModel {
     if (!this.columns.some((column) => column.kind === 'tree' || column.kind === 'inspectorPane')) {
       this.columns.unshift(normalizeColumn(builtInColumns.tree, 0));
     }
+    this.setRowActions(this.rowActionCount ?? 0);
     this.setRowReorder(this.rowReorder);
     this.#layout();
   }
@@ -80,6 +81,14 @@ export class TreeColumnModel {
       id: '__vtc_row_order', label: '', kind: 'rowOrder', width: 72, minWidth: 72,
       sortable: false, resizable: false
     }, 0));
+    this.#layout();
+  }
+
+  setRowActions(count) {
+    this.rowActionCount = count;
+    this.columns = this.columns.filter(column => column.id !== '__vtc_actions');
+    if (count) this.columns.push(normalizeColumn({ id: '__vtc_actions', label: '', kind: 'text',
+      width: count * 28, minWidth: count * 28, sortable: false, resizable: false, value: () => '' }, 0));
     this.#layout();
   }
 
@@ -101,11 +110,11 @@ export class TreeColumnModel {
   }
 
   moveColumn(id, targetIndex) {
-    if (id === '__vtc_row_order') return false;
+    if (id === '__vtc_row_order' || id === '__vtc_actions') return false;
     const currentIndex = this.columns.findIndex((column) => column.id === id);
     if (currentIndex === -1) return false;
     const [column] = this.columns.splice(currentIndex, 1);
-    const nextIndex = Math.max(this.rowReorder ? 1 : 0, Math.min(this.columns.length, targetIndex));
+    const nextIndex = Math.max(this.rowReorder ? 1 : 0, Math.min(this.columns.length - (this.rowActionCount ? 1 : 0), targetIndex));
     this.columns.splice(nextIndex, 0, column);
     if (!this.columns.some((item) => item.kind === 'tree')) this.columns.unshift(normalizeColumn(builtInColumns.tree, 0));
     this.#layout();
@@ -158,6 +167,8 @@ function normalizeColumn(column, index) {
     sortable: source.sortable ?? true,
     resizable: source.resizable ?? true,
     value: source.value ?? ((node) => node[source.id] ?? ''),
+    format: source.format,
+    valueType: source.valueType,
     render: source.render,
     x: 0,
   };

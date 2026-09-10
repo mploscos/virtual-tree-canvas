@@ -79,6 +79,8 @@ export class TreeView {
       if (changed('rowHeight') || changed('indentWidth')) controller.setLayoutMetrics({ rowHeight: next.rowHeight, indentWidth: next.indentWidth });
       if (changed('theme') || changed('fontFamily')) this.applyTheme();
       if (changed('editable')) controller.setEditable(next.editable);
+      if (changed('rowActions')) controller.setRowActions(next.rowActions);
+      if (changed('rowDrag')) controller.setRowDrag(next.rowDrag);
       if (changed('rowReorder')) controller.setRowReorder(next.rowReorder);
       if (replaceData) {
         if (next.mode === 'tree') controller.setData(next.nodes ?? [], { iconResolver: next.iconResolver });
@@ -88,18 +90,18 @@ export class TreeView {
         if (changed('markUpdated')) controller.setInspectorOptions({ markUpdated: next.markUpdated });
       }
       if (changed('columns') || (replaceData && next.columns !== null)) controller.setColumns(next.columns);
-      if (replaceData || ['filter', 'filterPlacement', 'headerHeight'].some(changed)) this.syncLayout();
+      if (replaceData || ['filter', 'filterPlacement', 'headerHeight', 'showHeader'].some(changed)) this.syncLayout();
     } finally {
       this.flushing = false;
     }
   }
 
   syncLayout() {
-    const { filter, filterPlacement, headerHeight, mode, presentation } = this.options;
-    const bar = filter && (filterPlacement === 'bar' || (filterPlacement === 'auto' && (mode === 'tree' || presentation === 'pane')));
+    const { filter, filterPlacement, headerHeight, showHeader, mode, presentation } = this.options;
+    const bar = filter && (!showHeader || filterPlacement === 'bar' || (filterPlacement === 'auto' && (mode === 'tree' || presentation === 'pane')));
     this.filterBar.setVisible(bar);
     this._controller.setHeaderFilter(filter && !bar);
-    this._controller.setLayoutMetrics({ headerHeight: bar && mode === 'inspector' && presentation === 'pane' ? 0 : headerHeight });
+    this._controller.setLayoutMetrics({ headerHeight: !showHeader || (bar && mode === 'inspector' && presentation === 'pane') ? 0 : headerHeight });
   }
 
   applyTheme() {

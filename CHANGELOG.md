@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 — 2026-09-10
+
+### Added
+
+- Configurable right-aligned row actions with icons, checkboxes, tooltips, disabled and pressed states, and keyboard activation.
+- Optional row data dragging with start, move, end and cancel events for application drop targets.
+- `preloadIcons` prepares action icon variants before the first interaction. Includes new trash and filled-star icons.
+- `showHeader` hides column headings independently of the filter.
+- `reorderable: false` prevents manual movement of individual rows while allowing their parent subtree to move.
+- Value formatting and semantic type colors for table columns, plus configurable status pills.
+
+### Fixed
+
+- Row actions preserve selection backgrounds and remain available on partially visible rows. Hover highlights the icon without covering the row.
+- Action icons render at their displayed size and current screen pixel density.
+- Canvas resizing repaints immediately after measurement; keyboard focus uses a subtle outer border.
+- Inspector checkboxes align with other value controls. Sliders and text inputs remain editable when row dragging is enabled.
+- Live refreshes preserve active editors, row drags, expansion state and action-button focus.
+- Flat lists no longer reserve unnecessary leaf-marker space. Sticky ancestor separators remain hidden before scrolling.
+- Focusing a row during dragging no longer scrolls ancestor panels.
+- Sorted and filtered tables can export rows while keeping manual reordering disabled.
+- Pointer cancellation and disposal release drag state.
+
 ## 0.6.0 — 2026-09-10
 
 ### Added

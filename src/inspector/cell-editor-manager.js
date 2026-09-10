@@ -6,11 +6,13 @@ export class CellEditorManager {
     if (!controller.canvas) throw new Error('CellEditorManager requires an initialized TreeViewController canvas');
     this.controller = controller;
     this.canvas = controller.canvas;
+    this.view = this.canvas.ownerDocument.defaultView;
     this.host = host ?? controller.canvas.parentElement ?? document.body;
     this.editable = true;
     this.overlay = null;
     this.rangeDrag = null;
     this.overlayKind = null;
+    this.overlayNode = null;
     this.stopFilter = controller.on('filterchange', ({ detail }) => {
       if (this.overlayKind === 'filter' && this.overlay) this.overlay.value = detail.query;
     });
@@ -26,15 +28,25 @@ export class CellEditorManager {
   destroy() {
     this.stopFilter();
     this.#removeOverlay();
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    this.view.removeEventListener('mousemove', this.onMouseMove);
+    this.view.removeEventListener('mouseup', this.onMouseUp);
   }
 
   close() {
     this.#removeOverlay();
     this.rangeDrag = null;
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    this.view.removeEventListener('mousemove', this.onMouseMove);
+    this.view.removeEventListener('mouseup', this.onMouseUp);
+  }
+
+  /** Keep an in-progress edit while values refresh; cancel if its editor changes. */
+  reconcile(nodes) {
+    const previous = this.overlayNode ?? this.rangeDrag?.node;
+    if (!previous) return;
+    const next = nodes.find(node => node.id === previous.id);
+    const signature = data => JSON.stringify([data.editorType, data.readonly, data.disabled,
+      ...['min', 'max', 'step', 'integer', 'options', 'unit'].map(key => data.meta?.[key])]);
+    if (!next || signature(previous.data) !== signature(next.data)) this.close();
   }
 
   handlePointerDown(event, hit) {
@@ -42,10 +54,10 @@ export class CellEditorManager {
     const data = hit.row ? this.controller.model.nodes[hit.row.nodeIndex]?.data : null;
     if (!data || data.readonly || data.disabled) return false;
     if (data.editorType === 'range' && hit.part === 'range') {
-      this.rangeDrag = { hit, data };
+      this.rangeDrag = { hit, data, node: this.controller.model.nodes[hit.row.nodeIndex] };
       this.#updateRangeFromEvent(event);
-      window.addEventListener('mousemove', this.onMouseMove);
-      window.addEventListener('mouseup', this.onMouseUp);
+      this.view.addEventListener('mousemove', this.onMouseMove);
+      this.view.addEventListener('mouseup', this.onMouseUp);
       return true;
     }
     if (shouldOpenOverlayOnPointerDown(data, hit)) {
@@ -137,6 +149,7 @@ export class CellEditorManager {
     this.host.append(element);
     this.overlay = element;
     this.overlayKind = 'value';
+    this.overlayNode = node;
     element.focus({ preventScroll: true });
     element.select?.();
     if (options.showPicker && element.showPicker) {
@@ -219,8 +232,8 @@ export class CellEditorManager {
 
   #onMouseUp() {
     this.rangeDrag = null;
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    this.view.removeEventListener('mousemove', this.onMouseMove);
+    this.view.removeEventListener('mouseup', this.onMouseUp);
   }
 
   #isEditableHit(hit) {
@@ -273,6 +286,7 @@ export class CellEditorManager {
     const overlay = this.overlay;
     this.overlay = null;
     this.overlayKind = null;
+    this.overlayNode = null;
     overlay?.remove();
   }
 
