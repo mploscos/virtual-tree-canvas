@@ -1,9 +1,15 @@
-/** Resolve built-in SVG resources independently of the bundled JavaScript location.
+/**
+ * Resolve built-in SVG resources independently of the bundled JavaScript location.
  * @param {string | URL} [iconsBaseUrl] Directory URL, with or without a trailing slash.
  */
 export function createBuiltinIconUrls(iconsBaseUrl) {
-  const base = String(iconsBaseUrl ?? new URL('../../resources/icons/', import.meta.url)).replace(/\/+$/, '');
-  return Object.freeze(Object.fromEntries(builtinIconNames.map(name => [name, `${base}/${name}.svg`])));
+  const base = String(iconsBaseUrl ?? new URL('../../resources/icons/', import.meta.url)).replace(
+    /\/+$/,
+    ''
+  );
+  return Object.freeze(
+    Object.fromEntries(builtinIconNames.map((name) => [name, `${base}/${name}.svg`]))
+  );
 }
 
 export const builtinIconNames = Object.freeze([
@@ -71,5 +77,5 @@ export const builtinIconNames = Object.freeze([
   'track',
   'tree',
   'warning',
-  'wind',
+  'wind'
 ]);

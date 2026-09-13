@@ -183,12 +183,14 @@ export class TreeViewController {
   setModel(model: any, meta?: Record<string, MetaRule>, options?: Record<string, any>): void;
   setColumns(columns: Column[] | null): void;
   setDynamicState(patches: DynamicPatch[]): void;
+  flushDynamicState(): Set<string>;
   setTheme(theme: any): void;
   setLayoutMetrics(options?: { rowHeight?: number; indentWidth?: number; headerHeight?: number }): void;
   registerIcon(name: string, icon: IconSource): any;
   resize(width: number, height: number): void;
   render(time?: number): void;
   renderMeasured(time?: number): any;
+  getStats(): TreeViewStats;
   hitTest(clientX: number, clientY: number): any;
   getTooltipForHit(hit: any): any;
   search(query: string, options?: Record<string, any> & { caseSensitive?: boolean; wholeWord?: boolean }): any;
@@ -203,6 +205,26 @@ export class TreeViewController {
   toggle(nodeId: string): boolean;
   expandAll(): void;
   collapseAll(): void;
+}
+
+export interface TreeViewStats {
+  totalNodes: number;
+  visibleRows: number;
+  renderedRows: number;
+  patchesFrame: number;
+  dirtyNodes: number;
+  selectedCount: number;
+  rebuildCount: number;
+  setDynamicStateCalls: number;
+  patchesReceived: number;
+  uniqueNodesReceived: number;
+  nodesChanged: number;
+  rendersRequested: number;
+  rendersExecuted: number;
+  rendersAvoidedNoChanges: number;
+  rendersAvoidedOffscreen: number;
+  rowActionsFullUpdates: number;
+  rowActionsIncrementalUpdates: number;
 }
 
 export class TreeViewInputController {

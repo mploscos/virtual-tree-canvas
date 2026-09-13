@@ -3,18 +3,54 @@ import test from 'node:test';
 import { CellEditorManager, TreeViewController, TreeViewInputController } from '../src/index.js';
 
 const nodes = [
-  { id: 'root', label: 'Root' },
-  { id: 'a', parentId: 'root', label: 'A', type: 'group' },
-  { id: 'a1', parentId: 'a', label: 'A1' },
-  { id: 'a2', parentId: 'a', label: 'A2' },
-  { id: 'b', parentId: 'root', label: 'B', type: 'group' },
-  { id: 'b1', parentId: 'b', label: 'B1' },
-  { id: 'b2', parentId: 'b', label: 'B2' },
-  { id: 'c', parentId: 'root', label: 'C' },
+  {
+    id: 'root',
+    label: 'Root'
+  },
+  {
+    id: 'a',
+    parentId: 'root',
+    label: 'A',
+    type: 'group'
+  },
+  {
+    id: 'a1',
+    parentId: 'a',
+    label: 'A1'
+  },
+  {
+    id: 'a2',
+    parentId: 'a',
+    label: 'A2'
+  },
+  {
+    id: 'b',
+    parentId: 'root',
+    label: 'B',
+    type: 'group'
+  },
+  {
+    id: 'b1',
+    parentId: 'b',
+    label: 'B1'
+  },
+  {
+    id: 'b2',
+    parentId: 'b',
+    label: 'B2'
+  },
+  {
+    id: 'c',
+    parentId: 'root',
+    label: 'C'
+  }
 ];
 
 function createController() {
-  const controller = new TreeViewController({ initialExpandDepth: 1, rowHeight: 20 });
+  const controller = new TreeViewController({
+    initialExpandDepth: 1,
+    rowHeight: 20
+  });
   controller.resize(200, 60);
   controller.setData(nodes);
   return controller;
@@ -22,19 +58,32 @@ function createController() {
 
 test('visible rows rebuild after expand and collapse', () => {
   const controller = createController();
-  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'a', 'b', 'c']);
+  assert.deepEqual(
+    controller.rowModel.rows.map((row) => row.nodeId),
+    ['root', 'a', 'b', 'c']
+  );
 
   controller.expand('a');
-  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'a', 'a1', 'a2', 'b', 'c']);
+  assert.deepEqual(
+    controller.rowModel.rows.map((row) => row.nodeId),
+    ['root', 'a', 'a1', 'a2', 'b', 'c']
+  );
 
   controller.collapse('root');
-  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root']);
+  assert.deepEqual(
+    controller.rowModel.rows.map((row) => row.nodeId),
+    ['root']
+  );
 });
 
 test('scrollToNode supports alignment modes', () => {
   const controller = createController();
   controller.expandAll();
-  assert.deepEqual(controller.createRenderScene().stickyRows, [], 'no sticky overlay before scrolling');
+  assert.deepEqual(
+    controller.createRenderScene().stickyRows,
+    [],
+    'no sticky overlay before scrolling'
+  );
   controller.scrollToNode('b1', 'start');
   assert.equal(controller.viewport.scrollY, 5 * 20);
 
@@ -61,16 +110,24 @@ test('keyboard navigation moves focus through visible rows', () => {
   const controller = createController();
   controller.setSelection(['root']);
 
-  controller.handleKey({ key: 'ArrowDown' });
+  controller.handleKey({
+    key: 'ArrowDown'
+  });
   assert.equal(controller.selection.focused, 'a');
 
-  controller.handleKey({ key: 'End' });
+  controller.handleKey({
+    key: 'End'
+  });
   assert.equal(controller.selection.focused, 'c');
 
-  controller.handleKey({ key: 'Home' });
+  controller.handleKey({
+    key: 'Home'
+  });
   assert.equal(controller.selection.focused, 'root');
 
-  controller.handleKey({ key: 'PageDown' });
+  controller.handleKey({
+    key: 'PageDown'
+  });
   assert.equal(controller.selection.focused, 'a');
 });
 
@@ -78,7 +135,9 @@ test('shift selection selects a visible row range', () => {
   const controller = createController();
   controller.expand('a');
   controller.selectRow(1);
-  controller.selectRow(3, { shiftKey: true });
+  controller.selectRow(3, {
+    shiftKey: true
+  });
 
   assert.deepEqual(controller.getSelection(), ['a', 'a1', 'a2']);
 });
@@ -86,10 +145,14 @@ test('shift selection selects a visible row range', () => {
 test('ctrl and cmd toggle individual row selection', () => {
   const controller = createController();
   controller.selectRow(1);
-  controller.selectRow(2, { ctrlKey: true });
+  controller.selectRow(2, {
+    ctrlKey: true
+  });
   assert.deepEqual(controller.getSelection(), ['a', 'b']);
 
-  controller.selectRow(1, { metaKey: true });
+  controller.selectRow(1, {
+    metaKey: true
+  });
   assert.deepEqual(controller.getSelection(), ['b']);
 });
 
@@ -98,7 +161,17 @@ test('dynamic patches do not rebuild visible rows', () => {
   const rebuildCount = controller.rebuildCount;
   const rowCount = controller.rowModel.rows.length;
 
-  controller.setDynamicState([{ id: 'a', state: { progress: 0.7, status: 2, value: 42 } }]);
+  controller.setDynamicState([
+    {
+      id: 'a',
+      state: {
+        progress: 0.7,
+        status: 2,
+        value: 42
+      }
+    }
+  ]);
+  controller.flushDynamicState();
 
   assert.equal(controller.rebuildCount, rebuildCount);
   assert.equal(controller.rowModel.rows.length, rowCount);
@@ -125,29 +198,72 @@ test('search state tracks cursor and clearSearch removes highlights', () => {
 test('search supports match case and whole word options', () => {
   const controller = new TreeViewController();
   controller.setData([
-    { id: 'root', label: 'Root' },
-    { id: 'lower', label: 'alpha beta' },
-    { id: 'upper', label: 'Alpha Betamax' },
+    {
+      id: 'root',
+      label: 'Root'
+    },
+    {
+      id: 'lower',
+      label: 'alpha beta'
+    },
+    {
+      id: 'upper',
+      label: 'Alpha Betamax'
+    }
   ]);
 
-  assert.deepEqual(controller.search('alpha', { caseSensitive: true }), ['lower']);
-  assert.deepEqual(controller.search('Alpha', { caseSensitive: true }), ['upper']);
-  assert.deepEqual(controller.search('beta', { wholeWord: true }), ['lower']);
+  assert.deepEqual(
+    controller.search('alpha', {
+      caseSensitive: true
+    }),
+    ['lower']
+  );
+  assert.deepEqual(
+    controller.search('Alpha', {
+      caseSensitive: true
+    }),
+    ['upper']
+  );
+  assert.deepEqual(
+    controller.search('beta', {
+      wholeWord: true
+    }),
+    ['lower']
+  );
 });
 
 test('filter supports match case and whole word options', () => {
   const controller = new TreeViewController();
   controller.setData([
-    { id: 'root', label: 'Root' },
-    { id: 'lower', label: 'alpha beta' },
-    { id: 'upper', label: 'Alpha Betamax' },
+    {
+      id: 'root',
+      label: 'Root'
+    },
+    {
+      id: 'lower',
+      label: 'alpha beta'
+    },
+    {
+      id: 'upper',
+      label: 'Alpha Betamax'
+    }
   ]);
 
-  controller.setFilter('Alpha', { caseSensitive: true });
-  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['upper']);
+  controller.setFilter('Alpha', {
+    caseSensitive: true
+  });
+  assert.deepEqual(
+    controller.rowModel.rows.map((row) => row.nodeId),
+    ['upper']
+  );
 
-  controller.setFilter('beta', { wholeWord: true });
-  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['lower']);
+  controller.setFilter('beta', {
+    wholeWord: true
+  });
+  assert.deepEqual(
+    controller.rowModel.rows.map((row) => row.nodeId),
+    ['lower']
+  );
 });
 
 test('render scene exposes sticky ancestor rows for scrolled children', () => {
@@ -156,57 +272,164 @@ test('render scene exposes sticky ancestor rows for scrolled children', () => {
   controller.expandAll();
   controller.scrollToNode('b1', 'start');
 
-  assert.deepEqual(controller.createRenderScene().stickyRows.map((row) => row.nodeId), ['root', 'b']);
+  assert.deepEqual(
+    controller.createRenderScene().stickyRows.map((row) => row.nodeId),
+    ['root', 'b']
+  );
 });
 
 test('sticky ancestor rows are replaced by sibling branches entering the sticky area', () => {
-  const controller = new TreeViewController({ initialExpandDepth: Number.MAX_SAFE_INTEGER, rowHeight: 20 });
+  const controller = new TreeViewController({
+    initialExpandDepth: Number.MAX_SAFE_INTEGER,
+    rowHeight: 20
+  });
   controller.resize(200, 128);
   controller.setData([
-    { id: 'root', label: 'Root' },
-    { id: 'array', parentId: 'root', label: 'Array' },
-    { id: 'item0', parentId: 'array', label: '[0]' },
-    { id: 'item0-value', parentId: 'item0', label: 'parameterValue' },
-    { id: 'item0-leaf', parentId: 'item0-value', label: 'key' },
-    { id: 'item1', parentId: 'array', label: '[1]' },
-    { id: 'item1-value', parentId: 'item1', label: 'parameterValue' },
-    { id: 'item1-leaf', parentId: 'item1-value', label: 'key' },
-    { id: 'tail0', parentId: 'root', label: 'Tail 0' },
-    { id: 'tail1', parentId: 'root', label: 'Tail 1' },
-    { id: 'tail2', parentId: 'root', label: 'Tail 2' },
+    {
+      id: 'root',
+      label: 'Root'
+    },
+    {
+      id: 'array',
+      parentId: 'root',
+      label: 'Array'
+    },
+    {
+      id: 'item0',
+      parentId: 'array',
+      label: '[0]'
+    },
+    {
+      id: 'item0-value',
+      parentId: 'item0',
+      label: 'parameterValue'
+    },
+    {
+      id: 'item0-leaf',
+      parentId: 'item0-value',
+      label: 'key'
+    },
+    {
+      id: 'item1',
+      parentId: 'array',
+      label: '[1]'
+    },
+    {
+      id: 'item1-value',
+      parentId: 'item1',
+      label: 'parameterValue'
+    },
+    {
+      id: 'item1-leaf',
+      parentId: 'item1-value',
+      label: 'key'
+    },
+    {
+      id: 'tail0',
+      parentId: 'root',
+      label: 'Tail 0'
+    },
+    {
+      id: 'tail1',
+      parentId: 'root',
+      label: 'Tail 1'
+    },
+    {
+      id: 'tail2',
+      parentId: 'root',
+      label: 'Tail 2'
+    }
   ]);
 
   controller.scrollTo(0, 80);
 
-  assert.deepEqual(controller.createRenderScene().stickyRows.map((row) => row.nodeId), ['root', 'array', 'item1', 'item1-value']);
+  assert.deepEqual(
+    controller.createRenderScene().stickyRows.map((row) => row.nodeId),
+    ['root', 'array', 'item1', 'item1-value']
+  );
 });
 
 test('sticky ancestor rows are truncated by leaf siblings entering the sticky area', () => {
-  const controller = new TreeViewController({ initialExpandDepth: Number.MAX_SAFE_INTEGER, rowHeight: 20 });
+  const controller = new TreeViewController({
+    initialExpandDepth: Number.MAX_SAFE_INTEGER,
+    rowHeight: 20
+  });
   controller.resize(200, 128);
   controller.setData([
-    { id: 'properties', label: 'Properties' },
-    { id: 'isPartOf', parentId: 'properties', label: 'isPartOf' },
-    { id: 'namedLocation', parentId: 'isPartOf', label: 'namedLocation' },
-    { id: 'stationName', parentId: 'namedLocation', label: 'stationName' },
-    { id: 'value', parentId: 'stationName', label: 'value' },
-    { id: 'bodyDistance', parentId: 'value', label: 'bodyDistance' },
-    { id: 'liveEntityMeasuredSpeed', parentId: 'properties', label: 'liveEntityMeasuredSpeed' },
-    { id: 'marking', parentId: 'properties', label: 'marking' },
-    { id: 'markingEncodingType', parentId: 'marking', label: 'markingEncodingType' },
-    { id: 'tail0', parentId: 'properties', label: 'Tail 0' },
-    { id: 'tail1', parentId: 'properties', label: 'Tail 1' },
+    {
+      id: 'properties',
+      label: 'Properties'
+    },
+    {
+      id: 'isPartOf',
+      parentId: 'properties',
+      label: 'isPartOf'
+    },
+    {
+      id: 'namedLocation',
+      parentId: 'isPartOf',
+      label: 'namedLocation'
+    },
+    {
+      id: 'stationName',
+      parentId: 'namedLocation',
+      label: 'stationName'
+    },
+    {
+      id: 'value',
+      parentId: 'stationName',
+      label: 'value'
+    },
+    {
+      id: 'bodyDistance',
+      parentId: 'value',
+      label: 'bodyDistance'
+    },
+    {
+      id: 'liveEntityMeasuredSpeed',
+      parentId: 'properties',
+      label: 'liveEntityMeasuredSpeed'
+    },
+    {
+      id: 'marking',
+      parentId: 'properties',
+      label: 'marking'
+    },
+    {
+      id: 'markingEncodingType',
+      parentId: 'marking',
+      label: 'markingEncodingType'
+    },
+    {
+      id: 'tail0',
+      parentId: 'properties',
+      label: 'Tail 0'
+    },
+    {
+      id: 'tail1',
+      parentId: 'properties',
+      label: 'Tail 1'
+    }
   ]);
 
   controller.scrollTo(0, 80);
 
-  assert.deepEqual(controller.createRenderScene().stickyRows.map((row) => row.nodeId), ['properties']);
+  assert.deepEqual(
+    controller.createRenderScene().stickyRows.map((row) => row.nodeId),
+    ['properties']
+  );
 });
 
 test('ctrl+a selects all visible rows', () => {
   const controller = createController();
 
-  assert.equal(controller.handleKey({ key: 'a', ctrlKey: true }), true);
+  assert.equal(
+    controller.handleKey({
+      key: 'a',
+      ctrlKey: true
+    }),
+    true
+  );
 
   assert.deepEqual(controller.getSelection(), ['root', 'a', 'b', 'c']);
 });
@@ -216,19 +439,35 @@ test('public initialization APIs fail on invalid dependencies', () => {
 
   assert.throws(() => controller.initialize({}), /HTMLCanvasElement/);
   assert.throws(() => new TreeViewInputController({}), /TreeViewController/);
-  assert.throws(() => new CellEditorManager({ controller }), /initialized/);
+  assert.throws(
+    () =>
+      new CellEditorManager({
+        controller
+      }),
+    /initialized/
+  );
 });
 
 test('layout metrics update rows through controller API', () => {
   const controller = createController();
 
-  controller.setLayoutMetrics({ rowHeight: 24, indentWidth: 20, headerHeight: 10 });
+  controller.setLayoutMetrics({
+    rowHeight: 24,
+    indentWidth: 20,
+    headerHeight: 10
+  });
 
   assert.equal(controller.rowModel.rowHeight, 24);
   assert.equal(controller.viewport.rowHeight, 24);
   assert.equal(controller.rowModel.indentWidth, 20);
   assert.equal(controller.viewport.headerHeight, 10);
-  assert.throws(() => controller.setLayoutMetrics({ rowHeight: 0 }), /rowHeight/);
+  assert.throws(
+    () =>
+      controller.setLayoutMetrics({
+        rowHeight: 0
+      }),
+    /rowHeight/
+  );
 });
 
 test('native scrollbar bridge stays synchronized with viewport scroll', () => {
@@ -271,6 +510,7 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
       if (index >= 0) siblings.splice(index, 1);
       this.parentElement = null;
     }
+
   }
 
   try {
@@ -281,7 +521,12 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
     canvas.offsetLeft = 7;
     canvas.offsetTop = 30;
     canvas.getContext = () => ({});
-    canvas.getBoundingClientRect = () => ({ width: 200, height: 80, left: 7, top: 30 });
+    canvas.getBoundingClientRect = () => ({
+      width: 200,
+      height: 80,
+      left: 7,
+      top: 30
+    });
     host.appendChild(canvas);
     const head = new FakeElement();
     const body = new FakeElement();
@@ -289,23 +534,38 @@ test('native scrollbar bridge stays synchronized with viewport scroll', () => {
       head,
       body,
       createElement: () => new FakeElement(),
-      getElementById: (id) => [...head.children, ...body.children].find((child) => child.id === id) ?? null,
+      getElementById: (id) =>
+        [...head.children, ...body.children].find((child) => child.id === id) ?? null
     };
-    globalThis.getComputedStyle = () => ({ position: 'static' });
+    globalThis.getComputedStyle = () => ({
+      position: 'static'
+    });
 
     const renderer = {
-      initialize() {},
-      setScene() {},
-      render() {},
-      updateDynamicState() {},
+      initialize() {
+      },
+      setScene() {
+      },
+      render() {
+      },
+      updateDynamicState() {
+      }
     };
-    const controller = new TreeViewController({ initialExpandDepth: 10, rowHeight: 20, renderer });
+    const controller = new TreeViewController({
+      initialExpandDepth: 10,
+      rowHeight: 20,
+      renderer
+    });
     controller.initialize(canvas);
     controller.setData(nodes);
 
-    const vertical = host.children.find((child) => child.className === 'virtual-tree-canvas-scrollbar virtual-tree-canvas-scrollbar-y');
+    const vertical = host.children.find(
+      (child) => child.className === 'virtual-tree-canvas-scrollbar virtual-tree-canvas-scrollbar-y'
+    );
     assert.ok(vertical);
-    assert.ok(head.children.find((child) => child.id === 'virtual-tree-canvas-native-scrollbar-style'));
+    assert.ok(
+      head.children.find((child) => child.id === 'virtual-tree-canvas-native-scrollbar-style')
+    );
     assert.ok(vertical.style['--vtc-scrollbar-thumb']);
     assert.equal(vertical.style.left, '193px');
     assert.equal(vertical.style.top, '58px');

@@ -1,5 +1,5 @@
 import { TreeIndex } from './tree-index.js';
-import { mergeDynamicState } from './dynamic-state.js';
+import { mergeDynamicStateChanged } from './dynamic-state.js';
 
 /**
  * Owns structural nodes, expanded state, and per-node dynamic state.
@@ -86,11 +86,13 @@ export class TreeModel extends EventTarget {
    * @param {Array<import('./types.js').DynamicPatch>} patches
    */
   applyDynamicPatches(patches) {
+    const changedIds = new Set();
     for (const patch of patches) {
       const current = this.dynamicState.get(patch.id);
       if (!current) continue;
-      mergeDynamicState(current, patch.state);
+      if (mergeDynamicStateChanged(current, patch.state)) changedIds.add(patch.id);
     }
+    return changedIds;
   }
 
   /** @param {string} id */

@@ -1,171 +1,171 @@
-# Catálogo de iconos
+# Icon catalog
 
-Los 65 iconos incluidos están disponibles en `resources/icons/`.
-Consulta la [galería visual](./icon-catalog.html) para verlos sobre fondos claros
-u oscuros y comparar tamaños. `builtinIconNames` permite enumerar sus IDs desde JavaScript.
+The 65 bundled icons are available in `resources/icons/`. Open the
+[rendered visual catalog](https://htmlpreview.github.io/?https://github.com/mploscos/virtual-tree-canvas/blob/main/docs/icon-catalog.html)
+to compare them at different sizes on light and dark backgrounds. The
+[HTML source](./icon-catalog.html) is also available. `builtinIconNames` lists
+their IDs from JavaScript.
 
-## Uso
+## Usage
 
-Asigna un ID a la propiedad `icon` del nodo:
+Assign an ID to the node's `icon` property:
 
 ```js
-view.setData([{ id: 'operator-1', label: 'Operador', icon: 'person' }]);
+view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 ```
 
-- `data-bus` representa un bus de datos; `bus-vehicle`, un autobús.
-- `placeholder` es el icono utilizado cuando no hay uno específico.
-- Acompaña los iconos con etiquetas. Para estados como advertencias o errores,
-  proporciona también texto y no dependas únicamente del color.
-- Para añadir un icono propio, usa `view.registerIcon('custom', svgStringOrUrl)`
-  y asigna `icon: 'custom'` al nodo.
-- Configura `iconsBaseUrl` al crear la vista si los recursos se sirven desde otra URL.
-  Los SVG se cargan al dibujarlos o mediante `view.controller.iconRegistry.prepare()`.
+- `data-bus` represents a data bus; `bus-vehicle` represents a passenger bus.
+- `placeholder` is used when no specific icon is available.
+- Pair icons with labels. For states such as warnings or errors, also provide
+  text instead of relying on color alone.
+- To add a custom icon, call `view.registerIcon('custom', svgStringOrUrl)` and
+  assign `icon: 'custom'` to the node.
+- Set `iconsBaseUrl` when creating the view if assets are served from another URL.
+  SVGs are loaded when drawn or through `view.controller.iconRegistry.prepare()`.
 
-## Iconos disponibles
+## Available icons
 
-### Personas y organización
+### People and organization
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `person` | Persona |
-| `people` | Grupo |
-| `child` | Infancia |
+| `person` | Person |
+| `people` | Group |
+| `child` | Child |
 
-### Animales
+### Animals
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `dog` | Perro |
-| `cat` | Gato |
-| `bird` | Ave |
-| `fish` | Pez |
-| `insect` | Insecto |
+| `dog` | Dog |
+| `cat` | Cat |
+| `bird` | Bird |
+| `fish` | Fish |
+| `insect` | Insect |
 
-### Plantas y ecosistemas
+### Plants and ecosystems
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `tree` | Árbol |
-| `leaf` | Hoja |
-| `flower` | Flor |
-| `seedling` | Brote |
+| `tree` | Tree |
+| `leaf` | Leaf |
+| `flower` | Flower |
+| `seedling` | Seedling |
 
-### Tiempo atmosférico
+### Weather
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `sun` | Sol |
-| `moon` | Luna |
-| `cloud` | Nube |
-| `rain` | Lluvia |
-| `snow` | Nieve |
-| `wind` | Viento |
-| `storm` | Tormenta |
-| `fog` | Niebla |
+| `sun` | Sun |
+| `moon` | Moon |
+| `cloud` | Cloud |
+| `rain` | Rain |
+| `snow` | Snow |
+| `wind` | Wind |
+| `storm` | Storm |
+| `fog` | Fog |
 
-### Terreno y agua
+### Terrain and water
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `ground` | Dominio terrestre |
-| `surface` | Dominio de superficie |
-| `subsurface` | Dominio submarino |
+| `ground` | Ground domain |
+| `surface` | Surface domain |
+| `subsurface` | Subsurface domain |
 
-### Transporte terrestre
+### Ground transportation
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `car` | Coche |
-| `bicycle` | Bicicleta |
-| `bus-vehicle` | Autobús de pasajeros |
+| `car` | Car |
+| `bicycle` | Bicycle |
+| `bus-vehicle` | Passenger bus |
 
-### Aviación y espacio
+### Aviation and space
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `aircraft` | Avión |
-| `helicopter` | Helicóptero |
-| `drone` | Dron |
-| `space` | Dominio espacial |
+| `aircraft` | Aircraft |
+| `helicopter` | Helicopter |
+| `drone` | Drone |
+| `space` | Space domain |
 
-### Entorno marítimo
+### Maritime environment
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `ship` | Buque |
+| `ship` | Ship |
 
-### Objetos e instalaciones
+### Objects and facilities
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `box` | Caja |
-| `building` | Edificio |
+| `box` | Box |
+| `building` | Building |
 
-### Datos y redes
+### Data and networks
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `data-bus` | Bus de datos |
-| `network` | Red |
-| `server` | Servidor |
-| `database` | Base de datos |
-| `link` | Enlace |
+| `data-bus` | Data bus |
+| `network` | Network |
+| `server` | Server |
+| `database` | Database |
+| `link` | Link |
 
-### Sensores y mediciones
+### Sensors and measurements
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `sensor` | Sensor genérico |
+| `sensor` | Generic sensor |
 | `radar` | Radar |
-| `thermometer` | Termómetro |
+| `thermometer` | Thermometer |
 
-### Geografía y navegación
+### Geography and navigation
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `globe` | Globo terrestre |
-| `point` | Punto |
-| `track` | Traza |
+| `globe` | Globe |
+| `point` | Point |
+| `track` | Track |
 
-### Inspector y documentos
+### Inspector and documents
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `folder` | Carpeta |
-| `inspector-object` | Objeto de datos |
+| `folder` | Folder |
+| `inspector-object` | Data object |
 | `inspector-array` | Array |
-| `inspector-value` | Valor escalar |
+| `inspector-value` | Scalar value |
 
-### Estados y alertas
+### States and alerts
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `warning` | Advertencia |
+| `warning` | Warning |
 | `error` | Error |
-| `placeholder` | Tipo desconocido |
-| `damage` | Daño |
-| `situation` | Situación |
-| `lock` | Bloqueado |
+| `placeholder` | Unknown type |
+| `damage` | Damage |
+| `situation` | Situation |
+| `lock` | Locked |
 
-### Acciones y controles
+### Actions and controls
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
 | `control` | Control |
-| `task` | Tarea |
-| `star` | Favorito |
-| `pin` | Fijado |
-| `heart` | Preferencia afectiva |
-| `grip` | Asa de arrastre |
+| `task` | Task |
+| `star` | Favorite |
+| `star-filled` | Active favorite |
+| `pin` | Pinned |
+| `heart` | Favorite |
+| `grip` | Drag handle |
+| `trash` | Delete or remove |
 
-### Tiempo y simulación
+### Time and simulation
 
-| ID | Significado |
+| ID | Meaning |
 | --- | --- |
-| `clock` | Reloj |
-| `calendar` | Calendario |
-| `munition` | Munición |
-
-- `trash`: eliminar un elemento o quitarlo de una lista.
-
-- `star-filled`: favorito activo; combina con `star` para el estado inactivo.
+| `clock` | Clock |
+| `calendar` | Calendar |
+| `munition` | Munition |

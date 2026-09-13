@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cloneDynamicState, mergeDynamicState } from '../src/core/dynamic-state.js';
+import {
+  cloneDynamicState,
+  mergeDynamicState,
+  mergeDynamicStateChanged
+} from '../src/core/dynamic-state.js';
 
 test('mergeDynamicState applies falsy and undefined values', () => {
   const state = {
@@ -40,4 +44,18 @@ test('cloneDynamicState returns an independent state object', () => {
   source.customMetric = 8;
 
   assert.deepEqual(clone, { progress: 0.5, customMetric: 4 });
+});
+
+test('mergeDynamicStateChanged reports only real Object.is changes', () => {
+  const nested = { ok: true };
+  const state = { value: 1, status: 2, customMetric: NaN, nested, zero: 0 };
+
+  assert.equal(
+    mergeDynamicStateChanged(state, { value: 1, status: 3, customMetric: NaN, nested }),
+    true
+  );
+  assert.deepEqual(state, { value: 1, status: 3, customMetric: NaN, nested, zero: 0 });
+  assert.equal(mergeDynamicStateChanged(state, { status: 3, customMetric: NaN, nested }), false);
+  assert.equal(mergeDynamicStateChanged(state, { zero: -0 }), true);
+  assert.equal(Object.is(state.zero, -0), true);
 });

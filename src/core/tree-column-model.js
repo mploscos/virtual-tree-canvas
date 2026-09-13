@@ -6,7 +6,7 @@ export const builtInColumns = {
     minWidth: 160,
     align: 'left',
     kind: 'tree',
-    value: (node) => node.label ?? node.id,
+    value: (node) => node.label ?? node.id
   },
   status: {
     id: 'status',
@@ -15,7 +15,7 @@ export const builtInColumns = {
     minWidth: 64,
     align: 'center',
     kind: 'status',
-    value: (_node, state) => state.status ?? 0,
+    value: (_node, state) => state.status ?? 0
   },
   value: {
     id: 'value',
@@ -24,7 +24,7 @@ export const builtInColumns = {
     minWidth: 56,
     align: 'right',
     kind: 'value',
-    value: (_node, state) => state.value ?? '',
+    value: (_node, state) => state.value ?? ''
   },
   progress: {
     id: 'progress',
@@ -33,7 +33,7 @@ export const builtInColumns = {
     minWidth: 80,
     align: 'left',
     kind: 'progress',
-    value: (_node, state) => state.progress ?? '',
+    value: (_node, state) => state.progress ?? ''
   },
   type: {
     id: 'type',
@@ -42,7 +42,7 @@ export const builtInColumns = {
     minWidth: 70,
     align: 'left',
     kind: 'type',
-    value: (node) => node.type ?? '',
+    value: (node) => node.type ?? ''
   },
   updated: {
     id: 'updated',
@@ -51,15 +51,18 @@ export const builtInColumns = {
     minWidth: 84,
     align: 'right',
     kind: 'updated',
-    value: (_node, state) => state.updatedAt ?? '',
-  },
+    value: (_node, state) => state.updatedAt ?? ''
+  }
 };
 
 export class TreeColumnModel {
   constructor(columns = [builtInColumns.tree]) {
     this.columns = [];
     this.contentWidth = 0;
-    this.sort = { columnId: null, direction: null };
+    this.sort = {
+      columnId: null,
+      direction: null
+    };
     this.setColumns(columns);
   }
 
@@ -76,23 +79,50 @@ export class TreeColumnModel {
 
   setRowReorder(enabled) {
     this.rowReorder = Boolean(enabled);
-    this.columns = this.columns.filter(column => column.id !== '__vtc_row_order');
-    if (this.rowReorder) this.columns.unshift(normalizeColumn({
-      id: '__vtc_row_order', label: '', kind: 'rowOrder', width: 72, minWidth: 72,
-      sortable: false, resizable: false
-    }, 0));
+    this.columns = this.columns.filter((column) => column.id !== '__vtc_row_order');
+    if (this.rowReorder)
+      this.columns.unshift(
+        normalizeColumn(
+          {
+            id: '__vtc_row_order',
+            label: '',
+            kind: 'rowOrder',
+            width: 72,
+            minWidth: 72,
+            sortable: false,
+            resizable: false
+          },
+          0
+        )
+      );
     this.#layout();
   }
 
   setRowActions(count) {
     this.rowActionCount = count;
-    this.columns = this.columns.filter(column => column.id !== '__vtc_actions');
-    if (count) this.columns.push(normalizeColumn({ id: '__vtc_actions', label: '', kind: 'text',
-      width: count * 28, minWidth: count * 28, sortable: false, resizable: false, value: () => '' }, 0));
+    this.columns = this.columns.filter((column) => column.id !== '__vtc_actions');
+    if (count)
+      this.columns.push(
+        normalizeColumn(
+          {
+            id: '__vtc_actions',
+            label: '',
+            kind: 'text',
+            width: count * 28,
+            minWidth: count * 28,
+            sortable: false,
+            resizable: false,
+            value: () => ''
+          },
+          0
+        )
+      );
     this.#layout();
   }
 
-  /** @param {number} x */
+  /**
+   * @param {number} x
+   */
   getColumnAt(x) {
     return this.columns.find((column) => x >= column.x && x < column.x + column.width) ?? null;
   }
@@ -114,21 +144,33 @@ export class TreeColumnModel {
     const currentIndex = this.columns.findIndex((column) => column.id === id);
     if (currentIndex === -1) return false;
     const [column] = this.columns.splice(currentIndex, 1);
-    const nextIndex = Math.max(this.rowReorder ? 1 : 0, Math.min(this.columns.length - (this.rowActionCount ? 1 : 0), targetIndex));
+    const nextIndex = Math.max(
+      this.rowReorder ? 1 : 0,
+      Math.min(this.columns.length - (this.rowActionCount ? 1 : 0), targetIndex)
+    );
     this.columns.splice(nextIndex, 0, column);
-    if (!this.columns.some((item) => item.kind === 'tree')) this.columns.unshift(normalizeColumn(builtInColumns.tree, 0));
+    if (!this.columns.some((item) => item.kind === 'tree'))
+      this.columns.unshift(normalizeColumn(builtInColumns.tree, 0));
     this.#layout();
     return true;
   }
 
   setSort(columnId, direction) {
     if (columnId !== null && !this.getColumn(columnId)) return false;
-    this.sort = { columnId, direction };
+    this.sort = {
+      columnId,
+      direction
+    };
     return true;
   }
 
   getResizeHandleAt(x, tolerance = 5) {
-    return this.columns.find((column) => column.resizable !== false && Math.abs(x - (column.x + column.width)) <= tolerance) ?? null;
+    return (
+      this.columns.find(
+        (column) =>
+          column.resizable !== false && Math.abs(x - (column.x + column.width)) <= tolerance
+      ) ?? null
+    );
   }
 
   #layout() {
@@ -139,16 +181,22 @@ export class TreeColumnModel {
     }
     this.contentWidth = x;
   }
+
 }
 
 export function defaultTreeTableColumns() {
   return [
-    { ...builtInColumns.tree, id: 'name', label: 'Name', width: 340 },
+    {
+      ...builtInColumns.tree,
+      id: 'name',
+      label: 'Name',
+      width: 340
+    },
     builtInColumns.type,
     builtInColumns.status,
     builtInColumns.value,
     builtInColumns.progress,
-    builtInColumns.updated,
+    builtInColumns.updated
   ];
 }
 
@@ -170,6 +218,6 @@ function normalizeColumn(column, index) {
     format: source.format,
     valueType: source.valueType,
     render: source.render,
-    x: 0,
+    x: 0
   };
 }

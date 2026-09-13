@@ -12,6 +12,7 @@
  */
 
 export class VisibleRowModel extends EventTarget {
+
   /**
    * @param {{
    *   model: import('./tree-model.js').TreeModel,
@@ -26,9 +27,15 @@ export class VisibleRowModel extends EventTarget {
     this.expansion = expansion;
     this.rowHeight = rowHeight;
     this.indentWidth = indentWidth;
-    /** @type {TreeRow[]} */
+
+    /**
+     * @type {TreeRow[]}
+     */
     this.rows = [];
-    /** @type {Map<string, number>} */
+
+    /**
+     * @type {Map<string, number>}
+     */
     this.rowIndexById = new Map();
     this.contentWidth = 0;
     this.contentHeight = 0;
@@ -75,14 +82,18 @@ export class VisibleRowModel extends EventTarget {
       const node = this.model.index.getNode(id);
       const state = this.model.dynamicState.get(id) ?? {};
       const ownMatch = node ? this.filterPredicate(node, state) : false;
-      const childMatch = this.model.index.getChildren(id).some((childId) => subtreeIncluded(childId));
+      const childMatch = this.model.index
+        .getChildren(id)
+        .some((childId) => subtreeIncluded(childId));
       const included = ownMatch || childMatch;
       includeCache.set(id, included);
       return included;
     };
 
     const sortedChildren = (id) => {
-      const children = this.model.index.getChildren(id).filter((childId) => subtreeIncluded(childId));
+      const children = this.model.index
+        .getChildren(id)
+        .filter((childId) => subtreeIncluded(childId));
       if (!this.sortComparator) return children;
       return children.slice().sort((aId, bId) => {
         const a = this.model.index.getNode(aId);
@@ -98,7 +109,8 @@ export class VisibleRowModel extends EventTarget {
       const children = sortedChildren(id);
       const hasChildren = this.expansion.hasChildren(id);
       const autoExpanded = Boolean(this.filterPredicate && children.length > 0);
-      const expanded = (this.expansion.isExpanded(id) || autoExpanded) && !this.filterCollapsed.has(id);
+      const expanded =
+        (this.expansion.isExpanded(id) || autoExpanded) && !this.filterCollapsed.has(id);
       const rowIndex = this.rows.length;
       this.rows.push({
         nodeId: id,
@@ -108,7 +120,7 @@ export class VisibleRowModel extends EventTarget {
         y: rowIndex * this.rowHeight,
         height: this.rowHeight,
         expanded,
-        hasChildren,
+        hasChildren
       });
       this.rowIndexById.set(id, rowIndex);
       maxDepth = Math.max(maxDepth, depth);
@@ -118,7 +130,9 @@ export class VisibleRowModel extends EventTarget {
 
     const roots = this.model.index.roots.filter((rootId) => subtreeIncluded(rootId));
     if (this.sortComparator) {
-      roots.sort((aId, bId) => this.sortComparator(this.model.index.getNode(aId), this.model.index.getNode(bId), aId, bId));
+      roots.sort((aId, bId) =>
+        this.sortComparator(this.model.index.getNode(aId), this.model.index.getNode(bId), aId, bId)
+      );
     }
     for (const rootId of roots) visit(rootId, 0);
     this.contentHeight = this.rows.length * this.rowHeight;
@@ -126,13 +140,17 @@ export class VisibleRowModel extends EventTarget {
     this.dispatchEvent(new Event('change'));
   }
 
-  /** @param {string} id */
+  /**
+   * @param {string} id
+   */
   getRowById(id) {
     const rowIndex = this.rowIndexById.get(id);
     return rowIndex === undefined ? null : this.rows[rowIndex];
   }
 
-  /** @param {number} rowIndex */
+  /**
+   * @param {number} rowIndex
+   */
   getRow(rowIndex) {
     return this.rows[rowIndex] ?? null;
   }
@@ -144,11 +162,20 @@ export class VisibleRowModel extends EventTarget {
   getVisibleRange(viewport, overscan = 6) {
     const rowViewportHeight = viewport.rowViewportHeight ?? viewport.viewportHeight;
     const first = Math.max(0, Math.floor(viewport.scrollY / this.rowHeight) - overscan);
-    const last = Math.min(this.rows.length - 1, Math.ceil((viewport.scrollY + rowViewportHeight) / this.rowHeight) + overscan);
-    return { first, last, count: last >= first ? last - first + 1 : 0 };
+    const last = Math.min(
+      this.rows.length - 1,
+      Math.ceil((viewport.scrollY + rowViewportHeight) / this.rowHeight) + overscan
+    );
+    return {
+      first,
+      last,
+      count: last >= first ? last - first + 1 : 0
+    };
   }
 
-  /** @param {import('./tree-view-viewport.js').TreeViewViewport} viewport */
+  /**
+   * @param {import('./tree-view-viewport.js').TreeViewViewport} viewport
+   */
   getStickyRows(viewport) {
     const rowViewportHeight = viewport.rowViewportHeight ?? viewport.viewportHeight;
     if (viewport.scrollY <= 0 || rowViewportHeight < this.rowHeight * 2) return [];
@@ -169,20 +196,23 @@ export class VisibleRowModel extends EventTarget {
         sticky = [...sticky.slice(0, replaceAt), candidate];
       }
     }
-    return sticky
-      .slice(-max)
-      .map((ancestor, index) => ({
-        ...ancestor,
-        stickyY: Math.max(ancestor.y - viewport.scrollY, index * this.rowHeight),
-      }));
+    return sticky.slice(-max).map((ancestor, index) => ({
+      ...ancestor,
+      stickyY: Math.max(ancestor.y - viewport.scrollY, index * this.rowHeight)
+    }));
   }
 
-  /** @param {TreeRow} row */
+  /**
+   * @param {TreeRow} row
+   */
   #getStickyPath(row) {
-    const ancestors = this.model.index.getAncestors(row.nodeId).reverse()
+    const ancestors = this.model.index
+      .getAncestors(row.nodeId)
+      .reverse()
       .map((id) => this.getRowById(id))
       .filter((ancestor) => ancestor && ancestor.rowIndex < row.rowIndex);
     if (row.hasChildren) ancestors.push(row);
     return ancestors;
   }
+
 }

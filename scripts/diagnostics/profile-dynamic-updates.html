@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+<meta charset="utf-8">
+<body>
+<script type="module">
+import { TreeView } from '../../src/index.js';
+
+const NODE_COUNT = 10_000;
+const PATCHES_PER_TICK = 500;
+const TICKS = 60;
+const nodes = Array.from({ length: NODE_COUNT }, (_, index) => ({
+  id: `node-${index}`,
+  label: `Node ${index}`
+}));
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+function describe(values) {
+  if (!values.length) return { avg: 0, p95: 0 };
+  const sorted = values.slice().sort((a, b) => a - b);
+  return {
+    avg: values.reduce((sum, value) => sum + value, 0) / values.length,
+    p95: sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)]
+  };
+}
+
+async function scenario(visiblePercent, rowActions, sorted) {
+  const host = document.createElement('div');
+  Object.assign(host.style, { width: '900px', height: '828px' });
+  document.body.append(host);
+  const actions = rowActions ? [{
+    id: 'live',
+    label: 'Live',
+    icon: (_node, state) => state.status % 2 ? 'star-filled' : 'star',
+    disabled: (_node, state) => state.status === 3,
+    pressed: (_node, state) => state.status === 2
+  }] : [];
+  const widget = new TreeView(host, {
+    nodes,
+    rowHeight: 20,
+    initialExpandDepth: 0,
+    editable: false,
+    rowActions: actions,
+    columns: [{
+      id: 'value', title: 'Value', width: 180, sortable: true,
+      value: (_node, state) => state.value ?? 0
+    }]
+  });
+  await nextFrame();
+  await nextFrame();
+  const controller = widget.controller;
+  if (sorted) {
+    controller.sortBy('value', 'asc');
+    await nextFrame();
+  }
+  controller.renderer.setInvalidationHandler?.(() => {});
+  await nextFrame();
+  await nextFrame();
+  controller.cancelRender();
+  controller.render();
+  const range = controller.rowModel.getVisibleRange(controller.viewport, 0);
+  const visibleIds = [];
+  for (let index = range.first; index <= range.last; index++) {
+    const row = controller.rowModel.rows[index];
+    if (row) visibleIds.push(row.nodeId);
+  }
+  const visiblePatchCount = Math.round(PATCHES_PER_TICK * visiblePercent / 100);
+  const patchTimes = [];
+  const renderTimes = [];
+  let flushInTick = 0;
+  let renders = 0;
+  let uniqueNodesReceived = 0;
+  let rowActionsFullUpdates = 0;
+  let rowActionsIncrementalUpdates = 0;
+  const originalFlush = controller.flushDynamicState?.bind(controller);
+  if (originalFlush) controller.flushDynamicState = (...args) => {
+    const start = performance.now();
+    const result = originalFlush(...args);
+    flushInTick += performance.now() - start;
+    return result;
+  };
+  const originalRenderMeasured = controller.renderMeasured.bind(controller);
+  controller.renderMeasured = (...args) => {
+    const start = performance.now();
+    const result = originalRenderMeasured(...args);
+    renderTimes.push(performance.now() - start);
+    renders++;
+    return result;
+  };
+  const originalActionRender = controller.actionOverlay?.render.bind(controller.actionOverlay);
+  if (originalActionRender) controller.actionOverlay.render = (scene, invalidation) => {
+    if (invalidation?.full === false) rowActionsIncrementalUpdates++;
+    else rowActionsFullUpdates++;
+    return originalActionRender(scene, invalidation);
+  };
+  const before = controller.getStats();
+
+  for (let tick = 0; tick < TICKS; tick++) {
+    const patches = new Array(PATCHES_PER_TICK);
+    for (let index = 0; index < PATCHES_PER_TICK; index++) {
+      const visible = index < visiblePatchCount;
+      const id = visible
+        ? visibleIds[index % visibleIds.length]
+        : `node-${500 + ((tick * PATCHES_PER_TICK + index) % (NODE_COUNT - 500))}`;
+      patches[index] = {
+        id,
+        state: { value: tick * PATCHES_PER_TICK + index, status: (tick + index) & 3 }
+      };
+    }
+    const tickIds = new Set();
+    for (const patch of patches) tickIds.add(patch.id);
+    uniqueNodesReceived += tickIds.size;
+    flushInTick = 0;
+    const start = performance.now();
+    controller.setDynamicState(patches);
+    const enqueueMs = performance.now() - start;
+    await nextFrame();
+    patchTimes.push(enqueueMs + flushInTick);
+  }
+
+  const after = controller.getStats();
+  const result = {
+    visiblePercent,
+    rowActions,
+    sorted,
+    setDynamicStateCalls: TICKS,
+    patchesReceived: TICKS * PATCHES_PER_TICK,
+    uniqueNodesReceived: after.uniqueNodesReceived === undefined
+      ? uniqueNodesReceived : after.uniqueNodesReceived - before.uniqueNodesReceived,
+    nodesChanged: after.nodesChanged === undefined
+      ? uniqueNodesReceived : after.nodesChanged - before.nodesChanged,
+    rendersRequested: after.rendersRequested === undefined
+      ? TICKS : after.rendersRequested - before.rendersRequested,
+    rendersExecuted: renders,
+    rendersAvoidedNoChanges: after.rendersAvoidedNoChanges === undefined
+      ? 0 : after.rendersAvoidedNoChanges - before.rendersAvoidedNoChanges,
+    rendersAvoidedOffscreen: after.rendersAvoidedOffscreen === undefined
+      ? Math.max(0, TICKS - renders) : after.rendersAvoidedOffscreen - before.rendersAvoidedOffscreen,
+    rowActionsFullUpdates,
+    rowActionsIncrementalUpdates,
+    patchMs: describe(patchTimes),
+    renderMs: describe(renderTimes)
+  };
+  widget.destroy();
+  host.remove();
+  await nextFrame();
+  return result;
+}
+
+const scenarios = [];
+for (const sorted of [false, true]) {
+  for (const rowActions of [false, true]) {
+    for (const visiblePercent of [0, 10, 100]) {
+      scenarios.push(await scenario(visiblePercent, rowActions, sorted));
+    }
+  }
+}
+window.testResult = {
+  config: { nodeCount: NODE_COUNT, visibleRows: 'approximately 40', hz: 60, ticks: TICKS, patchesPerTick: PATCHES_PER_TICK },
+  scenarios
+};
+</script>
+</body>
+</html>

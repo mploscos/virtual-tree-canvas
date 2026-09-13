@@ -20,10 +20,14 @@ export class TreeRowRenderer {
     this.stopIconListener = this.iconRegistry.onChange?.(() => this.#scheduleIconRender()) ?? null;
   }
 
-  /** @param {HTMLCanvasElement} canvas */
+  /**
+   * @param {HTMLCanvasElement} canvas
+   */
   initialize(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.ctx = canvas.getContext('2d', {
+      alpha: false
+    });
     if (!this.ctx) throw new Error('Canvas2D context is not available');
   }
 
@@ -31,7 +35,9 @@ export class TreeRowRenderer {
     this.scene = scene;
   }
 
-  setInvalidationHandler(invalidate) { this.invalidate = invalidate; }
+  setInvalidationHandler(invalidate) {
+    this.invalidate = invalidate;
+  }
 
   destroy() {
     if (this.iconRenderFrame !== null) {
@@ -87,7 +93,8 @@ export class TreeRowRenderer {
     if (this.invalidate) return this.invalidate();
     if (this.iconRenderFrame !== null) return;
     const view = this.canvas.ownerDocument?.defaultView ?? globalThis;
-    const schedule = view.requestAnimationFrame?.bind(view) ?? (callback => setTimeout(callback, 0));
+    const schedule =
+      view.requestAnimationFrame?.bind(view) ?? ((callback) => setTimeout(callback, 0));
     this.iconRenderFrame = schedule(() => {
       this.iconRenderFrame = null;
       this.render();
@@ -103,7 +110,12 @@ export class TreeRowRenderer {
     if (key === this.preparedIconThemeKey) return;
     this.preparedIconThemeKey = key;
     for (const [icon, color] of iconColors) {
-      this.iconRegistry.prepare?.({ icons: [icon], size: 15, color, pixelRatio });
+      this.iconRegistry.prepare?.({
+        icons: [icon],
+        size: 15,
+        color,
+        pixelRatio
+      });
     }
   }
 
@@ -123,14 +135,29 @@ export class TreeRowRenderer {
     ctx.textBaseline = 'middle';
 
     for (const column of columns) {
-      if (headerFilter && column === columns.find(item => item.kind !== 'rowOrder' && item.id !== '__vtc_actions')) {
+      if (
+        headerFilter &&
+        column === columns.find((item) => item.kind !== 'rowOrder' && item.id !== '__vtc_actions')
+      ) {
         this.#drawHeaderFilter(ctx, column, viewport, theme, filterQuery);
       } else {
         ctx.fillStyle = colors.textMuted;
-        drawTruncatedText(ctx, column.label, column.x + 10, viewport.headerHeight / 2, column.width - 20);
+        drawTruncatedText(
+          ctx,
+          column.label,
+          column.x + 10,
+          viewport.headerHeight / 2,
+          column.width - 20
+        );
       }
       if (sort?.columnId === column.id && sort.direction) {
-        this.#drawSortIndicator(ctx, column.x + column.width - 16, viewport.headerHeight / 2, sort.direction, theme);
+        this.#drawSortIndicator(
+          ctx,
+          column.x + column.width - 16,
+          viewport.headerHeight / 2,
+          sort.direction,
+          theme
+        );
       }
       ctx.strokeStyle = colors.border;
       ctx.beginPath();
@@ -151,7 +178,8 @@ export class TreeRowRenderer {
     const colors = theme.colors;
     const x = column.x + 8;
     const y = 5;
-    const visibleRight = viewport.scrollX + (viewport.contentViewportWidth ?? viewport.viewportWidth);
+    const visibleRight =
+      viewport.scrollX + (viewport.contentViewportWidth ?? viewport.viewportWidth);
     const visibleWidth = Math.max(1, Math.min(column.x + column.width, visibleRight) - column.x);
     const width = Math.max(40, visibleWidth - 16);
     const height = Math.max(18, viewport.headerHeight - 10);
@@ -161,7 +189,13 @@ export class TreeRowRenderer {
     ctx.strokeStyle = colors.border;
     ctx.stroke();
     ctx.fillStyle = filterQuery ? colors.text : colors.textMuted;
-    drawTruncatedText(ctx, filterQuery || 'Filter rows', x + 8, viewport.headerHeight / 2, width - 16);
+    drawTruncatedText(
+      ctx,
+      filterQuery || 'Filter rows',
+      x + 8,
+      viewport.headerHeight / 2,
+      width - 16
+    );
   }
 
   #drawSortIndicator(ctx, x, y, direction, theme) {
@@ -202,7 +236,10 @@ export class TreeRowRenderer {
     const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
     const height = Math.min(
       viewport.rowViewportHeight,
-      stickyRows.reduce((bottom, row, index) => Math.max(bottom, (row.stickyY ?? index * row.height) + row.height), 0)
+      stickyRows.reduce(
+        (bottom, row, index) => Math.max(bottom, (row.stickyY ?? index * row.height) + row.height),
+        0
+      )
     );
 
     ctx.save();
@@ -212,11 +249,14 @@ export class TreeRowRenderer {
     ctx.translate(-viewport.scrollX, viewport.headerHeight);
     for (let i = 0; i < stickyRows.length; i++) {
       const row = stickyRows[i];
-      this.#drawRow(ctx, { ...row, y: row.stickyY ?? i * row.height });
+      this.#drawRow(ctx, {
+        ...row,
+        y: row.stickyY ?? i * row.height
+      });
     }
     ctx.restore();
 
-    if (!stickyRows.some(row => row.stickyY > row.y - viewport.scrollY)) return;
+    if (!stickyRows.some((row) => row.stickyY > row.y - viewport.scrollY)) return;
     const bottom = viewport.headerHeight + height;
     ctx.strokeStyle = theme.colors.border;
     ctx.beginPath();
@@ -226,7 +266,20 @@ export class TreeRowRenderer {
   }
 
   #drawRow(ctx, row) {
-    const { columns, nodes, dynamicState, selection, hoverNodeId, hoverPart, activeNodeId, activePart, focusNodeId, searchMatches, theme, viewport } = this.scene;
+    const {
+      columns,
+      nodes,
+      dynamicState,
+      selection,
+      hoverNodeId,
+      hoverPart,
+      activeNodeId,
+      activePart,
+      focusNodeId,
+      searchMatches,
+      theme,
+      viewport
+    } = this.scene;
     const node = nodes[row.nodeIndex];
     const state = dynamicState.get(row.nodeId) ?? {};
     const style = resolveNodeStyle(theme, node, state);
@@ -239,14 +292,25 @@ export class TreeRowRenderer {
     const visibleX = viewport.scrollX;
     const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
 
-    const background = selected ? colors.rowSelected : highlighted ? colors.rowHighlighted : hovered ? colors.rowHover : colors.row;
+    const background = selected
+      ? colors.rowSelected
+      : highlighted
+        ? colors.rowHighlighted
+        : hovered
+          ? colors.rowHover
+          : colors.row;
     ctx.fillStyle = background;
     ctx.fillRect(visibleX, y, visibleWidth, row.height);
 
     this.#drawIndentGuides(ctx, row, colors);
 
     for (const column of columns) {
-      const rect = { x: column.x, y, width: column.width, height: row.height };
+      const rect = {
+        x: column.x,
+        y,
+        width: column.width,
+        height: row.height
+      };
       this.#drawCell(ctx, {
         node,
         state,
@@ -258,7 +322,7 @@ export class TreeRowRenderer {
         selected,
         hovered,
         hoverPart: hoverNodeId === row.nodeId ? hoverPart : null,
-        activePart: activeNodeId === row.nodeId ? activePart : null,
+        activePart: activeNodeId === row.nodeId ? activePart : null
       });
       ctx.strokeStyle = colors.border;
       ctx.beginPath();
@@ -267,10 +331,15 @@ export class TreeRowRenderer {
       ctx.stroke();
     }
 
-    const actions = columns.find(column => column.id === '__vtc_actions');
+    const actions = columns.find((column) => column.id === '__vtc_actions');
     if (actions) {
       ctx.fillStyle = background;
-      ctx.fillRect(visibleX + Math.max(0, visibleWidth - actions.width), y, actions.width, row.height);
+      ctx.fillRect(
+        visibleX + Math.max(0, visibleWidth - actions.width),
+        y,
+        actions.width,
+        row.height
+      );
     }
 
     ctx.strokeStyle = colors.border;
@@ -297,7 +366,8 @@ export class TreeRowRenderer {
     else if (cell.column.kind === 'inspectorPane') this.#drawInspectorPaneCell(ctx, cell);
     else if (cell.column.kind === 'inspectorValue') this.#drawInspectorValueCell(ctx, cell);
     else if (cell.column.kind === 'inspectorType') this.#drawInspectorTypeCell(ctx, cell);
-    else if (cell.column.kind === 'inspectorDescription') this.#drawInspectorDescriptionCell(ctx, cell);
+    else if (cell.column.kind === 'inspectorDescription')
+      this.#drawInspectorDescriptionCell(ctx, cell);
     else if (cell.column.kind === 'status') this.#drawStatusCell(ctx, cell);
     else if (cell.column.kind === 'progress') this.#drawProgressCell(ctx, cell);
     else this.#drawTextCell(ctx, cell);
@@ -312,9 +382,16 @@ export class TreeRowRenderer {
     ctx.strokeStyle = theme.colors.textMuted;
     ctx.fillStyle = theme.colors.textMuted;
     ctx.lineWidth = 1.5;
-    ctx.globalAlpha = enabled || this.scene.rowDrag?.(node, this.scene.dynamicState.get(node.id) ?? {}) != null ? 1 : 0.3;
-    for (const dx of [10, 14]) for (const dy of [-4, 0, 4]) ctx.fillRect(rect.x + dx, cy + dy, 1.5, 1.5);
-    for (const [center, direction, available] of [[36, -1, siblings[0] !== node.id], [60, 1, siblings.at(-1) !== node.id]]) {
+    ctx.globalAlpha =
+      enabled || this.scene.rowDrag?.(node, this.scene.dynamicState.get(node.id) ?? {}) != null
+        ? 1
+        : 0.3;
+    for (const dx of [10, 14])
+      for (const dy of [-4, 0, 4]) ctx.fillRect(rect.x + dx, cy + dy, 1.5, 1.5);
+    for (const [center, direction, available] of [
+      [36, -1, siblings[0] !== node.id],
+      [60, 1, siblings.at(-1) !== node.id]
+    ]) {
       ctx.globalAlpha = enabled && available ? 1 : 0.3;
       ctx.beginPath();
       ctx.moveTo(rect.x + center - 4, cy - direction * 2);
@@ -341,8 +418,13 @@ export class TreeRowRenderer {
   }
 
   #drawInspectorPaneCell(ctx, { node, row, rect, theme, style, hovered, hoverPart, activePart }) {
-    const visibleRight = this.scene.viewport.scrollX + (this.scene.viewport.contentViewportWidth ?? this.scene.viewport.viewportWidth);
-    rect = { ...rect, width: Math.max(1, Math.min(rect.x + rect.width, visibleRight) - rect.x) };
+    const visibleRight =
+      this.scene.viewport.scrollX +
+      (this.scene.viewport.contentViewportWidth ?? this.scene.viewport.viewportWidth);
+    rect = {
+      ...rect,
+      width: Math.max(1, Math.min(rect.x + rect.width, visibleRight) - rect.x)
+    };
     const data = node.data ?? {};
     const colors = theme.colors;
     const indentX = rect.x + row.depth * theme.indentWidth;
@@ -360,52 +442,109 @@ export class TreeRowRenderer {
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.globalAlpha = data.disabled ? DISABLED_ALPHA : 1;
-    ctx.fillStyle = data.valueType === 'object' || data.valueType === 'array' ? colors.text : colors.textMuted;
+    ctx.fillStyle =
+      data.valueType === 'object' || data.valueType === 'array' ? colors.text : colors.textMuted;
 
     if (data.valueType === 'object') {
-      drawTruncatedText(ctx, node.label ?? node.id, labelX, cy, Math.max(20, rect.x + rect.width - labelX - 8));
+      drawTruncatedText(
+        ctx,
+        node.label ?? node.id,
+        labelX,
+        cy,
+        Math.max(20, rect.x + rect.width - labelX - 8)
+      );
       if (data.meta?.updated) this.#drawUpdatedMarker(ctx, row, theme);
       ctx.globalAlpha = 1;
       return;
     }
 
-    const layout = inspectorPaneLayout(rect.width, row.depth, theme.indentWidth, data.editorType, this.scene.inspectorPaneLabelEnd);
-    drawTruncatedText(ctx, node.label ?? node.id, labelX, cy, Math.max(20, rect.x + layout.editorLeft - labelX - 8));
+    const layout = inspectorPaneLayout(
+      rect.width,
+      row.depth,
+      theme.indentWidth,
+      data.editorType,
+      this.scene.inspectorPaneLabelEnd
+    );
+    drawTruncatedText(
+      ctx,
+      node.label ?? node.id,
+      labelX,
+      cy,
+      Math.max(20, rect.x + layout.editorLeft - labelX - 8)
+    );
 
     const editorX = rect.x + layout.editorLeft;
     const editorWidth = layout.editorWidth;
     if (data.valueType === 'array') {
       ctx.fillStyle = colors.textMuted;
       drawTruncatedText(ctx, data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
-      this.#drawSmallButton(ctx, rect.x + rect.width - 54, rect.y + 5, 22, rect.height - 10, '+', theme, {
-        hovered: hovered && hoverPart === 'arrayAdd',
-        active: activePart === 'arrayAdd',
-      });
-      this.#drawSmallButton(ctx, rect.x + rect.width - 28, rect.y + 5, 22, rect.height - 10, '-', theme, {
-        hovered: hovered && hoverPart === 'arrayRemove',
-        active: activePart === 'arrayRemove',
-      });
+      this.#drawSmallButton(
+        ctx,
+        rect.x + rect.width - 54,
+        rect.y + 5,
+        22,
+        rect.height - 10,
+        '+',
+        theme,
+        {
+          hovered: hovered && hoverPart === 'arrayAdd',
+          active: activePart === 'arrayAdd'
+        }
+      );
+      this.#drawSmallButton(
+        ctx,
+        rect.x + rect.width - 28,
+        rect.y + 5,
+        22,
+        rect.height - 10,
+        '-',
+        theme,
+        {
+          hovered: hovered && hoverPart === 'arrayRemove',
+          active: activePart === 'arrayRemove'
+        }
+      );
     } else {
       this.#drawInspectorValueCell(ctx, {
         node,
-        rect: { x: editorX, y: rect.y, width: editorWidth, height: rect.height },
+        rect: {
+          x: editorX,
+          y: rect.y,
+          width: editorWidth,
+          height: rect.height
+        },
         theme,
         hovered,
         hoverPart,
         activePart,
-        suppressUpdatedMarker: true,
+        suppressUpdatedMarker: true
       });
     }
     if (data.meta?.updated) this.#drawUpdatedMarker(ctx, row, theme);
     ctx.globalAlpha = 1;
   }
 
-  #drawInspectorValueCell(ctx, { node, rect, theme, hovered = false, hoverPart = null, activePart = null, suppressUpdatedMarker = false }) {
+  #drawInspectorValueCell(
+    ctx,
+    {
+      node,
+      rect,
+      theme,
+      hovered = false,
+      hoverPart = null,
+      activePart = null,
+      suppressUpdatedMarker = false
+    }
+  ) {
     const data = node.data ?? {};
     const meta = data.meta ?? {};
     const disabled = data.disabled;
     const readonly = data.readonly;
-    const valueColor = resolveValueColor(theme, data.value, data.editorType === 'select' ? 'enum' : data.valueType);
+    const valueColor = resolveValueColor(
+      theme,
+      data.value,
+      data.editorType === 'select' ? 'enum' : data.valueType
+    );
     const x = rect.x + 10;
     const y = rect.y + 5;
     const fullWidth = Math.max(24, rect.width - 20);
@@ -420,7 +559,13 @@ export class TreeRowRenderer {
     if (numeric.unit && numeric.unitWidth) {
       ctx.font = theme.unitFont ?? theme.monoFont ?? theme.font;
       ctx.fillStyle = theme.colors.unit ?? theme.colors.textMuted;
-      drawTruncatedText(ctx, numeric.unit, x + numeric.unitLeft, rect.y + rect.height / 2, numeric.unitWidth);
+      drawTruncatedText(
+        ctx,
+        numeric.unit,
+        x + numeric.unitLeft,
+        rect.y + rect.height / 2,
+        numeric.unitWidth
+      );
       ctx.font = theme.font;
     }
 
@@ -429,33 +574,59 @@ export class TreeRowRenderer {
     } else if (data.editorType === 'range') {
       this.#drawInspectorRange(ctx, x, rect.y + rect.height / 2 - 4, width, data, theme, {
         hoveredNumber: hovered && hoverPart === 'number',
-        activeNumber: activePart === 'number',
+        activeNumber: activePart === 'number'
       });
     } else if (data.editorType === 'color') {
       ctx.fillStyle = String(data.value || '#000000');
       ctx.fillRect(x, y + 2, 28, height - 4);
       ctx.strokeStyle = theme.colors.border;
       ctx.strokeRect(x + 0.5, y + 2.5, 28, height - 4);
-      this.#drawMutedText(ctx, String(data.value ?? ''), x + 38, rect.y + rect.height / 2, width - 38, theme, false, null, valueColor);
+      this.#drawMutedText(
+        ctx,
+        String(data.value ?? ''),
+        x + 38,
+        rect.y + rect.height / 2,
+        width - 38,
+        theme,
+        false,
+        null,
+        valueColor
+      );
     } else if (data.editorType === 'button') {
       const buttonWidth = meta.fullWidthButton ? width : Math.min(width, 140);
       this.#drawControlSurface(ctx, x, y, buttonWidth, height, theme, {
         hovered: hovered && hoverPart === 'button',
         active: activePart === 'button',
-        disabled: readonly || disabled,
+        disabled: readonly || disabled
       });
       ctx.fillStyle = theme.colors.text;
       ctx.textAlign = 'center';
-      drawTruncatedText(ctx, meta.button ?? node.label, x + buttonWidth / 2, rect.y + rect.height / 2, Math.max(10, buttonWidth - 12));
+      drawTruncatedText(
+        ctx,
+        meta.button ?? node.label,
+        x + buttonWidth / 2,
+        rect.y + rect.height / 2,
+        Math.max(10, buttonWidth - 12)
+      );
       ctx.textAlign = 'left';
     } else if (data.editorType === 'select') {
       const selectWidth = Math.min(width, 180);
       this.#drawControlSurface(ctx, x, y, selectWidth, height, theme, {
         hovered: hovered && hoverPart === 'editor',
         active: activePart === 'editor',
-        disabled: readonly || disabled,
+        disabled: readonly || disabled
       });
-      this.#drawMutedText(ctx, data.valueText, x + 8, rect.y + rect.height / 2, selectWidth - 30, theme, false, null, valueColor);
+      this.#drawMutedText(
+        ctx,
+        data.valueText,
+        x + 8,
+        rect.y + rect.height / 2,
+        selectWidth - 30,
+        theme,
+        false,
+        null,
+        valueColor
+      );
       this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
     } else {
       if (numeric.unit) {
@@ -465,7 +636,17 @@ export class TreeRowRenderer {
         drawTruncatedText(ctx, data.valueText, x + width, rect.y + rect.height / 2, width);
         ctx.textAlign = 'left';
       } else {
-        this.#drawMutedText(ctx, data.valueText, x, rect.y + rect.height / 2, width, theme, false, null, valueColor);
+        this.#drawMutedText(
+          ctx,
+          data.valueText,
+          x,
+          rect.y + rect.height / 2,
+          width,
+          theme,
+          false,
+          null,
+          valueColor
+        );
       }
     }
 
@@ -488,13 +669,28 @@ export class TreeRowRenderer {
   }
 
   #drawInspectorTypeCell(ctx, { node, rect, theme }) {
-    this.#drawMutedText(ctx, node.data?.valueType ?? '', rect.x + 10, rect.y + rect.height / 2, rect.width - 20, theme, false, theme.monoFont);
+    this.#drawMutedText(
+      ctx,
+      node.data?.valueType ?? '',
+      rect.x + 10,
+      rect.y + rect.height / 2,
+      rect.width - 20,
+      theme,
+      false,
+      theme.monoFont
+    );
   }
 
   #drawInspectorDescriptionCell(ctx, { node, rect, theme }) {
-    this.#drawMutedText(ctx, node.data?.meta?.description ?? '', rect.x + 10, rect.y + rect.height / 2, rect.width - 20, theme);
+    this.#drawMutedText(
+      ctx,
+      node.data?.meta?.description ?? '',
+      rect.x + 10,
+      rect.y + rect.height / 2,
+      rect.width - 20,
+      theme
+    );
   }
-
 
   #drawInspectorRange(ctx, x, y, width, data, theme, state = {}) {
     const meta = data.meta ?? {};
@@ -507,12 +703,18 @@ export class TreeRowRenderer {
     this.#drawMeterBar(ctx, x, y + 0.5, barWidth, 7, ratio, theme.colors.progressFill, theme);
     this.#drawControlSurface(ctx, x + barWidth + gap, y - 6, valueWidth, 20, theme, {
       hovered: Boolean(state.hoveredNumber),
-      active: Boolean(state.activeNumber),
+      active: Boolean(state.activeNumber)
     });
     ctx.fillStyle = resolveValueColor(theme, data.value);
     ctx.font = theme.monoFont ?? theme.font;
     ctx.textAlign = 'right';
-    drawTruncatedText(ctx, String(data.valueText ?? ''), x + barWidth + gap + valueWidth - 6, y + 4, valueWidth - 10);
+    drawTruncatedText(
+      ctx,
+      String(data.valueText ?? ''),
+      x + barWidth + gap + valueWidth - 6,
+      y + 4,
+      valueWidth - 10
+    );
     ctx.textAlign = 'left';
     ctx.font = theme.font;
   }
@@ -526,7 +728,15 @@ export class TreeRowRenderer {
     ctx.textAlign = 'left';
   }
 
-  #drawControlSurface(ctx, x, y, width, height, theme, { hovered = false, active = false, disabled = false } = {}) {
+  #drawControlSurface(
+    ctx,
+    x,
+    y,
+    width,
+    height,
+    theme,
+    { hovered = false, active = false, disabled = false } = {}
+  ) {
     const colors = theme.colors;
     ctx.fillStyle = disabled
       ? colors.progressTrack
@@ -537,7 +747,11 @@ export class TreeRowRenderer {
           : colors.progressTrack;
     roundRect(ctx, x, y, width, height, 5);
     ctx.fill();
-    ctx.strokeStyle = active ? colors.focus : hovered ? mixColor(colors.border, colors.focus, 0.5) : colors.border;
+    ctx.strokeStyle = active
+      ? colors.focus
+      : hovered
+        ? mixColor(colors.border, colors.focus, 0.5)
+        : colors.border;
     ctx.stroke();
   }
 
@@ -561,7 +775,11 @@ export class TreeRowRenderer {
 
   #drawTreeCell(ctx, { node, row, rect, theme, style }) {
     const colors = theme.colors;
-    const layout = treeCellLayout(row.depth, theme.indentWidth, this.scene.childrenByParent.size > 1);
+    const layout = treeCellLayout(
+      row.depth,
+      theme.indentWidth,
+      this.scene.childrenByParent.size > 1
+    );
     const cy = rect.y + rect.height / 2;
     if (row.hasChildren) this.#drawChevron(ctx, rect.x + layout.chevronX, cy, row, colors);
     this.iconRegistry.draw(ctx, style.icon, rect.x + layout.iconX, rect.y + 6, 15, style.color);
@@ -569,12 +787,21 @@ export class TreeRowRenderer {
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    drawTruncatedText(ctx, node.label ?? node.id, rect.x + layout.labelX, cy, Math.max(0, rect.width - layout.labelX - 6));
+    drawTruncatedText(
+      ctx,
+      node.label ?? node.id,
+      rect.x + layout.labelX,
+      cy,
+      Math.max(0, rect.width - layout.labelX - 6)
+    );
   }
 
   #drawStatusCell(ctx, { rect, style, theme }) {
     ctx.font = theme.font;
-    const badgeWidth = Math.max(0, Math.min(ctx.measureText(style.status.label).width + 18, rect.width - 12));
+    const badgeWidth = Math.max(
+      0,
+      Math.min(ctx.measureText(style.status.label).width + 18, rect.width - 12)
+    );
     const x = rect.x + (rect.width - badgeWidth) / 2;
     const y = rect.y + (rect.height - 17) / 2;
     const statusColor = style.status.color;
@@ -593,7 +820,18 @@ export class TreeRowRenderer {
   }
 
   #drawProgressCell(ctx, { state, rect, theme, style }) {
-    if (state.progress === undefined) return this.#drawTextCell(ctx, { state, rect, theme, style, column: { align: 'right', value: () => '' }, node: {} });
+    if (state.progress === undefined)
+      return this.#drawTextCell(ctx, {
+        state,
+        rect,
+        theme,
+        style,
+        column: {
+          align: 'right',
+          value: () => ''
+        },
+        node: {}
+      });
     const ratio = clamp01(state.progress);
     const barX = rect.x + 10;
     const barHeight = 7;
@@ -628,16 +866,32 @@ export class TreeRowRenderer {
   #drawTextCell(ctx, { node, state, rect, column, theme }) {
     let value = column.value(node, state);
     const numeric = typeof value === 'number';
-    const valueType = typeof column.valueType === 'function' ? column.valueType(value, node, state) : column.valueType;
+    const valueType =
+      typeof column.valueType === 'function'
+        ? column.valueType(value, node, state)
+        : column.valueType;
     const valueColor = resolveValueColor(theme, value, valueType);
     if (column.format) value = column.format(value, node, state);
     else if (column.kind === 'updated' && numeric) value = formatTime(value);
     else if (numeric) value = formatInspectorValue(value);
-    ctx.fillStyle = column.kind === 'type' ? resolveNodeStyle(theme, node, state).color : column.kind === 'value' ? valueColor : theme.colors.textMuted;
-    ctx.font = column.kind === 'type' || column.kind === 'updated' || numeric ? theme.monoFont ?? theme.font : theme.font;
+    ctx.fillStyle =
+      column.kind === 'type'
+        ? resolveNodeStyle(theme, node, state).color
+        : column.kind === 'value'
+          ? valueColor
+          : theme.colors.textMuted;
+    ctx.font =
+      column.kind === 'type' || column.kind === 'updated' || numeric
+        ? (theme.monoFont ?? theme.font)
+        : theme.font;
     ctx.textBaseline = 'middle';
     ctx.textAlign = column.align;
-    const x = column.align === 'right' ? rect.x + rect.width - 10 : column.align === 'center' ? rect.x + rect.width / 2 : rect.x + 10;
+    const x =
+      column.align === 'right'
+        ? rect.x + rect.width - 10
+        : column.align === 'center'
+          ? rect.x + rect.width / 2
+          : rect.x + 10;
     drawTruncatedText(ctx, String(value ?? ''), x, rect.y + rect.height / 2, rect.width - 20);
     ctx.textAlign = 'left';
   }
@@ -671,19 +925,22 @@ export class TreeRowRenderer {
     ctx.closePath();
     ctx.fill();
   }
+
 }
 
 function resolveNodeStyle(theme, node, state = {}) {
   const typeRule = theme.types[node?.type ?? ''] ?? {};
-  const status = theme.statuses[state.status ?? 0] ?? { label: String(state.status ?? ''), color: theme.colors.textMuted };
+  const status = theme.statuses[state.status ?? 0] ?? {
+    label: String(state.status ?? ''),
+    color: theme.colors.textMuted
+  };
   return {
     icon: state.icon ?? node?.icon ?? typeRule.icon ?? 'placeholder',
     color: state.color ?? typeRule.color ?? theme.colors.progressFill,
     typeColor: typeRule.color ?? theme.colors.progressFill,
-    status,
+    status
   };
 }
-
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
@@ -773,7 +1030,7 @@ function setTextFitCache(key, value) {
 const timeFormatter = new Intl.DateTimeFormat([], {
   hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
+  second: '2-digit'
 });
 
 function formatTime(value) {

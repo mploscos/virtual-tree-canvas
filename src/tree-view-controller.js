@@ -16,18 +16,30 @@ import {
   TreeSelectionManager,
   TreeWorkerClient,
   TreeViewViewport,
-  VisibleRowModel,
+  VisibleRowModel
 } from './core/index.js';
 import { numericLayout } from './inspector/numeric-layout.js';
 import { CellEditorManager } from './inspector/cell-editor-manager.js';
-import { formatInspectorValue, getAtPath, inspectorNodeId, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath } from './inspector/index.js';
+import {
+  formatInspectorValue,
+  getAtPath,
+  inspectorNodeId,
+  inspectorColumns,
+  inspectorPaneColumns,
+  ModelInspectorBuilder,
+  setAtPath
+} from './inspector/index.js';
 import { TreeViewInputController } from './input/tree-view-input-controller.js';
 import { TreeRowRenderer } from './renderers/index.js';
+import { mergeDynamicStateChanged } from './core/dynamic-state.js';
 
 export class TreeViewController {
   constructor(options = {}) {
     validateTreeViewOptions(options);
-    this.layoutOverrides = { rowHeight: options.rowHeight, indentWidth: options.indentWidth };
+    this.layoutOverrides = {
+      rowHeight: options.rowHeight,
+      indentWidth: options.indentWidth
+    };
     this.rawNodes = new Map();
     this.editable = options.editable !== false;
     this.destroyed = false;
@@ -38,12 +50,12 @@ export class TreeViewController {
       model: this.model,
       expansion: this.expansion,
       rowHeight: options.rowHeight ?? 28,
-      indentWidth: options.indentWidth ?? 18,
+      indentWidth: options.indentWidth ?? 18
     });
     this.viewport = new TreeViewViewport({
       rowHeight: this.rowModel.rowHeight,
       indentWidth: this.rowModel.indentWidth,
-      headerHeight: options.headerHeight ?? 28,
+      headerHeight: options.headerHeight ?? 28
     });
     this.viewport.renderInsetX = options.renderInsetX ?? 0;
     this.viewport.renderInsetY = options.renderInsetY ?? 0;
@@ -61,14 +73,29 @@ export class TreeViewController {
     this.searchIndex = new TreeSearchIndex();
     this.selection = new TreeSelectionManager();
     this.patchBatcher = new PatchBatcher();
+    this.dynamicPatchQueue = new PatchBatcher();
+    this.invalidation = { full: true, dirtyNodeIds: new Set() };
+    this.renderForced = false;
     this.themeManager = options.themeManager ?? new ThemeManager(options.theme);
-    this.iconRegistry = options.iconRegistry ?? new IconRegistry({ iconsBaseUrl: options.iconsBaseUrl });
-    this.renderer = options.renderer ?? new TreeRowRenderer({ themeManager: this.themeManager, iconRegistry: this.iconRegistry });
+    this.iconRegistry =
+      options.iconRegistry ??
+      new IconRegistry({
+        iconsBaseUrl: options.iconsBaseUrl
+      });
+    this.renderer =
+      options.renderer ??
+      new TreeRowRenderer({
+        themeManager: this.themeManager,
+        iconRegistry: this.iconRegistry
+      });
     this.nativeScrollbars = options.nativeScrollbars !== false;
     this.initialExpandDepth = options.initialExpandDepth ?? 1;
     this.searchHighlights = new Set();
     this.filterQuery = '';
-    this.filterOptions = { caseSensitive: false, wholeWord: false };
+    this.filterOptions = {
+      caseSensitive: false,
+      wholeWord: false
+    };
     this.hoverId = null;
     this.hoverPart = null;
     this.activeId = null;
@@ -79,6 +106,16 @@ export class TreeViewController {
     this.lastDirtyNodeCount = 0;
     this.lastRenderedRows = 0;
     this.rebuildCount = 0;
+    this.performanceStats = {
+      setDynamicStateCalls: 0,
+      patchesReceived: 0,
+      uniqueNodesReceived: 0,
+      nodesChanged: 0,
+      rendersRequested: 0,
+      rendersExecuted: 0,
+      rendersAvoidedNoChanges: 0,
+      rendersAvoidedOffscreen: 0
+    };
     this.workerClient = null;
     this.workerRevision = 0;
     this.sortValueSnapshot = null;
@@ -87,15 +124,36 @@ export class TreeViewController {
     this.cellEditor = null;
     const initialTheme = this.themeManager.get();
     this.rowModel.rowHeight = this.viewport.rowHeight = options.rowHeight ?? initialTheme.rowHeight;
-    this.rowModel.indentWidth = this.viewport.indentWidth = options.indentWidth ?? initialTheme.indentWidth;
+    this.rowModel.indentWidth = this.viewport.indentWidth =
+      options.indentWidth ?? initialTheme.indentWidth;
     this.scene = this.createRenderScene();
     this.renderer.setInvalidationHandler?.(() => this.requestRender(true));
 
-    for (const type of ['viewportchange', 'columnschange', 'sortchange', 'filterchange', 'themechange', 'layoutchange', 'expand', 'collapse', 'searchchange', 'nodehover', 'selectionchange', 'focuschange', 'rowreorder', 'rowdrag', 'rowreorderchange', 'modelchange']) {
+    for (const type of [
+      'viewportchange',
+      'columnschange',
+      'sortchange',
+      'filterchange',
+      'themechange',
+      'layoutchange',
+      'expand',
+      'collapse',
+      'searchchange',
+      'nodehover',
+      'selectionchange',
+      'focuschange',
+      'rowreorder',
+      'rowdrag',
+      'rowreorderchange',
+      'modelchange'
+    ]) {
       this.events.on(type, () => this.requestRender());
     }
     if (options.canvas) this.initialize(options.canvas);
-    if (options.canvas && (options.host || options.editable)) this.attachCellEditor({ host: options.host });
+    if (options.canvas && (options.host || options.editable))
+      this.attachCellEditor({
+        host: options.host
+      });
     if (options.canvas && options.input !== false) this.attachInput();
   }
 
@@ -107,21 +165,26 @@ export class TreeViewController {
     this.renderer.initialize(canvas);
     this.renderer.setScene(this.scene);
     this.actionOverlay?.destroy();
-    this.actionOverlay = canvas.ownerDocument?.createElement && canvas.parentElement ? new RowActions(this) : null;
+    this.actionOverlay =
+      canvas.ownerDocument?.createElement && canvas.parentElement ? new RowActions(this) : null;
     this.#resizeToCanvasClientSize();
     this.#observeCanvasSize();
     this.#setupNativeScrollbars();
-    if (this.tooltipEnabled) this.attachTooltip({ host: this.host });
+    if (this.tooltipEnabled)
+      this.attachTooltip({
+        host: this.host
+      });
     this.requestRender();
     return this;
   }
 
   attachCellEditor(options = {}) {
-    if (!this.canvas) throw new Error('TreeViewController.attachCellEditor requires an initialized canvas');
+    if (!this.canvas)
+      throw new Error('TreeViewController.attachCellEditor requires an initialized canvas');
     this.cellEditor?.destroy?.();
     this.cellEditor = new CellEditorManager({
       controller: this,
-      host: options.host,
+      host: options.host
     });
     this.cellEditor.setEditable(this.editable);
     if (this.inputController) this.inputController.cellEditor = this.cellEditor;
@@ -129,7 +192,9 @@ export class TreeViewController {
   }
 
   setRowActions(actions) {
-    validateTreeViewOptions({ rowActions: actions });
+    validateTreeViewOptions({
+      rowActions: actions
+    });
     this.rowActions = actions;
     this.columnModel.setRowActions(actions.length);
     this.columnModel.setRowReorder(this.rowReorder && !this.inspector);
@@ -138,36 +203,47 @@ export class TreeViewController {
   }
 
   setRowDrag(resolver) {
-    validateTreeViewOptions({ rowDrag: resolver });
+    validateTreeViewOptions({
+      rowDrag: resolver
+    });
     this.rowReorderInput?.cancel();
     this.rowDrag = resolver;
     this.rowReorderInput?.syncMode();
   }
 
   setEditable(enabled) {
-    validateTreeViewOptions({ editable: enabled });
+    validateTreeViewOptions({
+      editable: enabled
+    });
     if (this.editable === enabled) return;
     this.editable = enabled;
-    if (!this.cellEditor && this.canvas) this.attachCellEditor({ host: this.host });
+    if (!this.cellEditor && this.canvas)
+      this.attachCellEditor({
+        host: this.host
+      });
     this.cellEditor?.setEditable(enabled);
-    this.events.emit('editablechange', { editable: enabled });
+    this.events.emit('editablechange', {
+      editable: enabled
+    });
     this.requestRender();
   }
 
   setInitialExpandDepth(depth) {
-    validateTreeViewOptions({ initialExpandDepth: depth });
+    validateTreeViewOptions({
+      initialExpandDepth: depth
+    });
     this.initialExpandDepth = depth;
   }
 
-
   attachInput(options = {}) {
-    if (!this.canvas) throw new Error('TreeViewController.attachInput requires an initialized canvas');
+    if (!this.canvas)
+      throw new Error('TreeViewController.attachInput requires an initialized canvas');
     this.inputController?.destroy?.();
     this.rowReorderInput?.destroy();
     this.rowReorderInput = new RowReorderInput(this);
     this.inputController = new TreeViewInputController({
       controller: this,
-      cellEditor: options.cellEditor ?? this.cellEditor,
+      cellEditor: options.cellEditor ?? this.cellEditor
     });
     return this.inputController;
   }
@@ -180,6 +256,10 @@ export class TreeViewController {
     this.tooltip?.destroy();
     this.tooltip = null;
     this.cancelRender();
+    this.patchBatcher.clear();
+    this.dynamicPatchQueue.clear();
+    this.invalidation.dirtyNodeIds.clear();
+    this.invalidation.full = false;
     this.inputController?.destroy?.();
     this.cellEditor?.destroy?.();
     this.disableWorkers();
@@ -203,16 +283,19 @@ export class TreeViewController {
   }
 
   setData(nodes, options = {}) {
+    this.flushDynamicState();
     if (!Array.isArray(nodes)) throw new TypeError('nodes must be an array');
-    validateTreeViewOptions({ iconResolver: options.iconResolver ?? null });
+    validateTreeViewOptions({
+      iconResolver: options.iconResolver ?? null
+    });
     const resolved = resolveNodeIcons(nodes, options.iconResolver);
     this.closeEditor();
-    this.rawNodes = new Map(nodes.map(node => [node.id, node]));
+    this.rawNodes = new Map(nodes.map((node) => [node.id, node]));
     nodes = resolved;
     const preserveExpansion = !this.inspector;
     this.inspector = null;
     this.columnModel.setRowReorder(this.rowReorder);
-    if (this.columnModel.columns.some(column => column.kind?.startsWith('inspector'))) {
+    if (this.columnModel.columns.some((column) => column.kind?.startsWith('inspector'))) {
       this.columnModel.setColumns([]);
     }
     this.#replaceTree(nodes, preserveExpansion);
@@ -223,7 +306,11 @@ export class TreeViewController {
   }
 
   #replaceTree(nodes, preserveExpansion) {
-    const branches = preserveExpansion ? this.model.nodes.filter(node => this.expansion.hasChildren(node.id)).map(node => node.id) : [];
+    const branches = preserveExpansion
+      ? this.model.nodes
+          .filter((node) => this.expansion.hasChildren(node.id))
+          .map((node) => node.id)
+      : [];
     const expanded = new Set(this.model.expanded);
     this.model.setTree(nodes);
     this.expansion.expandToDepth(this.initialExpandDepth);
@@ -235,9 +322,11 @@ export class TreeViewController {
   }
 
   setIconResolver(resolver) {
-    validateTreeViewOptions({ iconResolver: resolver });
+    validateTreeViewOptions({
+      iconResolver: resolver
+    });
     if (this.inspector) return;
-    const source = this.model.nodes.map(node => this.rawNodes.get(node.id) ?? node);
+    const source = this.model.nodes.map((node) => this.rawNodes.get(node.id) ?? node);
     const nodes = resolveNodeIcons(source, resolver);
     this.model.nodes = nodes;
     this.model.index.rebuild(nodes);
@@ -262,17 +351,26 @@ export class TreeViewController {
   }
 
   setRowReorder(enabled) {
-    validateTreeViewOptions({ rowReorder: enabled });
+    validateTreeViewOptions({
+      rowReorder: enabled
+    });
     this.rowReorder = Boolean(enabled);
     this.rowDrop = null;
     this.columnModel.setRowReorder(this.rowReorder && !this.inspector);
     this.#syncContentSize();
-    this.events.emit('rowreorderchange', { enabled: this.rowReorder });
+    this.events.emit('rowreorderchange', {
+      enabled: this.rowReorder
+    });
   }
 
   canReorderRows(nodeId) {
-    return this.rowReorder && !this.inspector && !this.columnModel.sort.direction && !this.rowModel.filterPredicate
-      && (nodeId == null || this.model.index.getNode(nodeId)?.reorderable !== false);
+    return (
+      this.rowReorder &&
+      !this.inspector &&
+      !this.columnModel.sort.direction &&
+      !this.rowModel.filterPredicate &&
+      (nodeId == null || this.model.index.getNode(nodeId)?.reorderable !== false)
+    );
   }
 
   getRowOrder(parentId = null) {
@@ -280,6 +378,7 @@ export class TreeViewController {
   }
 
   moveRow(nodeId, targetIndex, options = {}) {
+    this.flushDynamicState();
     if (!this.canReorderRows(nodeId)) return false;
     const anchorId = this.rowModel.getRow(this.anchorRowIndex)?.nodeId;
     const detail = this.model.moveNode(nodeId, targetIndex);
@@ -293,8 +392,13 @@ export class TreeViewController {
     this.selection.focused = nodeId;
     this.cellEditor?.close?.();
     this.scrollToNode(nodeId);
-    this.events.emit('rowreorder', { ...detail, source: options.source ?? 'api' });
-    this.events.emit('focuschange', { nodeId });
+    this.events.emit('rowreorder', {
+      ...detail,
+      source: options.source ?? 'api'
+    });
+    this.events.emit('focuschange', {
+      nodeId
+    });
     return true;
   }
 
@@ -309,10 +413,17 @@ export class TreeViewController {
     if (!this.canReorderRows(nodeId)) return null;
     const x = clientX - this.viewport.renderInsetX;
     const y = clientY - this.viewport.renderInsetY;
-    if (x < 0 || x >= this.viewport.contentViewportWidth || y < this.viewport.headerHeight
-        || y >= this.viewport.headerHeight + this.viewport.rowViewportHeight) return null;
+    if (
+      x < 0 ||
+      x >= this.viewport.contentViewportWidth ||
+      y < this.viewport.headerHeight ||
+      y >= this.viewport.headerHeight + this.viewport.rowViewportHeight
+    )
+      return null;
     const contentY = y - this.viewport.headerHeight + this.viewport.scrollY;
-    const row = this.rowModel.getRow(Math.min(this.rowModel.rows.length - 1, Math.floor(contentY / this.rowModel.rowHeight)));
+    const row = this.rowModel.getRow(
+      Math.min(this.rowModel.rows.length - 1, Math.floor(contentY / this.rowModel.rowHeight))
+    );
     const source = this.model.index.getNode(nodeId);
     const target = row && this.model.index.getNode(row.nodeId);
     if (!source || !target || (source.parentId ?? null) !== (target.parentId ?? null)) return null;
@@ -321,21 +432,46 @@ export class TreeViewController {
     const from = siblings.indexOf(nodeId);
     let index = siblings.indexOf(target.id) + Number(after);
     if (index > from) index--;
-    return index === from ? null : { nodeId, targetId: target.id, index, y: row.y + (after ? row.height : 0) };
+    return index === from
+      ? null
+      : {
+          nodeId,
+          targetId: target.id,
+          index,
+          y: row.y + (after ? row.height : 0)
+        };
   }
 
   setRowDrop(target) {
     this.rowDrop = target;
-    this.events.emit('rowdrag', { target });
+    this.events.emit('rowdrag', {
+      target
+    });
   }
 
   requestRender(force = false) {
-    if (this.destroyed || (!this.autoRender && !force) || !this.canvas || this.renderFrame !== null) return;
-    const view = this.canvas.ownerDocument?.defaultView ?? globalThis;
-    const schedule = view.requestAnimationFrame?.bind(view) ?? (callback => setTimeout(callback, 0));
+    if (this.destroyed) return;
+    this.invalidation.full = true;
+    this.invalidation.dirtyNodeIds.clear();
+    if ((!this.autoRender && !force) || !this.canvas) return;
+    if (this.renderFrame === null) this.performanceStats.rendersRequested++;
+    this.renderForced ||= force;
+    this.#scheduleFrame();
+  }
+
+  #scheduleFrame() {
+    if (this.destroyed || this.renderFrame !== null) return;
+    const view = this.canvas?.ownerDocument?.defaultView ?? globalThis;
+    const schedule =
+      view.requestAnimationFrame?.bind(view) ?? ((callback) => setTimeout(callback, 0));
     this.renderFrame = schedule(() => {
       this.renderFrame = null;
-      if (this.canvas) this.render();
+      const forced = this.renderForced;
+      this.renderForced = false;
+      this.flushDynamicState();
+      if (this.canvas && (this.autoRender || forced) && this.#hasInvalidation()) {
+        this.render();
+      }
     });
   }
 
@@ -344,16 +480,27 @@ export class TreeViewController {
     const view = this.canvas?.ownerDocument?.defaultView ?? globalThis;
     (view.cancelAnimationFrame?.bind(view) ?? clearTimeout)(this.renderFrame);
     this.renderFrame = null;
+    this.renderForced = false;
   }
 
   attachTooltip(options = {}) {
     this.tooltip?.destroy();
-    this.tooltip = new TreeTooltip({ controller: this, host: options.host ?? this.canvas?.parentElement });
+    this.tooltip = new TreeTooltip({
+      controller: this,
+      host: options.host ?? this.canvas?.parentElement
+    });
     return this.tooltip;
   }
 
   setModel(model, meta = {}, options = {}) {
-    validateTreeViewOptions({ ...options, mode: 'inspector', model, meta, presentation: options.presentation ?? options.mode ?? 'table' });
+    this.flushDynamicState();
+    validateTreeViewOptions({
+      ...options,
+      mode: 'inspector',
+      model,
+      meta,
+      presentation: options.presentation ?? options.mode ?? 'table'
+    });
     this.columnModel.setRowReorder(false);
     const builder = new ModelInspectorBuilder();
     const presentation = options.presentation ?? options.mode ?? 'table';
@@ -363,21 +510,34 @@ export class TreeViewController {
       flatRoot: Boolean(options.flatRoot),
       enforceMeta: Boolean(options.enforceMeta),
       filter: Boolean(options.filter),
-      markUpdated: options.markUpdated !== false,
+      markUpdated: options.markUpdated !== false
     };
     const nodes = builder.build(model, meta, inspectorOptions);
-    const sameLayout = this.inspector?.presentation === presentation &&
-      nodes.length === this.model.nodes.length && nodes.every((node, index) => node.id === this.model.nodes[index].id);
+    const sameLayout =
+      this.inspector?.presentation === presentation &&
+      nodes.length === this.model.nodes.length &&
+      nodes.every((node, index) => node.id === this.model.nodes[index].id);
     if (!sameLayout) this.closeEditor();
     else this.cellEditor?.reconcile(nodes);
     this.rawNodes.clear();
-    this.inspector = { model, meta, builder, presentation, options: inspectorOptions };
-    if (!sameLayout) this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
+    this.inspector = {
+      model,
+      meta,
+      builder,
+      presentation,
+      options: inspectorOptions
+    };
+    if (!sameLayout)
+      this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
     this.#replaceTree(nodes, preserveExpansion);
     this.searchIndex.rebuild(this.model);
     this.#rebuildRows();
     this.events.emit('datachange', {});
-    this.events.emit('modelchange', { model, meta, structural: true });
+    this.events.emit('modelchange', {
+      model,
+      meta,
+      structural: true
+    });
   }
 
   updateInspectorValue(nodeId, newValue, editorType = 'unknown', options = {}) {
@@ -389,15 +549,39 @@ export class TreeViewController {
     if (Object.is(oldValue, newValue)) return true;
     setAtPath(this.inspector.model, data.path, newValue);
     data.value = newValue;
-    data.valueType = Array.isArray(newValue) ? 'array' : newValue === null ? 'null' : typeof newValue === 'object' ? 'object' : typeof newValue;
+    data.valueType = Array.isArray(newValue)
+      ? 'array'
+      : newValue === null
+        ? 'null'
+        : typeof newValue === 'object'
+          ? 'object'
+          : typeof newValue;
     data.valueText = formatInspectorValue(newValue, data.meta);
     if (this.inspector.options.markUpdated !== false) {
-      this.setDynamicState([{ id: nodeId, state: { updated: true } }]);
+      this.setDynamicState([
+        {
+          id: nodeId,
+          state: {
+            updated: true
+          }
+        }
+      ]);
+      this.flushDynamicState();
     }
-    const detail = { path: data.path, oldValue, newValue, nodeId, editorType, model: this.inspector.model, source: options.source ?? 'user' };
+    const detail = {
+      path: data.path,
+      oldValue,
+      newValue,
+      nodeId,
+      editorType,
+      model: this.inspector.model,
+      source: options.source ?? 'user'
+    };
     if (options.emit !== false) {
       this.events.emit('valuechange', detail);
-      this.events.emit('modelchange', { ...detail });
+      this.events.emit('modelchange', {
+        ...detail
+      });
     }
     this.requestRender();
     return true;
@@ -405,14 +589,23 @@ export class TreeViewController {
 
   setInspectorValue(path, value, options = {}) {
     if (typeof path !== 'string') throw new TypeError('path must be a string');
-    return this.updateInspectorValue(inspectorNodeId(path === '$' ? '' : path), value, 'api', { ...options, source: 'api' });
+    return this.updateInspectorValue(inspectorNodeId(path === '$' ? '' : path), value, 'api', {
+      ...options,
+      source: 'api'
+    });
   }
 
   triggerInspectorAction(nodeId) {
     const node = this.model.index.getNode(nodeId);
     if (!node?.data?.inspector) return false;
     const label = node.data.meta?.button ?? node.label;
-    this.events.emit('action', { path: node.data.path, label, nodeId, model: this.inspector?.model, source: 'user' });
+    this.events.emit('action', {
+      path: node.data.path,
+      label,
+      nodeId,
+      model: this.inspector?.model,
+      source: 'user'
+    });
     return true;
   }
 
@@ -424,7 +617,13 @@ export class TreeViewController {
     const item = createDefaultArrayItem(node.data.meta);
     array.push(item);
     this.#rebuildInspectorModel(node.data.path);
-    this.events.emit('modelchange', { model: this.inspector.model, path: node.data.path, structural: true, action: 'array-add', value: item });
+    this.events.emit('modelchange', {
+      model: this.inspector.model,
+      path: node.data.path,
+      structural: true,
+      action: 'array-add',
+      value: item
+    });
     return true;
   }
 
@@ -435,7 +634,13 @@ export class TreeViewController {
     if (!Array.isArray(array) || !array.length) return false;
     const value = array.pop();
     this.#rebuildInspectorModel(node.data.path);
-    this.events.emit('modelchange', { model: this.inspector.model, path: node.data.path, structural: true, action: 'array-remove', value });
+    this.events.emit('modelchange', {
+      model: this.inspector.model,
+      path: node.data.path,
+      structural: true,
+      action: 'array-remove',
+      value
+    });
     return true;
   }
 
@@ -443,7 +648,8 @@ export class TreeViewController {
     if (this.workerClient) return Promise.resolve(this);
     const client = new TreeWorkerClient(workerUrl);
     this.workerClient = client;
-    return client.setData(this.model.nodes)
+    return client
+      .setData(this.model.nodes)
       .then(() => this)
       .catch((error) => {
         if (this.workerClient === client) this.disableWorkers();
@@ -457,30 +663,42 @@ export class TreeViewController {
   }
 
   setColumns(columns) {
-    if (columns == null) columns = this.inspector ? (this.inspector.presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns()) : [];
+    if (columns == null)
+      columns = this.inspector
+        ? this.inspector.presentation === 'pane'
+          ? inspectorPaneColumns()
+          : inspectorColumns()
+        : [];
     if (!Array.isArray(columns)) throw new TypeError('columns must be an array or null');
     this.closeEditor();
     this.columnModel.setColumns(columns);
     this.columnModel.setRowReorder(this.rowReorder && !this.inspector);
     this.#syncContentSize();
-    this.events.emit('columnschange', { columns: this.columnModel.columns });
+    this.events.emit('columnschange', {
+      columns: this.columnModel.columns
+    });
   }
 
   resizeColumn(columnId, width) {
     if (!this.columnModel.resizeColumn(columnId, width)) return false;
     this.#syncContentSize();
-    this.events.emit('columnschange', { columns: this.columnModel.columns });
+    this.events.emit('columnschange', {
+      columns: this.columnModel.columns
+    });
     return true;
   }
 
   moveColumn(columnId, targetIndex) {
     if (!this.columnModel.moveColumn(columnId, targetIndex)) return false;
     this.#syncContentSize();
-    this.events.emit('columnschange', { columns: this.columnModel.columns });
+    this.events.emit('columnschange', {
+      columns: this.columnModel.columns
+    });
     return true;
   }
 
   sortBy(columnId, direction = 'toggle') {
+    this.flushDynamicState();
     const column = this.columnModel.getColumn(columnId);
     if (!column || column.sortable === false) return false;
     const current = this.columnModel.sort;
@@ -496,10 +714,21 @@ export class TreeViewController {
       return true;
     }
     this.columnModel.setSort(columnId, nextDirection);
-    this.sortValueSnapshot = createSortValueSnapshot(column, this.model.nodes, this.model.dynamicState);
-    this.rowModel.setSortComparator((a, b) => compareColumnValues(column, a, b, this.model.dynamicState, this.sortValueSnapshot) * (nextDirection === 'desc' ? -1 : 1));
+    this.sortValueSnapshot = createSortValueSnapshot(
+      column,
+      this.model.nodes,
+      this.model.dynamicState
+    );
+    this.rowModel.setSortComparator(
+      (a, b) =>
+        compareColumnValues(column, a, b, this.model.dynamicState, this.sortValueSnapshot) *
+        (nextDirection === 'desc' ? -1 : 1)
+    );
     this.#rebuildRows();
-    this.events.emit('sortchange', { columnId, direction: nextDirection });
+    this.events.emit('sortchange', {
+      columnId,
+      direction: nextDirection
+    });
     return true;
   }
 
@@ -508,24 +737,51 @@ export class TreeViewController {
     this.sortValueSnapshot = null;
     this.rowModel.setSortComparator(null);
     this.#rebuildRows();
-    this.events.emit('sortchange', { columnId: null, direction: null });
+    this.events.emit('sortchange', {
+      columnId: null,
+      direction: null
+    });
   }
 
   setFilter(queryOrPredicate = '', options = {}) {
-    if (typeof queryOrPredicate !== 'string' && typeof queryOrPredicate !== 'function') throw new TypeError('filter must be a string or predicate');
+    this.flushDynamicState();
+    if (typeof queryOrPredicate !== 'string' && typeof queryOrPredicate !== 'function')
+      throw new TypeError('filter must be a string or predicate');
     if (this.cellEditor?.overlayKind !== 'filter') this.closeEditor();
     this.filterQuery = typeof queryOrPredicate === 'string' ? queryOrPredicate : '';
-    this.filterOptions = typeof queryOrPredicate === 'string'
-      ? { caseSensitive: Boolean(options.caseSensitive), wholeWord: Boolean(options.wholeWord) }
-      : { caseSensitive: false, wholeWord: false };
+    this.filterOptions =
+      typeof queryOrPredicate === 'string'
+        ? {
+            caseSensitive: Boolean(options.caseSensitive),
+            wholeWord: Boolean(options.wholeWord)
+          }
+        : {
+            caseSensitive: false,
+            wholeWord: false
+          };
     if (typeof queryOrPredicate === 'function') {
       this.rowModel.setFilterPredicate(queryOrPredicate);
     } else {
       const query = normalizeFilterValue(queryOrPredicate.trim(), this.filterOptions);
-      this.rowModel.setFilterPredicate(query ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', query, this.filterOptions) : null);
+      this.rowModel.setFilterPredicate(
+        query
+          ? (node, state) =>
+              matchesFilter(
+                node,
+                state,
+                this.model.index.pathById.get(node.id) ?? '',
+                query,
+                this.filterOptions
+              )
+          : null
+      );
     }
     this.#rebuildRows();
-    this.events.emit('filterchange', { query: this.filterQuery, options: this.filterOptions, visibleRows: this.rowModel.rows.length });
+    this.events.emit('filterchange', {
+      query: this.filterQuery,
+      options: this.filterOptions,
+      visibleRows: this.rowModel.rows.length
+    });
   }
 
   clearFilter() {
@@ -540,45 +796,128 @@ export class TreeViewController {
     const totalStart = now();
     const revision = ++this.workerRevision;
     this.filterQuery = query;
-    this.filterOptions = { caseSensitive: Boolean(options.caseSensitive), wholeWord: Boolean(options.wholeWord) };
+    this.filterOptions = {
+      caseSensitive: Boolean(options.caseSensitive),
+      wholeWord: Boolean(options.wholeWord)
+    };
     const normalized = normalizeFilterValue(query.trim(), this.filterOptions);
-    this.rowModel.setFilterPredicate(normalized ? (node, state) => matchesFilter(node, state, this.model.index.pathById.get(node.id) ?? '', normalized, this.filterOptions) : null);
+    this.rowModel.setFilterPredicate(
+      normalized
+        ? (node, state) =>
+            matchesFilter(
+              node,
+              state,
+              this.model.index.pathById.get(node.id) ?? '',
+              normalized,
+              this.filterOptions
+            )
+        : null
+    );
     const workerStart = now();
-    const result = await this.workerClient.rebuildRows(this.#workerRowOptions({ filterQuery: query, filterOptions: this.filterOptions }));
+    const result = await this.workerClient.rebuildRows(
+      this.#workerRowOptions({
+        filterQuery: query,
+        filterOptions: this.filterOptions
+      })
+    );
     const workerMs = now() - workerStart;
     if (revision !== this.workerRevision) return this.rowModel.rows;
     this.#applyWorkerRows(result);
-    this.events.emit('filterchange', { query: this.filterQuery, options: this.filterOptions, visibleRows: this.rowModel.rows.length, worker: true, workerMs, totalMs: now() - totalStart });
+    this.events.emit('filterchange', {
+      query: this.filterQuery,
+      options: this.filterOptions,
+      visibleRows: this.rowModel.rows.length,
+      worker: true,
+      workerMs,
+      totalMs: now() - totalStart
+    });
     return this.rowModel.rows;
   }
 
   setDynamicState(patches) {
     if (!Array.isArray(patches)) throw new TypeError('patches must be an array');
-    this.lastPatchCount = patches.length;
-    this.lastDirtyNodeCount = new Set(patches.map((patch) => patch.id)).size;
-    this.model.applyDynamicPatches(patches);
-    this.renderer.updateDynamicState(patches);
-    this.requestRender();
+    if (this.destroyed || patches.length === 0) return;
+    this.performanceStats.setDynamicStateCalls++;
+    this.performanceStats.patchesReceived += patches.length;
+    this.lastPatchCount += patches.length;
+    this.dynamicPatchQueue.addMany(patches);
+    this.#scheduleFrame();
+  }
+
+  /**
+   * Applies queued dynamic patches immediately. Rendering, scene creation,
+   * sorting and filtering call this method before reading dynamic state.
+   * @returns {Set<string>} IDs whose stored state actually changed.
+   */
+  flushDynamicState() {
+    if (!this.dynamicPatchQueue.size) return new Set();
+    const hadInvalidation = this.#hasInvalidation();
+    const queued = this.dynamicPatchQueue.pending;
+    const changedIds = new Set();
+    const changedPatches = [];
+    this.performanceStats.uniqueNodesReceived += queued.size;
+    this.lastDirtyNodeCount = 0;
+
+    for (const [id, state] of queued) {
+      const current = this.model.dynamicState.get(id);
+      if (!current || !mergeDynamicStateChanged(current, state)) continue;
+      changedIds.add(id);
+      changedPatches.push({ id, state });
+    }
+    queued.clear();
+
+    if (!changedIds.size) {
+      if (!hadInvalidation) this.performanceStats.rendersAvoidedNoChanges++;
+      this.lastPatchCount = 0;
+      return changedIds;
+    }
+
+    this.lastDirtyNodeCount = changedIds.size;
+    this.performanceStats.nodesChanged += changedIds.size;
+    this.renderer.updateDynamicState(changedPatches);
+    if (this.#hasVisibleDirtyNode(changedIds)) {
+      if (!this.invalidation.full) {
+        const requestsRender = this.invalidation.dirtyNodeIds.size === 0;
+        for (const id of changedIds) this.invalidation.dirtyNodeIds.add(id);
+        if (requestsRender) this.performanceStats.rendersRequested++;
+      }
+    } else {
+      if (!hadInvalidation) this.performanceStats.rendersAvoidedOffscreen++;
+      this.lastPatchCount = 0;
+    }
+    return changedIds;
   }
 
   setTheme(theme) {
+    this.flushDynamicState();
     const beforeRowHeight = this.rowModel.rowHeight;
     const beforeIndentWidth = this.rowModel.indentWidth;
     this.themeManager.setTheme(theme);
     const nextTheme = this.themeManager.get();
-    this.rowModel.rowHeight = this.viewport.rowHeight = this.layoutOverrides.rowHeight ?? nextTheme.rowHeight;
-    this.rowModel.indentWidth = this.viewport.indentWidth = this.layoutOverrides.indentWidth ?? nextTheme.indentWidth;
-    if (beforeRowHeight !== this.rowModel.rowHeight || beforeIndentWidth !== this.rowModel.indentWidth) {
+    this.rowModel.rowHeight = this.viewport.rowHeight =
+      this.layoutOverrides.rowHeight ?? nextTheme.rowHeight;
+    this.rowModel.indentWidth = this.viewport.indentWidth =
+      this.layoutOverrides.indentWidth ?? nextTheme.indentWidth;
+    if (
+      beforeRowHeight !== this.rowModel.rowHeight ||
+      beforeIndentWidth !== this.rowModel.indentWidth
+    ) {
       this.closeEditor();
       this.#rebuildRows();
     }
     this.#nativeScroll?.applyTheme?.(nextTheme);
-    this.events.emit('themechange', { theme: nextTheme });
+    this.events.emit('themechange', {
+      theme: nextTheme
+    });
   }
 
   setLayoutMetrics(options = {}) {
-    const rowHeight = Object.hasOwn(options, 'rowHeight') ? options.rowHeight ?? this.themeManager.get().rowHeight : this.rowModel.rowHeight;
-    const indentWidth = Object.hasOwn(options, 'indentWidth') ? options.indentWidth ?? this.themeManager.get().indentWidth : this.rowModel.indentWidth;
+    const rowHeight = Object.hasOwn(options, 'rowHeight')
+      ? (options.rowHeight ?? this.themeManager.get().rowHeight)
+      : this.rowModel.rowHeight;
+    const indentWidth = Object.hasOwn(options, 'indentWidth')
+      ? (options.indentWidth ?? this.themeManager.get().indentWidth)
+      : this.rowModel.indentWidth;
     const headerHeight = options.headerHeight ?? this.viewport.headerHeight;
     assertPositiveNumber(rowHeight, 'rowHeight');
     assertPositiveNumber(indentWidth, 'indentWidth');
@@ -586,7 +925,8 @@ export class TreeViewController {
     for (const key of ['rowHeight', 'indentWidth']) {
       if (Object.hasOwn(options, key)) this.layoutOverrides[key] = options[key];
     }
-    const rowsChanged = this.rowModel.rowHeight !== rowHeight || this.rowModel.indentWidth !== indentWidth;
+    const rowsChanged =
+      this.rowModel.rowHeight !== rowHeight || this.rowModel.indentWidth !== indentWidth;
     if (rowsChanged || headerHeight !== this.viewport.headerHeight) this.closeEditor();
     this.rowModel.rowHeight = rowHeight;
     this.rowModel.indentWidth = indentWidth;
@@ -605,12 +945,17 @@ export class TreeViewController {
   expand(nodeId) {
     if (this.filterQuery && this.rowModel.expandFilterBranch(nodeId)) {
       this.#rebuildRows();
-      this.events.emit('expand', { nodeId, filter: true });
+      this.events.emit('expand', {
+        nodeId,
+        filter: true
+      });
       return true;
     }
     if (!this.expansion.expand(nodeId)) return false;
     this.#rebuildRows();
-    this.events.emit('expand', { nodeId });
+    this.events.emit('expand', {
+      nodeId
+    });
     return true;
   }
 
@@ -621,51 +966,76 @@ export class TreeViewController {
     if (shouldCollapseFilterBranch) this.rowModel.collapseFilterBranch(nodeId);
     if (!changed && !shouldCollapseFilterBranch) return false;
     this.#rebuildRows();
-    this.events.emit('collapse', { nodeId, filter: shouldCollapseFilterBranch });
+    this.events.emit('collapse', {
+      nodeId,
+      filter: shouldCollapseFilterBranch
+    });
     return true;
   }
 
   toggle(nodeId) {
     const row = this.rowModel.getRowById(nodeId);
-    return (row?.expanded ?? this.expansion.isExpanded(nodeId)) ? this.collapse(nodeId) : this.expand(nodeId);
+    return (row?.expanded ?? this.expansion.isExpanded(nodeId))
+      ? this.collapse(nodeId)
+      : this.expand(nodeId);
   }
 
   expandAll() {
     this.expansion.expandAll();
     this.#rebuildRows();
-    this.events.emit('expand', { nodeId: null, all: true });
+    this.events.emit('expand', {
+      nodeId: null,
+      all: true
+    });
   }
 
   collapseAll() {
     this.expansion.collapseAll();
     this.#rebuildRows();
-    this.events.emit('collapse', { nodeId: null, all: true });
+    this.events.emit('collapse', {
+      nodeId: null,
+      all: true
+    });
   }
 
   search(query, options = {}) {
-    for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
+    for (const id of this.searchHighlights)
+      this.patchBatcher.set(id, {
+        highlighted: false
+      });
     const results = this.searchIndex.search(query, {
       limit: options.limit ?? 500,
       fields: options.fields,
       caseSensitive: options.caseSensitive,
-      wholeWord: options.wholeWord,
+      wholeWord: options.wholeWord
     });
     this.searchHighlights = new Set(results);
     const expandedSizeBefore = this.expansion.model.expanded.size;
     for (const id of results) {
       if (options.expand !== false) this.expansion.expandAncestors(id);
-      this.patchBatcher.set(id, { highlighted: true });
+      this.patchBatcher.set(id, {
+        highlighted: true
+      });
     }
-    if (options.expand !== false && this.expansion.model.expanded.size !== expandedSizeBefore) this.#rebuildRows();
+    if (options.expand !== false && this.expansion.model.expanded.size !== expandedSizeBefore)
+      this.#rebuildRows();
     this.setDynamicState(this.patchBatcher.flush());
+    this.flushDynamicState();
     if (results[0] && options.focus !== false) {
       this.scrollToNode(results[0], options.align ?? 'nearest');
       this.focusedId = results[0];
       this.selection.focused = results[0];
       if (options.select) this.setSelection([results[0]]);
-      this.events.emit('focuschange', { nodeId: results[0] });
+      this.events.emit('focuschange', {
+        nodeId: results[0]
+      });
     }
-    this.events.emit('searchchange', { query, results, cursor: this.searchIndex.cursor, current: this.searchIndex.currentSearchResult() });
+    this.events.emit('searchchange', {
+      query,
+      results,
+      cursor: this.searchIndex.cursor,
+      current: this.searchIndex.currentSearchResult()
+    });
     return results;
   }
 
@@ -673,13 +1043,16 @@ export class TreeViewController {
     if (!this.workerClient) return this.search(query, options);
     const totalStart = now();
     const revision = ++this.workerRevision;
-    for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
+    for (const id of this.searchHighlights)
+      this.patchBatcher.set(id, {
+        highlighted: false
+      });
     const searchStart = now();
     const results = await this.workerClient.search(query, {
       limit: options.limit ?? 500,
       fields: options.fields,
       caseSensitive: options.caseSensitive,
-      wholeWord: options.wholeWord,
+      wholeWord: options.wholeWord
     });
     const searchMs = now() - searchStart;
     if (revision !== this.workerRevision) return this.searchIndex.results;
@@ -690,24 +1063,34 @@ export class TreeViewController {
     const expandedSizeBefore = this.expansion.model.expanded.size;
     for (const id of results) {
       if (options.expand !== false) this.expansion.expandAncestors(id);
-      this.patchBatcher.set(id, { highlighted: true });
+      this.patchBatcher.set(id, {
+        highlighted: true
+      });
     }
     let rowMs = 0;
-    const expansionChanged = options.expand !== false && this.expansion.model.expanded.size !== expandedSizeBefore;
+    const expansionChanged =
+      options.expand !== false && this.expansion.model.expanded.size !== expandedSizeBefore;
     if (expansionChanged || this.filterQuery) {
       const rowStart = now();
-      const rowResult = await this.workerClient.rebuildRows(this.#workerRowOptions({ filterQuery: this.filterQuery }));
+      const rowResult = await this.workerClient.rebuildRows(
+        this.#workerRowOptions({
+          filterQuery: this.filterQuery
+        })
+      );
       rowMs = now() - rowStart;
       if (revision !== this.workerRevision) return this.searchIndex.results;
       this.#applyWorkerRows(rowResult);
     }
     this.setDynamicState(this.patchBatcher.flush());
+    this.flushDynamicState();
     if (results[0] && options.focus !== false) {
       this.scrollToNode(results[0], options.align ?? 'nearest');
       this.focusedId = results[0];
       this.selection.focused = results[0];
       if (options.select) this.setSelection([results[0]]);
-      this.events.emit('focuschange', { nodeId: results[0] });
+      this.events.emit('focuschange', {
+        nodeId: results[0]
+      });
     }
     this.events.emit('searchchange', {
       query,
@@ -718,18 +1101,27 @@ export class TreeViewController {
       searchMs,
       rowMs,
       workerMs: searchMs + rowMs,
-      totalMs: now() - totalStart,
+      totalMs: now() - totalStart
     });
     return results;
   }
 
   clearSearch() {
     this.workerRevision++;
-    for (const id of this.searchHighlights) this.patchBatcher.set(id, { highlighted: false });
+    for (const id of this.searchHighlights)
+      this.patchBatcher.set(id, {
+        highlighted: false
+      });
     this.searchHighlights.clear();
     this.searchIndex.clear();
     this.setDynamicState(this.patchBatcher.flush());
-    this.events.emit('searchchange', { query: '', results: [], cursor: -1, current: null });
+    this.flushDynamicState();
+    this.events.emit('searchchange', {
+      query: '',
+      results: [],
+      cursor: -1,
+      current: null
+    });
   }
 
   getSearchState() {
@@ -738,21 +1130,37 @@ export class TreeViewController {
       results: this.searchIndex.results.slice(),
       cursor: this.searchIndex.cursor,
       current: this.searchIndex.currentSearchResult(),
-      count: this.searchIndex.results.length,
+      count: this.searchIndex.results.length
     };
   }
 
   nextSearchResult() {
     const id = this.searchIndex.nextSearchResult();
-    if (id) this.focusNode(id, { select: false });
-    this.events.emit('searchchange', { query: this.searchIndex.lastQuery, results: this.searchIndex.results.slice(), cursor: this.searchIndex.cursor, current: id });
+    if (id)
+      this.focusNode(id, {
+        select: false
+      });
+    this.events.emit('searchchange', {
+      query: this.searchIndex.lastQuery,
+      results: this.searchIndex.results.slice(),
+      cursor: this.searchIndex.cursor,
+      current: id
+    });
     return id;
   }
 
   previousSearchResult() {
     const id = this.searchIndex.previousSearchResult();
-    if (id) this.focusNode(id, { select: false });
-    this.events.emit('searchchange', { query: this.searchIndex.lastQuery, results: this.searchIndex.results.slice(), cursor: this.searchIndex.cursor, current: id });
+    if (id)
+      this.focusNode(id, {
+        select: false
+      });
+    this.events.emit('searchchange', {
+      query: this.searchIndex.lastQuery,
+      results: this.searchIndex.results.slice(),
+      cursor: this.searchIndex.cursor,
+      current: id
+    });
     return id;
   }
 
@@ -764,7 +1172,9 @@ export class TreeViewController {
     this.focusedId = nodeId;
     this.selection.focused = nodeId;
     if (options.select) this.setSelection([nodeId]);
-    this.events.emit('focuschange', { nodeId });
+    this.events.emit('focuschange', {
+      nodeId
+    });
     return true;
   }
 
@@ -786,9 +1196,14 @@ export class TreeViewController {
     for (const id of ids) this.selection.selected.add(id);
     this.selection.focused = ids[ids.length - 1] ?? null;
     this.focusedId = this.selection.focused;
-    this.anchorRowIndex = this.focusedId ? this.rowModel.getRowById(this.focusedId)?.rowIndex ?? null : null;
+    this.anchorRowIndex = this.focusedId
+      ? (this.rowModel.getRowById(this.focusedId)?.rowIndex ?? null)
+      : null;
     this.#syncSelectionState();
-    this.events.emit('selectionchange', { selection: this.getSelection(), focusedId: this.focusedId });
+    this.events.emit('selectionchange', {
+      selection: this.getSelection(),
+      focusedId: this.focusedId
+    });
   }
 
   clearSelection() {
@@ -799,7 +1214,9 @@ export class TreeViewController {
     if (this.hoverId === nodeId) return;
     this.hoverId = nodeId;
     this.hoverPart = null;
-    this.events.emit('nodehover', { nodeId });
+    this.events.emit('nodehover', {
+      nodeId
+    });
   }
 
   setHoverHit(hit) {
@@ -808,7 +1225,10 @@ export class TreeViewController {
     if (this.hoverId === nodeId && this.hoverPart === part) return;
     this.hoverId = nodeId;
     this.hoverPart = part;
-    this.events.emit('nodehover', { nodeId, part });
+    this.events.emit('nodehover', {
+      nodeId,
+      part
+    });
   }
 
   setActiveHit(hit) {
@@ -824,14 +1244,22 @@ export class TreeViewController {
     const row = this.rowModel.getRowById(nodeId);
     if (!row) return;
     this.selectRow(row.rowIndex, event);
-    this.events.emit('nodeclick', { nodeId, row, originalEvent: event });
+    this.events.emit('nodeclick', {
+      nodeId,
+      row,
+      originalEvent: event
+    });
   }
 
   doubleClickNode(nodeId, event = {}) {
     const row = this.rowModel.getRowById(nodeId);
     if (!row) return;
     if (row.hasChildren) this.toggle(nodeId);
-    this.events.emit('nodedblclick', { nodeId, row, originalEvent: event });
+    this.events.emit('nodedblclick', {
+      nodeId,
+      row,
+      originalEvent: event
+    });
   }
 
   selectRow(rowIndex, event = {}) {
@@ -854,8 +1282,13 @@ export class TreeViewController {
     this.focusedId = row.nodeId;
     this.selection.focused = row.nodeId;
     this.#syncSelectionState();
-    this.events.emit('selectionchange', { selection: this.getSelection(), focusedId: this.focusedId });
-    this.events.emit('focuschange', { nodeId: this.focusedId });
+    this.events.emit('selectionchange', {
+      selection: this.getSelection(),
+      focusedId: this.focusedId
+    });
+    this.events.emit('focuschange', {
+      nodeId: this.focusedId
+    });
     return true;
   }
 
@@ -863,7 +1296,9 @@ export class TreeViewController {
     if (!this.rowModel.rows.length) return false;
     if (this.rowReorder && event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
       const id = this.focusedId ?? this.rowModel.getRow(this.#focusedRowIndex())?.nodeId;
-      this.moveRowBy(id, event.key === 'ArrowUp' ? -1 : 1, { source: 'keyboard' });
+      this.moveRowBy(id, event.key === 'ArrowUp' ? -1 : 1, {
+        source: 'keyboard'
+      });
       return true;
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
@@ -873,15 +1308,28 @@ export class TreeViewController {
       this.focusedId = focusedRow?.nodeId ?? this.focusedId;
       this.selection.focused = this.focusedId;
       this.#syncSelectionState();
-      this.events.emit('selectionchange', { selection: this.getSelection(), focusedId: this.focusedId });
+      this.events.emit('selectionchange', {
+        selection: this.getSelection(),
+        focusedId: this.focusedId
+      });
       return true;
     }
     const currentRow = this.#focusedRowIndex();
     let target = currentRow;
     if (event.key === 'ArrowDown') target = Math.min(this.rowModel.rows.length - 1, currentRow + 1);
     else if (event.key === 'ArrowUp') target = Math.max(0, currentRow - 1);
-    else if (event.key === 'PageDown') target = Math.min(this.rowModel.rows.length - 1, currentRow + Math.max(1, Math.floor(this.viewport.rowViewportHeight / this.rowModel.rowHeight) - 1));
-    else if (event.key === 'PageUp') target = Math.max(0, currentRow - Math.max(1, Math.floor(this.viewport.rowViewportHeight / this.rowModel.rowHeight) - 1));
+    else if (event.key === 'PageDown')
+      target = Math.min(
+        this.rowModel.rows.length - 1,
+        currentRow +
+          Math.max(1, Math.floor(this.viewport.rowViewportHeight / this.rowModel.rowHeight) - 1)
+      );
+    else if (event.key === 'PageUp')
+      target = Math.max(
+        0,
+        currentRow -
+          Math.max(1, Math.floor(this.viewport.rowViewportHeight / this.rowModel.rowHeight) - 1)
+      );
     else if (event.key === 'Home') target = 0;
     else if (event.key === 'End') target = this.rowModel.rows.length - 1;
     else if (event.key === 'ArrowRight') {
@@ -896,13 +1344,20 @@ export class TreeViewController {
       if (parentRow) target = parentRow.rowIndex;
     } else if (event.key === 'Enter' || event.key === ' ') {
       const row = this.rowModel.getRow(currentRow);
-      if (row) this.selectRow(row.rowIndex, { ctrlKey: true });
+      if (row)
+        this.selectRow(row.rowIndex, {
+          ctrlKey: true
+        });
       return true;
     } else return false;
 
     const row = this.rowModel.getRow(target);
     if (!row) return false;
-    this.selectRow(target, { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey });
+    this.selectRow(target, {
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey
+    });
     this.viewport.scrollRowIntoView(target, 'nearest');
     this.events.emit('viewportchange', this.getViewportState());
     return true;
@@ -919,23 +1374,37 @@ export class TreeViewController {
   }
 
   render(time = performance.now()) {
+    this.cancelRender();
     this.renderMeasured(time);
   }
 
   renderMeasured(time = performance.now()) {
+    if (this.renderFrame !== null) this.cancelRender();
+    this.flushDynamicState();
     const sceneStart = performance.now();
     this.scene = this.createRenderScene();
     const sceneMs = performance.now() - sceneStart;
     this.renderer.setScene(this.scene);
     const renderStart = performance.now();
     this.renderer.render(this.scene, time);
-    this.actionOverlay?.render(this.scene);
+    this.actionOverlay?.render(this.scene, this.invalidation);
+    this.tooltip?.refresh();
     const renderMs = performance.now() - renderStart;
     this.lastRenderedRows = this.renderer.renderedRows ?? 0;
-    return { scene: this.scene, sceneMs, renderMs, renderedRows: this.lastRenderedRows };
+    this.performanceStats.rendersExecuted++;
+    this.lastPatchCount = 0;
+    this.invalidation.full = false;
+    this.invalidation.dirtyNodeIds.clear();
+    return {
+      scene: this.scene,
+      sceneMs,
+      renderMs,
+      renderedRows: this.lastRenderedRows
+    };
   }
 
   createRenderScene() {
+    this.flushDynamicState();
     const visibleRange = this.rowModel.getVisibleRange(this.viewport, 4);
     return {
       rowDrag: this.rowDrag,
@@ -959,11 +1428,10 @@ export class TreeViewController {
       focusNodeId: this.focusedId,
       searchMatches: this.searchHighlights,
       sort: this.columnModel.sort,
-      sortValues: this.sortValueSnapshot ? Array.from(this.sortValueSnapshot) : null,
       inspectorPaneLabelEnd: this.#computeInspectorPaneLabelEnd(visibleRange),
       filterQuery: this.filterQuery,
       headerFilter: this.headerFilter ?? Boolean(this.inspector?.options?.filter),
-      stats: this.getStats(),
+      stats: this.getStats()
     };
   }
 
@@ -980,12 +1448,46 @@ export class TreeViewController {
     const x = localX + this.viewport.scrollX;
     if (localY < this.viewport.headerHeight) {
       const resizeColumn = this.columnModel.getResizeHandleAt(x);
-      if (resizeColumn) return { area: 'header', part: 'resize', column: resizeColumn, x, y: localY };
+      if (resizeColumn)
+        return {
+          area: 'header',
+          part: 'resize',
+          column: resizeColumn,
+          x,
+          y: localY
+        };
       const column = this.columnModel.getColumnAt(x);
-      if (column && (this.headerFilter ?? Boolean(this.inspector?.options?.filter)) && column === this.columnModel.columns.find(item => item.kind !== 'rowOrder' && item.id !== '__vtc_actions')) {
-        return { area: 'header', part: 'filter', column, x, y: localY };
+      if (
+        column &&
+        (this.headerFilter ?? Boolean(this.inspector?.options?.filter)) &&
+        column ===
+          this.columnModel.columns.find(
+            (item) => item.kind !== 'rowOrder' && item.id !== '__vtc_actions'
+          )
+      ) {
+        return {
+          area: 'header',
+          part: 'filter',
+          column,
+          x,
+          y: localY
+        };
       }
-      return column ? { area: 'header', part: 'label', column, x, y: localY } : { area: 'header', part: 'header', column: null, x, y: localY };
+      return column
+        ? {
+            area: 'header',
+            part: 'label',
+            column,
+            x,
+            y: localY
+          }
+        : {
+            area: 'header',
+            part: 'header',
+            column: null,
+            x,
+            y: localY
+          };
     }
 
     if (localY >= this.viewport.headerHeight + this.viewport.rowViewportHeight) return null;
@@ -994,11 +1496,26 @@ export class TreeViewController {
     const row = this.rowModel.getRow(rowIndex);
     if (!row) return null;
     const column = this.columnModel.getColumnAt(x);
-    if (!column) return { area: 'row', part: 'row', row, column: null, x, y: rowY };
+    if (!column)
+      return {
+        area: 'row',
+        part: 'row',
+        row,
+        column: null,
+        x,
+        y: rowY
+      };
 
     if (column.kind === 'rowOrder') {
       const offset = x - column.x;
-      return { area: 'row', part: offset < 24 ? 'rowDrag' : offset < 48 ? 'rowUp' : 'rowDown', row, column, x, y: rowY };
+      return {
+        area: 'row',
+        part: offset < 24 ? 'rowDrag' : offset < 48 ? 'rowUp' : 'rowDown',
+        row,
+        column,
+        x,
+        y: rowY
+      };
     }
     let part = 'cell';
     if (column.kind === 'inspectorPane') {
@@ -1007,23 +1524,46 @@ export class TreeViewController {
       if (node?.data?.valueType === 'object') {
         const treeX = row.depth * this.rowModel.indentWidth;
         part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
-        return { area: 'row', part, row, column, x, y: rowY };
+        return {
+          area: 'row',
+          part,
+          row,
+          column,
+          x,
+          y: rowY
+        };
       }
       if (node?.data?.valueType === 'array') {
         if (localX >= column.width - 54 && localX <= column.width - 32) part = 'arrayAdd';
         else if (localX >= column.width - 28 && localX <= column.width - 6) part = 'arrayRemove';
         else {
-          const editorLeft = this.getInspectorPaneLayout(this.#visibleInspectorPaneWidth(column), row, node?.data?.editorType).editorLeft;
+          const editorLeft = this.getInspectorPaneLayout(
+            this.#visibleInspectorPaneWidth(column),
+            row,
+            node?.data?.editorType
+          ).editorLeft;
           if (localX >= editorLeft) part = 'editor';
           else {
             const treeX = row.depth * this.rowModel.indentWidth;
             part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
           }
         }
-        return { area: 'row', part, row, column, x, y: rowY };
+        return {
+          area: 'row',
+          part,
+          row,
+          column,
+          x,
+          y: rowY
+        };
       }
-      const layout = this.getInspectorPaneLayout(this.#visibleInspectorPaneWidth(column), row, node?.data?.editorType);
-      if (localX >= layout.editorLeft) part = this.#inspectorEditorPart(row, localX - layout.editorLeft, layout.editorWidth);
+      const layout = this.getInspectorPaneLayout(
+        this.#visibleInspectorPaneWidth(column),
+        row,
+        node?.data?.editorType
+      );
+      if (localX >= layout.editorLeft)
+        part = this.#inspectorEditorPart(row, localX - layout.editorLeft, layout.editorWidth);
       else {
         const treeX = row.depth * this.rowModel.indentWidth;
         if (localX >= treeX + 4 && localX <= treeX + 22) part = 'chevron';
@@ -1031,15 +1571,27 @@ export class TreeViewController {
       }
     } else if (column.kind === 'tree') {
       const localX = x - column.x;
-      const layout = treeCellLayout(row.depth, this.rowModel.indentWidth, this.model.index.childrenByParent.size > 1);
-      if (row.hasChildren && localX >= layout.chevronX - 6 && localX <= layout.chevronX + 12) part = 'chevron';
+      const layout = treeCellLayout(
+        row.depth,
+        this.rowModel.indentWidth,
+        this.model.index.childrenByParent.size > 1
+      );
+      if (row.hasChildren && localX >= layout.chevronX - 6 && localX <= layout.chevronX + 12)
+        part = 'chevron';
       else if (localX >= layout.iconX - 1 && localX <= layout.iconX + 17) part = 'icon';
       else if (localX >= layout.labelX - 2) part = 'label';
       else part = 'cell';
     } else if (column.kind === 'inspectorValue') {
       part = this.#inspectorEditorPart(row, x - column.x, column.width);
     }
-    return { area: 'row', part, row, column, x, y: rowY };
+    return {
+      area: 'row',
+      part,
+      row,
+      column,
+      x,
+      y: rowY
+    };
   }
 
   #inspectorEditorPart(row, localEditorX, editorWidth) {
@@ -1058,33 +1610,62 @@ export class TreeViewController {
   }
 
   #visibleInspectorPaneWidth(column) {
-    return Math.max(1, Math.min(column.width, this.viewport.scrollX + this.viewport.contentViewportWidth - column.x));
+    return Math.max(
+      1,
+      Math.min(column.width, this.viewport.scrollX + this.viewport.contentViewportWidth - column.x)
+    );
   }
 
   getInspectorPaneLayout(width, row = null, editorType = '') {
-    return inspectorPaneLayout(width, row?.depth ?? 0, this.rowModel.indentWidth, editorType, this.#computeInspectorPaneLabelEnd(this.rowModel.getVisibleRange(this.viewport, 4)));
+    return inspectorPaneLayout(
+      width,
+      row?.depth ?? 0,
+      this.rowModel.indentWidth,
+      editorType,
+      this.#computeInspectorPaneLabelEnd(this.rowModel.getVisibleRange(this.viewport, 4))
+    );
   }
 
   getCellClientRect(hit) {
-    if (!hit?.row || !hit.column || !this.canvas) return { x: 0, y: 0, width: 0, height: 0 };
+    if (!hit?.row || !hit.column || !this.canvas)
+      return {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0
+      };
     const rect = this.canvas.getBoundingClientRect();
     return {
       x: rect.left + (this.viewport.renderInsetX ?? 0) + hit.column.x - this.viewport.scrollX,
-      y: rect.top + (this.viewport.renderInsetY ?? 0) + this.viewport.headerHeight + hit.row.y - this.viewport.scrollY,
+      y:
+        rect.top +
+        (this.viewport.renderInsetY ?? 0) +
+        this.viewport.headerHeight +
+        hit.row.y -
+        this.viewport.scrollY,
       width: hit.column.width,
-      height: hit.row.height,
+      height: hit.row.height
     };
   }
 
   getHeaderClientRect(hit) {
-    if (!hit?.column || !this.canvas) return { x: 0, y: 0, width: 0, height: 0 };
+    if (!hit?.column || !this.canvas)
+      return {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0
+      };
     const rect = this.canvas.getBoundingClientRect();
-    const visibleWidth = Math.max(0, this.viewport.contentViewportWidth - Math.max(0, hit.column.x - this.viewport.scrollX));
+    const visibleWidth = Math.max(
+      0,
+      this.viewport.contentViewportWidth - Math.max(0, hit.column.x - this.viewport.scrollX)
+    );
     return {
       x: rect.left + (this.viewport.renderInsetX ?? 0) + hit.column.x - this.viewport.scrollX,
       y: rect.top + (this.viewport.renderInsetY ?? 0),
       width: Math.min(hit.column.width, visibleWidth || hit.column.width),
-      height: this.viewport.headerHeight,
+      height: this.viewport.headerHeight
     };
   }
 
@@ -1104,7 +1685,10 @@ export class TreeViewController {
       if (hit.part === 'label' || hit.part === 'chevron') {
         const labelX = hit.row.depth * this.rowModel.indentWidth + (hit.row.hasChildren ? 28 : 24);
         text = node.label ?? node.id;
-        width = data.valueType === 'object' ? Math.max(0, visibleWidth - labelX - 8) : Math.max(0, layout.editorLeft - labelX - 8);
+        width =
+          data.valueType === 'object'
+            ? Math.max(0, visibleWidth - labelX - 8)
+            : Math.max(0, layout.editorLeft - labelX - 8);
       } else if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove') {
         return null;
       } else {
@@ -1112,7 +1696,11 @@ export class TreeViewController {
         width = Math.max(0, layout.editorWidth - 20);
       }
     } else if (hit.column.kind === 'tree') {
-      const { labelX } = treeCellLayout(hit.row.depth, this.rowModel.indentWidth, this.model.index.childrenByParent.size > 1);
+      const { labelX } = treeCellLayout(
+        hit.row.depth,
+        this.rowModel.indentWidth,
+        this.model.index.childrenByParent.size > 1
+      );
       text = node.label ?? node.id;
       width = Math.max(0, hit.column.width - labelX - 6);
     } else if (hit.column.kind === 'inspectorValue') {
@@ -1126,17 +1714,28 @@ export class TreeViewController {
       width = Math.max(0, hit.column.width - 20);
     } else if (typeof hit.column.value === 'function') {
       const value = hit.column.value(node, state);
-      text = hit.column.format ? hit.column.format(value, node, state) : value == null ? '' : String(value);
+      text = hit.column.format
+        ? hit.column.format(value, node, state)
+        : value == null
+          ? ''
+          : String(value);
       width = Math.max(0, hit.column.width - 20);
     }
 
     text = String(text ?? '');
     if (!text || !isProbablyTruncated(text, width)) return null;
-    return { text, rect, nodeId: node.id, part: hit.part, columnId: hit.column.id };
+    return {
+      text,
+      rect,
+      nodeId: node.id,
+      part: hit.part,
+      columnId: hit.column.id
+    };
   }
 
   resize(width, height) {
-    if (width !== this.viewport.viewportWidth || height !== this.viewport.viewportHeight) this.closeEditor();
+    if (width !== this.viewport.viewportWidth || height !== this.viewport.viewportHeight)
+      this.closeEditor();
     this.viewport.resize(width, height);
     this.#fitInspectorPaneColumn(width);
     this.#syncContentSize();
@@ -1144,6 +1743,7 @@ export class TreeViewController {
   }
 
   getStats() {
+    this.flushDynamicState();
     return {
       totalNodes: this.model.nodes.length,
       visibleRows: this.rowModel.rows.length,
@@ -1152,6 +1752,9 @@ export class TreeViewController {
       dirtyNodes: this.lastDirtyNodeCount,
       selectedCount: this.selection.selected.size,
       rebuildCount: this.rebuildCount,
+      ...this.performanceStats,
+      rowActionsFullUpdates: this.actionOverlay?.fullUpdates ?? 0,
+      rowActionsIncrementalUpdates: this.actionOverlay?.incrementalUpdates ?? 0
     };
   }
 
@@ -1168,8 +1771,26 @@ export class TreeViewController {
       viewportHeight: this.viewport.viewportHeight,
       contentWidth: this.viewport.contentWidth,
       contentHeight: this.viewport.contentHeight,
-      zoom: this.viewport.zoom,
+      zoom: this.viewport.zoom
     };
+  }
+
+  #hasInvalidation() {
+    return this.invalidation.full || this.invalidation.dirtyNodeIds.size > 0;
+  }
+
+  /** @param {Set<string>} ids */
+  #hasVisibleDirtyNode(ids) {
+    const rowIndexById = this.rowModel.rowIndexById;
+    if (!(rowIndexById instanceof Map) || !this.viewport) return true;
+    const range = this.rowModel.getVisibleRange(this.viewport, 4);
+    for (const id of ids) {
+      const index = rowIndexById.get(id);
+      if (index !== undefined && index >= range.first && index <= range.last) return true;
+    }
+    const stickyRows = this.rowReorder ? [] : this.rowModel.getStickyRows(this.viewport);
+    for (const row of stickyRows) if (ids.has(row.nodeId)) return true;
+    return false;
   }
 
   #rebuildRows() {
@@ -1183,17 +1804,25 @@ export class TreeViewController {
 
   #syncContentSize() {
     this.#syncScrollbarState(this.columnModel.contentWidth, this.rowModel.contentHeight);
-    if (this.viewport.viewportWidth > 1) this.#fitInspectorPaneColumn(this.viewport.contentViewportWidth);
+    if (this.viewport.viewportWidth > 1)
+      this.#fitInspectorPaneColumn(this.viewport.contentViewportWidth);
     this.#syncScrollbarState(this.columnModel.contentWidth, this.rowModel.contentHeight);
     this.viewport.setContentSize(this.columnModel.contentWidth, this.rowModel.contentHeight);
   }
 
   #syncSelectionState() {
     for (const [id, state] of this.model.dynamicState) {
-      if (state.selected) this.patchBatcher.set(id, { selected: false });
+      if (state.selected)
+        this.patchBatcher.set(id, {
+          selected: false
+        });
     }
-    for (const id of this.selection.selected) this.patchBatcher.set(id, { selected: true });
+    for (const id of this.selection.selected)
+      this.patchBatcher.set(id, {
+        selected: true
+      });
     this.setDynamicState(this.patchBatcher.flush());
+    this.flushDynamicState();
   }
 
   #focusedRowIndex() {
@@ -1213,7 +1842,10 @@ export class TreeViewController {
       const height = Math.floor(entry?.contentRect?.height ?? 0);
       if (width > 0 && height > 0) {
         this.resize(width, height);
-        if (this.autoRender) { this.cancelRender(); this.render(); }
+        if (this.autoRender) {
+          this.cancelRender();
+          this.render();
+        }
       }
     });
     this.#resizeObserver.observe(this.canvas);
@@ -1221,8 +1853,12 @@ export class TreeViewController {
 
   #resizeToCanvasClientSize() {
     if (!this.canvas) return;
-    const width = Math.floor(this.canvas.clientWidth || this.canvas.getBoundingClientRect().width || 0);
-    const height = Math.floor(this.canvas.clientHeight || this.canvas.getBoundingClientRect().height || 0);
+    const width = Math.floor(
+      this.canvas.clientWidth || this.canvas.getBoundingClientRect().width || 0
+    );
+    const height = Math.floor(
+      this.canvas.clientHeight || this.canvas.getBoundingClientRect().height || 0
+    );
     if (width > 0 && height > 0) this.resize(width, height);
   }
 
@@ -1264,7 +1900,7 @@ export class TreeViewController {
       height: '1px',
       overflowX: 'hidden',
       overflowY: 'auto',
-      zIndex: '4',
+      zIndex: '4'
     });
     Object.assign(horizontal.style, {
       position: 'absolute',
@@ -1274,7 +1910,7 @@ export class TreeViewController {
       height: `${size}px`,
       overflowX: 'auto',
       overflowY: 'hidden',
-      zIndex: '4',
+      zIndex: '4'
     });
     Object.assign(corner.style, {
       position: 'absolute',
@@ -1284,15 +1920,15 @@ export class TreeViewController {
       height: `${size}px`,
       zIndex: '4',
       background: 'transparent',
-      pointerEvents: 'none',
+      pointerEvents: 'none'
     });
     Object.assign(verticalSpacer.style, {
       width: '1px',
-      minHeight: '1px',
+      minHeight: '1px'
     });
     Object.assign(horizontalSpacer.style, {
       height: '1px',
-      minWidth: '1px',
+      minWidth: '1px'
     });
 
     host.appendChild(vertical);
@@ -1340,8 +1976,12 @@ export class TreeViewController {
     };
     const onViewportChange = () => sync();
 
-    vertical.addEventListener('scroll', onVerticalScroll, { passive: true });
-    horizontal.addEventListener('scroll', onHorizontalScroll, { passive: true });
+    vertical.addEventListener('scroll', onVerticalScroll, {
+      passive: true
+    });
+    horizontal.addEventListener('scroll', onHorizontalScroll, {
+      passive: true
+    });
     this.viewport.addEventListener('change', onViewportChange);
     sync();
 
@@ -1356,16 +1996,24 @@ export class TreeViewController {
         horizontal.remove();
         corner.remove();
         this.#nativeScrollbarSize = 0;
-        this.viewport.setScrollbarState({ size: 0, vertical: false, horizontal: false });
+        this.viewport.setScrollbarState({
+          size: 0,
+          vertical: false,
+          horizontal: false
+        });
         if (hostPositionChanged) host.style.position = previousHostPosition;
-      },
+      }
     };
   }
 
   #syncScrollbarState(contentWidth, contentHeight) {
     const size = this.nativeScrollbars ? this.#nativeScrollbarSize : 0;
     if (!size) {
-      this.viewport.setScrollbarState({ size: 0, vertical: false, horizontal: false });
+      this.viewport.setScrollbarState({
+        size: 0,
+        vertical: false,
+        horizontal: false
+      });
       return;
     }
     let availableWidth = this.viewport.viewportWidth;
@@ -1374,16 +2022,45 @@ export class TreeViewController {
     let showX = contentWidth > availableWidth;
     if (showY && contentWidth > Math.max(1, availableWidth - size)) showX = true;
     if (showX && contentHeight > Math.max(1, availableRowHeight - size)) showY = true;
-    this.viewport.setScrollbarState({ size, vertical: showY, horizontal: showX });
+    this.viewport.setScrollbarState({
+      size,
+      vertical: showY,
+      horizontal: showX
+    });
   }
 
   #canvasHostMetrics() {
-    if (!this.canvas) return { left: 0, top: 0, width: this.viewport.viewportWidth, height: this.viewport.viewportHeight };
+    if (!this.canvas)
+      return {
+        left: 0,
+        top: 0,
+        width: this.viewport.viewportWidth,
+        height: this.viewport.viewportHeight
+      };
     const left = Number.isFinite(this.canvas.offsetLeft) ? this.canvas.offsetLeft : 0;
     const top = Number.isFinite(this.canvas.offsetTop) ? this.canvas.offsetTop : 0;
-    const width = Math.max(1, Math.floor(this.canvas.clientWidth || this.canvas.getBoundingClientRect?.().width || this.viewport.viewportWidth));
-    const height = Math.max(1, Math.floor(this.canvas.clientHeight || this.canvas.getBoundingClientRect?.().height || this.viewport.viewportHeight));
-    return { left, top, width, height };
+    const width = Math.max(
+      1,
+      Math.floor(
+        this.canvas.clientWidth ||
+          this.canvas.getBoundingClientRect?.().width ||
+          this.viewport.viewportWidth
+      )
+    );
+    const height = Math.max(
+      1,
+      Math.floor(
+        this.canvas.clientHeight ||
+          this.canvas.getBoundingClientRect?.().height ||
+          this.viewport.viewportHeight
+      )
+    );
+    return {
+      left,
+      top,
+      width,
+      height
+    };
   }
 
   #computeInspectorPaneLabelEnd(visibleRange) {
@@ -1405,9 +2082,13 @@ export class TreeViewController {
   }
 
   #fitInspectorPaneColumn(width) {
-    const columns = this.columnModel.columns.filter(c => !['__vtc_actions', '__vtc_row_order'].includes(c.id));
+    const columns = this.columnModel.columns.filter(
+      (c) => !['__vtc_actions', '__vtc_row_order'].includes(c.id)
+    );
     const column = columns.length === 1 ? columns[0] : null;
-    width -= this.columnModel.columns.filter(c => !columns.includes(c)).reduce((sum, c) => sum + c.width, 0);
+    width -= this.columnModel.columns
+      .filter((c) => !columns.includes(c))
+      .reduce((sum, c) => sum + c.width, 0);
     if (column?.kind !== 'inspectorPane' && column?.kind !== 'tree') return;
     if (column.kind === 'inspectorPane' && this.inspector?.options?.presentation !== 'pane') return;
     const nextWidth = Math.max(column.minWidth, Math.floor(width));
@@ -1422,9 +2103,10 @@ export class TreeViewController {
       rowHeight: this.rowModel.rowHeight,
       indentWidth: this.rowModel.indentWidth,
       sort: this.columnModel.sort,
+      sortValues: this.sortValueSnapshot ? Array.from(this.sortValueSnapshot) : null,
       filterQuery: this.filterQuery,
       filterOptions: this.filterOptions,
-      ...overrides,
+      ...overrides
     };
   }
 
@@ -1441,12 +2123,18 @@ export class TreeViewController {
     const scrollY = this.viewport.scrollY;
     const rowIndex = Math.max(0, Math.floor(scrollY / this.rowModel.rowHeight));
     const row = this.rowModel.getRow(rowIndex);
-    if (!row) return { scrollX, scrollY, nodeId: null, offsetY: 0 };
+    if (!row)
+      return {
+        scrollX,
+        scrollY,
+        nodeId: null,
+        offsetY: 0
+      };
     return {
       scrollX,
       scrollY,
       nodeId: row.nodeId,
-      offsetY: Math.max(0, scrollY - row.y),
+      offsetY: Math.max(0, scrollY - row.y)
     };
   }
 
@@ -1460,7 +2148,11 @@ export class TreeViewController {
     if (!this.inspector) return;
     const expanded = new Set(this.expansion.model.expanded);
     const focusId = focusPath ? `model:${focusPath}` : this.focusedId;
-    const nodes = this.inspector.builder.build(this.inspector.model, this.inspector.meta, this.inspector.options);
+    const nodes = this.inspector.builder.build(
+      this.inspector.model,
+      this.inspector.meta,
+      this.inspector.options
+    );
     this.model.setTree(nodes);
     this.expansion.model.expanded = expanded;
     if (focusId) this.expansion.expandAncestors(focusId);
@@ -1478,7 +2170,8 @@ const NATIVE_SCROLLBAR_STYLE_ID = 'virtual-tree-canvas-native-scrollbar-style';
 
 function ensureNativeScrollbarStyles(doc) {
   if (!doc || typeof doc.createElement !== 'function') return;
-  if (typeof doc.getElementById === 'function' && doc.getElementById(NATIVE_SCROLLBAR_STYLE_ID)) return;
+  if (typeof doc.getElementById === 'function' && doc.getElementById(NATIVE_SCROLLBAR_STYLE_ID))
+    return;
   const style = doc.createElement('style');
   style.id = NATIVE_SCROLLBAR_STYLE_ID;
   style.textContent = `
@@ -1545,7 +2238,11 @@ function ensureNativeScrollbarStyles(doc) {
 function applyNativeScrollbarTheme(elements, theme) {
   const colors = theme?.colors ?? {};
   const track = alphaHex(colors.row ?? colors.background ?? '#0b1020', 0.74);
-  const thumb = mixHex(colors.borderStrong ?? colors.border ?? '#334155', colors.textMuted ?? colors.focus ?? '#94a3b8', 0.55);
+  const thumb = mixHex(
+    colors.borderStrong ?? colors.border ?? '#334155',
+    colors.textMuted ?? colors.focus ?? '#94a3b8',
+    0.55
+  );
   const hover = mixHex(thumb, colors.focus ?? '#38bdf8', 0.32);
   const active = mixHex(thumb, colors.focus ?? '#38bdf8', 0.52);
   const highlight = alphaHex('#ffffff', 0.2);
@@ -1592,7 +2289,7 @@ function nativeScrollbarSize() {
     top: '-9999px',
     width: '100px',
     height: '100px',
-    overflow: 'scroll',
+    overflow: 'scroll'
   });
   document.body?.appendChild(probe);
   const size = Math.max(10, probe.offsetWidth - probe.clientWidth || 14);
@@ -1612,7 +2309,6 @@ function assertNonNegativeNumber(value, name) {
   }
 }
 
-
 function createDefaultArrayItem(meta = {}) {
   if (meta.itemFactory) return meta.itemFactory();
   if (meta.itemType === 'number') return 0;
@@ -1622,14 +2318,19 @@ function createDefaultArrayItem(meta = {}) {
 }
 
 function createSortValueSnapshot(column, nodes, dynamicState) {
-  return new Map(nodes.map((node) => [node.id, column.value(node, dynamicState.get(node.id) ?? {})]));
+  return new Map(
+    nodes.map((node) => [node.id, column.value(node, dynamicState.get(node.id) ?? {})])
+  );
 }
 
 function compareColumnValues(column, a, b, dynamicState, snapshot = null) {
   const aValue = snapshot ? snapshot.get(a.id) : column.value(a, dynamicState.get(a.id) ?? {});
   const bValue = snapshot ? snapshot.get(b.id) : column.value(b, dynamicState.get(b.id) ?? {});
   if (typeof aValue === 'number' && typeof bValue === 'number') return aValue - bValue;
-  return String(aValue ?? '').localeCompare(String(bValue ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+  return String(aValue ?? '').localeCompare(String(bValue ?? ''), undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  });
 }
 
 function matchesFilter(node, state, path, query, options = {}) {
@@ -1642,18 +2343,12 @@ function matchesFilter(node, state, path, query, options = {}) {
         node.data?.key,
         node.data?.valueText,
         node.data?.meta?.description,
-        ...Object.keys(node.data?.meta?.options ?? {}),
+        ...Object.keys(node.data?.meta?.options ?? {})
       ]
-    : [
-        node.id,
-        node.label,
-        node.type,
-        path,
-        ...(node.tags ?? []),
-        state.status,
-        state.value,
-      ];
-  return values.some((value) => matchesSearch(normalizeFilterValue(value, options), query, options.wholeWord));
+    : [node.id, node.label, node.type, path, ...(node.tags ?? []), state.status, state.value];
+  return values.some((value) =>
+    matchesSearch(normalizeFilterValue(value, options), query, options.wholeWord)
+  );
 }
 
 function normalizeFilterValue(value, options = {}) {
@@ -1694,11 +2389,22 @@ function now() {
 
 function resolveNodeIcons(nodes, resolver) {
   if (!resolver) return nodes;
-  return nodes.map(node => {
+  return nodes.map((node) => {
     const visual = resolver(node);
-    if (typeof visual === 'string') return { ...node, icon: visual };
+    if (typeof visual === 'string')
+      return {
+        ...node,
+        icon: visual
+      };
     if (!visual || typeof visual !== 'object') return node;
-    if ((visual.id !== undefined && visual.id !== node.id) || (visual.parentId !== undefined && visual.parentId !== node.parentId)) throw new TypeError('iconResolver cannot change node identity or parent');
-    return { ...node, ...visual };
+    if (
+      (visual.id !== undefined && visual.id !== node.id) ||
+      (visual.parentId !== undefined && visual.parentId !== node.parentId)
+    )
+      throw new TypeError('iconResolver cannot change node identity or parent');
+    return {
+      ...node,
+      ...visual
+    };
   });
 }

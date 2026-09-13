@@ -3,7 +3,8 @@ export const darkTheme = {
   indentWidth: 18,
   font: '12px Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   unitFont: '11px ui-monospace, SFMono-Regular, Consolas, monospace',
-  monoFont: '12px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace',
+  monoFont:
+    '12px "JetBrains Mono", "Cascadia Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace',
   colors: {
     background: '#0a0f1c',
     row: '#0a0f1c',
@@ -30,46 +31,146 @@ export const darkTheme = {
     badgeText: '#ffffff',
     border: '#1b2637',
     borderStrong: '#2b3b52',
-    shadow: 'rgba(0,0,0,.24)',
+    shadow: 'rgba(0,0,0,.24)'
   },
-  valueColors: { number: '#8bd5ee', bigint: '#8bd5ee', string: '#dde5ef', boolean: '#86d6b5', enum: '#c4b5fd', null: '#9aa9bc', undefined: '#9aa9bc' },
+  valueColors: {
+    number: '#8bd5ee',
+    bigint: '#8bd5ee',
+    string: '#dde5ef',
+    boolean: '#86d6b5',
+    enum: '#c4b5fd',
+    null: '#9aa9bc',
+    undefined: '#9aa9bc'
+  },
   types: {
-    root: { icon: 'folder', color: '#38bdf8' },
-    system: { icon: 'folder', color: '#818cf8' },
-    platform: { icon: 'aircraft', color: '#60a5fa' },
-    air: { icon: 'aircraft', color: '#60a5fa' },
-    ground: { icon: 'ground', color: '#a3e635' },
-    surface: { icon: 'surface', color: '#22d3ee' },
-    subsurface: { icon: 'subsurface', color: '#38bdf8' },
-    space: { icon: 'space', color: '#c084fc' },
-    munition: { icon: 'munition', color: '#fb7185' },
-    sensor: { icon: 'radar', color: '#34d399' },
-    track: { icon: 'track', color: '#a78bfa' },
-    geometry: { icon: 'point', color: '#38bdf8' },
-    control: { icon: 'control', color: '#f59e0b' },
-    situation: { icon: 'situation', color: '#2dd4bf' },
-    damage: { icon: 'damage', color: '#fb7185' },
-    warning: { icon: 'warning', color: '#facc15' },
-    error: { icon: 'error', color: '#ef4444' },
-    task: { icon: 'task', color: '#f97316' },
-    bus: { icon: 'data-bus', color: '#22d3ee' },
-    object: { icon: 'inspector-object', color: '#7dd3fc' },
-    array: { icon: 'inspector-array', color: '#a78bfa' },
-    string: { icon: 'inspector-value', color: '#94a3b8' },
-    number: { icon: 'inspector-value', color: '#34d399' },
-    boolean: { icon: 'inspector-value', color: '#22c55e' },
-    null: { icon: 'inspector-value', color: '#64748b' },
+    root: {
+      icon: 'folder',
+      color: '#38bdf8'
+    },
+    system: {
+      icon: 'folder',
+      color: '#818cf8'
+    },
+    platform: {
+      icon: 'aircraft',
+      color: '#60a5fa'
+    },
+    air: {
+      icon: 'aircraft',
+      color: '#60a5fa'
+    },
+    ground: {
+      icon: 'ground',
+      color: '#a3e635'
+    },
+    surface: {
+      icon: 'surface',
+      color: '#22d3ee'
+    },
+    subsurface: {
+      icon: 'subsurface',
+      color: '#38bdf8'
+    },
+    space: {
+      icon: 'space',
+      color: '#c084fc'
+    },
+    munition: {
+      icon: 'munition',
+      color: '#fb7185'
+    },
+    sensor: {
+      icon: 'radar',
+      color: '#34d399'
+    },
+    track: {
+      icon: 'track',
+      color: '#a78bfa'
+    },
+    geometry: {
+      icon: 'point',
+      color: '#38bdf8'
+    },
+    control: {
+      icon: 'control',
+      color: '#f59e0b'
+    },
+    situation: {
+      icon: 'situation',
+      color: '#2dd4bf'
+    },
+    damage: {
+      icon: 'damage',
+      color: '#fb7185'
+    },
+    warning: {
+      icon: 'warning',
+      color: '#facc15'
+    },
+    error: {
+      icon: 'error',
+      color: '#ef4444'
+    },
+    task: {
+      icon: 'task',
+      color: '#f97316'
+    },
+    bus: {
+      icon: 'data-bus',
+      color: '#22d3ee'
+    },
+    object: {
+      icon: 'inspector-object',
+      color: '#7dd3fc'
+    },
+    array: {
+      icon: 'inspector-array',
+      color: '#a78bfa'
+    },
+    string: {
+      icon: 'inspector-value',
+      color: '#94a3b8'
+    },
+    number: {
+      icon: 'inspector-value',
+      color: '#34d399'
+    },
+    boolean: {
+      icon: 'inspector-value',
+      color: '#22c55e'
+    },
+    null: {
+      icon: 'inspector-value',
+      color: '#64748b'
+    }
   },
   statuses: {
-    0: { label: 'OK', color: '#22c55e' },
-    1: { label: 'WARN', color: '#facc15' },
-    2: { label: 'ERR', color: '#ef4444' },
-  },
+    0: {
+      label: 'OK',
+      color: '#22c55e'
+    },
+    1: {
+      label: 'WARN',
+      color: '#facc15'
+    },
+    2: {
+      label: 'ERR',
+      color: '#ef4444'
+    }
+  }
 };
 
 export const lightTheme = {
   ...darkTheme,
-  valueColors: { number: '#075985', bigint: '#075985', string: '#182438', boolean: '#176249', enum: '#6b3fa0', null: '#576579', undefined: '#576579' },
+  valueColors: {
+    number: '#075985',
+    bigint: '#075985',
+    string: '#182438',
+    boolean: '#176249',
+    enum: '#6b3fa0',
+    null: '#576579',
+    undefined: '#576579'
+  },
   colors: {
     background: '#f8fafc',
     row: '#ffffff',
@@ -96,8 +197,8 @@ export const lightTheme = {
     badgeFill: '#e2e8f0',
     border: '#e2e8f0',
     borderStrong: '#cbd5e1',
-    shadow: 'rgba(15,23,42,.1)',
-  },
+    shadow: 'rgba(15,23,42,.1)'
+  }
 };
 
 export const tacticalTheme = {
@@ -125,34 +226,85 @@ export const tacticalTheme = {
     badgeFill: '#102217',
     border: '#183321',
     borderStrong: '#295337',
-    shadow: 'rgba(0,0,0,.3)',
+    shadow: 'rgba(0,0,0,.3)'
   },
   types: {
     ...darkTheme.types,
-    root: { icon: 'folder', color: '#7ddc92' },
-    platform: { icon: 'aircraft', color: '#93c572' },
-    air: { icon: 'aircraft', color: '#93c572' },
-    ground: { icon: 'ground', color: '#c7f36f' },
-    surface: { icon: 'surface', color: '#67e8f9' },
-    subsurface: { icon: 'subsurface', color: '#7dd3fc' },
-    space: { icon: 'space', color: '#d8b4fe' },
-    munition: { icon: 'munition', color: '#ff8fab' },
-    sensor: { icon: 'radar', color: '#45d483' },
-    track: { icon: 'track', color: '#d6f264' },
-    geometry: { icon: 'point', color: '#7ddc92' },
-    control: { icon: 'control', color: '#ffd166' },
-    situation: { icon: 'situation', color: '#8be9d9' },
-    damage: { icon: 'damage', color: '#ff8fab' },
-    warning: { icon: 'warning', color: '#ffd166' },
-    error: { icon: 'error', color: '#ff5c5c' },
-    bus: { icon: 'data-bus', color: '#67e8f9' },
-  },
+    root: {
+      icon: 'folder',
+      color: '#7ddc92'
+    },
+    platform: {
+      icon: 'aircraft',
+      color: '#93c572'
+    },
+    air: {
+      icon: 'aircraft',
+      color: '#93c572'
+    },
+    ground: {
+      icon: 'ground',
+      color: '#c7f36f'
+    },
+    surface: {
+      icon: 'surface',
+      color: '#67e8f9'
+    },
+    subsurface: {
+      icon: 'subsurface',
+      color: '#7dd3fc'
+    },
+    space: {
+      icon: 'space',
+      color: '#d8b4fe'
+    },
+    munition: {
+      icon: 'munition',
+      color: '#ff8fab'
+    },
+    sensor: {
+      icon: 'radar',
+      color: '#45d483'
+    },
+    track: {
+      icon: 'track',
+      color: '#d6f264'
+    },
+    geometry: {
+      icon: 'point',
+      color: '#7ddc92'
+    },
+    control: {
+      icon: 'control',
+      color: '#ffd166'
+    },
+    situation: {
+      icon: 'situation',
+      color: '#8be9d9'
+    },
+    damage: {
+      icon: 'damage',
+      color: '#ff8fab'
+    },
+    warning: {
+      icon: 'warning',
+      color: '#ffd166'
+    },
+    error: {
+      icon: 'error',
+      color: '#ff5c5c'
+    },
+    bus: {
+      icon: 'data-bus',
+      color: '#67e8f9'
+    }
+  }
 };
 
 export const themes = {
   dark: darkTheme,
   light: lightTheme,
-  tactical: tacticalTheme,
+  tactical: tacticalTheme
 };
 
 export class ThemeManager extends EventTarget {
@@ -170,7 +322,10 @@ export class ThemeManager extends EventTarget {
     return this.theme;
   }
 
-  /** @param {import('./types.js').TreeNode} node @param {import('./types.js').NodeDynamicState} state */
+  /**
+   * @param {import('./types.js').TreeNode} node
+   * @param {import('./types.js').NodeDynamicState} state
+   */
   resolveNodeStyle(node, state = {}) {
     const typeRule = this.theme.types[node?.type ?? ''] ?? {};
     const statusRule = this.resolveStatus(state.status);
@@ -180,14 +335,20 @@ export class ThemeManager extends EventTarget {
       typeColor: typeRule.color ?? this.theme.colors.progressFill,
       status: statusRule,
       font: this.theme.font,
-      colors: this.theme.colors,
+      colors: this.theme.colors
     };
   }
 
   resolveStatus(status) {
     const key = status ?? 0;
-    return this.theme.statuses[key] ?? { label: String(key), color: this.theme.colors.textMuted };
+    return (
+      this.theme.statuses[key] ?? {
+        label: String(key),
+        color: this.theme.colors.textMuted
+      }
+    );
   }
+
 }
 
 export function resolveTheme(theme = {}) {
@@ -195,7 +356,8 @@ export function resolveTheme(theme = {}) {
     if (!Object.hasOwn(themes, theme)) throw new TypeError(`Unknown virtual tree theme: ${theme}`);
     return themes[theme];
   }
-  if (!theme || typeof theme !== 'object' || Array.isArray(theme)) throw new TypeError('theme must be a theme name or object');
+  if (!theme || typeof theme !== 'object' || Array.isArray(theme))
+    throw new TypeError('theme must be a theme name or object');
   return theme;
 }
 
@@ -221,7 +383,7 @@ function normalizeTheme(theme = {}) {
     indentGuide: base.colors.guide,
     chevron: base.colors.chevron,
     chevronMuted: base.colors.textMuted,
-    progress: base.colors.progressFill,
+    progress: base.colors.progressFill
   };
 }
 
@@ -229,9 +391,21 @@ function mergeTheme(base, override) {
   return {
     ...base,
     ...override,
-    colors: { ...base.colors, ...(override.colors ?? {}) },
-    valueColors: { ...base.valueColors, ...(override.valueColors ?? {}) },
-    types: { ...base.types, ...(override.types ?? {}) },
-    statuses: { ...base.statuses, ...(override.statuses ?? {}) },
+    colors: {
+      ...base.colors,
+      ...(override.colors ?? {})
+    },
+    valueColors: {
+      ...base.valueColors,
+      ...(override.valueColors ?? {})
+    },
+    types: {
+      ...base.types,
+      ...(override.types ?? {})
+    },
+    statuses: {
+      ...base.statuses,
+      ...(override.statuses ?? {})
+    }
   };
 }

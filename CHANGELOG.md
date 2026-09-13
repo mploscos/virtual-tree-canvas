@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1
+
+- Coalesce dynamic state patches by node until the next frame and ignore repeated values.
+- Skip Canvas2D renders for dynamic changes outside the visible/overscan and sticky rows.
+- Incrementally synchronize RowActions for dirty visible rows without redundant DOM or icon writes.
+- Avoid copying active sort snapshots into every render scene; serialize them only for worker calls.
+- Add dynamic-update counters, regression coverage, and a 10,000-node browser benchmark.
+- Keep an open truncated-value tooltip visible and refresh its text across live state/data updates while the pointer remains on the same cell.
+
 ## 0.7.0 — 2026-09-10
 
 ### Added

@@ -24,6 +24,10 @@ export class PatchBatcher {
     return patches;
   }
 
+  clear() {
+    this.pending.clear();
+  }
+
   get size() {
     return this.pending.size;
   }

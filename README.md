@@ -130,6 +130,14 @@ tree.setDynamicState([
 ]);
 ```
 
+Calls made before the next animation frame are coalesced by node ID and property
+(the last value wins). Repeated values and changes wholly outside the current
+viewport/overscan do not repaint. `render()`, `createRenderScene()`, sorting,
+filtering, TreeView configuration flushes, inspector writes, search and selection
+operations apply pending patches before they read dynamic state. The controller's
+`flushDynamicState()` method is also available when an integration needs an
+explicit synchronous boundary.
+
 `setData()`, expand/collapse, sorting and filtering are structural operations
 and may rebuild the visible row list. For very large datasets,
 `enableWorkers()` moves search and filtered row rebuilds off the main thread
@@ -384,7 +392,10 @@ Open [the reorder demo](./examples/reorder-table.html) through a local HTTP serv
 
 ## Icon catalogue
 
-65 SVGs are included, with a [visual sheet](./docs/icon-catalog.html) and a [reference of available icons](./docs/icon-catalog.md). `builtinIconNames` exposes available IDs.
+65 SVGs are included, with a
+[rendered visual sheet](https://htmlpreview.github.io/?https://github.com/mploscos/virtual-tree-canvas/blob/main/docs/icon-catalog.html), and a
+[reference of available icons](./docs/icon-catalog.md). `builtinIconNames`
+exposes available IDs.
 
 ## Row actions and data dragging
 
