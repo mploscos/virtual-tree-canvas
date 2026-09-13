@@ -456,6 +456,42 @@ export async function runViewContract(create) {
     await wait();
     same(a.root.querySelector('[data-action]'), null, 'removed actions');
   });
+  await check('async action icons repaint without scrolling', async (a) => {
+    const c = a.widget.controller;
+    c.registerIcon(
+      'async-action-test',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="currentColor"/></svg>'
+    );
+    a.configure({
+      mode: 'inspector',
+      model: { first: 1, second: 2 },
+      rowReorder: false,
+      rowActions: [
+        {
+          id: 'favorite',
+          label: 'Favorite',
+          icon: () => 'async-action-test'
+        }
+      ]
+    });
+    for (
+      let index = 0;
+      index < 30 && c.iconRegistry.get('async-action-test').rasters.size === 0;
+      index++
+    ) {
+      await wait();
+    }
+    await wait();
+    const icon = a.root.querySelector(
+      '[data-node-id="model:first"][data-action="favorite"] canvas'
+    );
+    const pixels = icon.getContext('2d').getImageData(0, 0, icon.width, icon.height).data;
+    same(
+      pixels.some((channel, index) => index % 4 === 3 && channel > 0),
+      true,
+      'initially visible async icon is repainted once decoded'
+    );
+  });
   await check(
     'right-side actions include partial rows and checkboxes share the value column',
     async (a) => {

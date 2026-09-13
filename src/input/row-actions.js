@@ -13,6 +13,12 @@ export class RowActions {
     this.incrementalUpdates = 0;
     this.themeToken = 0;
     this.theme = null;
+    this.stopIconListener = this.controller.iconRegistry.onChange?.(() => {
+      for (const button of this.buttons.values()) {
+        if (button._vtcKind !== 'checkbox') button.firstChild._vtcDrawKey = null;
+      }
+      this.controller.requestRender(true);
+    }) ?? null;
     this.element = controller.canvas.ownerDocument.createElement('div');
     Object.assign(this.element.style, {
       position: 'absolute', overflow: 'hidden', pointerEvents: 'none', zIndex: '2'
@@ -215,6 +221,8 @@ export class RowActions {
   }
 
   destroy() {
+    this.stopIconListener?.();
+    this.stopIconListener = null;
     this.element.remove();
     this.buttons.clear();
     this.buttonsByNodeId.clear();

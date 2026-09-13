@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2 — 2026-09-13
+
+### Fixed
+
+- Repaint initially visible row-action icons when their asynchronous SVG raster finishes loading.
+
 ## 0.7.1
 
 - Coalesce dynamic state patches by node until the next frame and ignore repeated values.
