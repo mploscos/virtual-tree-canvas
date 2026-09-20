@@ -328,7 +328,16 @@ export interface RowDragDetail {
   nodeId: string;
   payload: any;
   label: string;
+  /** Draggable selected rows captured when the pointer gesture starts. */
+  items: RowDragItem[];
+  nodeIds: string[];
+  count: number;
   originalEvent: PointerEvent;
+}
+export interface RowDragItem {
+  nodeId: string;
+  payload: any;
+  label: string;
 }
 export interface TreeViewEvents {
   rowaction: {checked?: boolean; actionId: string; nodeId: string; node: TreeNode; originalEvent: MouseEvent};

@@ -430,12 +430,18 @@ value updates preserve their identity and focus.
 
 `rowDrag(node, dynamicState)` returns a payload, or `null` to disable dragging
 that row. Drag from a row label or the row-order handle. Editors, checkboxes,
-action buttons and expand/collapse controls retain their normal behavior.
+action buttons and expand/collapse controls retain their normal behavior. When
+the source row belongs to a multi-selection, all selected draggable rows take
+part in the gesture. Starting on an unselected row selects and drags only that
+row. A small count badge identifies multi-row drags.
 
 The controller emits `rowdragstart`, `rowdragmove`, `rowdragend` and
-`rowdragcancel`. Details contain `nodeId`, `payload`, `label` and, except on
-cancellation, `originalEvent` with client coordinates. Connect these events to
-your application's drop manager to highlight destinations and handle the drop.
+`rowdragcancel`. The backward-compatible `nodeId`, `payload` and `label` fields
+describe the source row. `items`, `nodeIds` and `count` describe the complete
+drag selection; every item contains its row's `nodeId`, `payload` and `label`.
+Rows whose `rowDrag` resolver returns `null` are omitted. Except on cancellation,
+`originalEvent` provides client coordinates. Connect these events to your
+application's drop manager to highlight destinations and handle the drop.
 The payload is captured at pointer-down; use a stable reference instead of a
 snapshot of a live value. The library never moves or deletes exported data.
 

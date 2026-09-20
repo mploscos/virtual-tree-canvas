@@ -766,6 +766,7 @@ export async function runViewContract(create) {
     for (const type of ['rowdragstart', 'rowdragmove', 'rowdragend', 'rowdragcancel'])
       c.on(type, (e) => events.push(e));
     c.sortBy('name', 'desc');
+    c.setSelection(['b', 'c']);
     await wait();
     const box = c.canvas.getBoundingClientRect(),
       x = box.left + 125,
@@ -784,6 +785,9 @@ export async function runViewContract(create) {
       button: 'left',
       buttons: 1
     });
+    const dragBadge = document.querySelector('.vtc-row-drag-badge');
+    same(dragBadge?.hidden, false, 'multi-row drag badge visible');
+    same(dragBadge?.textContent, '×2', 'multi-row drag badge count');
     await window.testMouse({
       type: 'mouseReleased',
       x: x + 30,
@@ -803,8 +807,11 @@ export async function runViewContract(create) {
       },
       'sorted row payload'
     );
+    same(events[0].detail.nodeIds, ['b', 'c'], 'selected drag row ids');
+    same(events[0].detail.count, 2, 'selected drag row count');
+    same(dragBadge?.hidden, true, 'multi-row drag badge hidden after drop');
     same(a.widget.getRowOrder(), ['a', 'b', 'c'], 'manual order unchanged');
-    same(a.widget.getSelection(), [], 'drag does not generate a click');
+    same(a.widget.getSelection(), ['b', 'c'], 'drag preserves the active selection');
     await window.testMouse({
       type: 'mousePressed',
       x,

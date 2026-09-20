@@ -234,6 +234,57 @@ test('pointer drag has a threshold and changes order only on a valid drop', () =
   }
 });
 
+test('external drag captures draggable selected rows and preserves source fields', () => {
+  const { controller, view, canvas, input } = inputFixture();
+  controller.setRowReorder(false);
+  controller.setRowDrag((node) => (node.id === 'c' ? null : { reference: node.id }));
+  controller.setSelection(['a', 'b', 'c']);
+  const events = [];
+  for (const type of ['rowdragstart', 'rowdragmove', 'rowdragend'])
+    controller.on(type, (event) => events.push(event));
+  try {
+    canvas.dispatchEvent(pointer('pointerdown', 125, 40));
+    view.dispatchEvent(pointer('pointermove', 131, 40));
+    view.dispatchEvent(pointer('pointerup', 131, 40));
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ['rowdragstart', 'rowdragmove', 'rowdragend']
+    );
+    assert.equal(events[0].detail.nodeId, 'a');
+    assert.deepEqual(events[0].detail.payload, { reference: 'a' });
+    assert.deepEqual(events[0].detail.nodeIds, ['a', 'b']);
+    assert.equal(events[0].detail.count, 2);
+    assert.deepEqual(events[0].detail.items, [
+      { nodeId: 'a', payload: { reference: 'a' }, label: 'a' },
+      { nodeId: 'b', payload: { reference: 'b' }, label: 'b' }
+    ]);
+    assert.deepEqual(controller.getSelection(), ['a', 'b', 'c']);
+  } finally {
+    input.destroy();
+  }
+});
+
+test('external drag on an unselected row replaces the selection when dragging starts', () => {
+  const { controller, view, canvas, input } = inputFixture();
+  controller.setRowReorder(false);
+  controller.setRowDrag((node) => node.id);
+  controller.setSelection(['b', 'c']);
+  const events = [];
+  controller.on('rowdragstart', (event) => events.push(event.detail));
+  try {
+    canvas.dispatchEvent(pointer('pointerdown', 125, 40));
+    view.dispatchEvent(pointer('pointermove', 128, 40));
+    assert.deepEqual(controller.getSelection(), ['b', 'c']);
+    view.dispatchEvent(pointer('pointermove', 131, 40));
+    assert.deepEqual(controller.getSelection(), ['a']);
+    assert.deepEqual(events[0].nodeIds, ['a']);
+    assert.equal(events[0].count, 1);
+    view.dispatchEvent(pointer('pointerup', 131, 40));
+  } finally {
+    input.destroy();
+  }
+});
+
 test('pointer cancellation, Escape and dropping outside leave the order unchanged', () => {
   for (const cancel of ['pointercancel', 'Escape', 'outside', 'filter']) {
     const { controller, view, canvas, input } = inputFixture();

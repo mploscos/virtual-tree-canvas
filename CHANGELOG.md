@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- External row dragging now includes every draggable row in the active selection through `items`, `nodeIds` and `count`, with a count badge for multi-row gestures.
+
+### Changed
+
+- Starting a drag on an unselected row selects and drags only that row, matching common multi-selection behavior.
+
 ## 0.7.2 — 2026-09-13
 
 ### Fixed
