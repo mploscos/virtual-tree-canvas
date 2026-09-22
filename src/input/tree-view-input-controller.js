@@ -45,9 +45,14 @@ export class TreeViewInputController {
   }
 
   #onWheel = (event) => {
-    event.preventDefault();
     this.cellEditor?.close?.();
+    const { scrollX, scrollY } = this.controller.viewport;
     this.controller.scrollBy(event.shiftKey ? event.deltaY : event.deltaX, event.deltaY);
+    // Let the browser chain the wheel event to a scrollable ancestor when the
+    // tree has no room to move in the requested direction. This is essential
+    // for trees embedded in an accordion or other scrolling panel.
+    if (this.controller.viewport.scrollX !== scrollX || this.controller.viewport.scrollY !== scrollY)
+      event.preventDefault();
   };
 
   #onMouseMove = (event) => {

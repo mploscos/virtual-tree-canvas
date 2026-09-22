@@ -94,6 +94,39 @@ test('scrollToNode supports alignment modes', () => {
   assert.equal(controller.viewport.scrollY, 5 * 20 + 20 - 32);
 });
 
+test('wheel events bubble to a scrolling parent when the tree cannot scroll', () => {
+  const controller = createController();
+  const canvas = new EventTarget();
+  canvas.tabIndex = -1;
+  canvas.ownerDocument = {
+    defaultView: new EventTarget()
+  };
+  controller.canvas = canvas;
+  const input = new TreeViewInputController({ controller });
+  const wheel = (deltaY) => {
+    const event = new Event('wheel', { cancelable: true });
+    Object.defineProperty(event, 'deltaX', { value: 0 });
+    Object.defineProperty(event, 'deltaY', { value: deltaY });
+    Object.defineProperty(event, 'shiftKey', { value: false });
+    return event;
+  };
+
+  const down = wheel(10);
+  canvas.dispatchEvent(down);
+  assert.equal(down.defaultPrevented, true, 'tree consumes the wheel while it can scroll');
+
+  controller.scrollTo(0, Number.POSITIVE_INFINITY);
+  const atBottom = wheel(10);
+  canvas.dispatchEvent(atBottom);
+  assert.equal(atBottom.defaultPrevented, false, 'wheel is available to the parent at the bottom');
+
+  controller.scrollTo(0, 0);
+  const atTop = wheel(-10);
+  canvas.dispatchEvent(atTop);
+  assert.equal(atTop.defaultPrevented, false, 'wheel is available to the parent at the top');
+  input.destroy();
+});
+
 test('structural changes above the viewport preserve the visible row anchor', () => {
   const controller = createController();
   controller.expand('b');
