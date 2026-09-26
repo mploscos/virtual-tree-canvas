@@ -48,7 +48,8 @@ export class TreeView {
       tooltip: true,
       iconsBaseUrl: options.iconsBaseUrl,
       iconRegistry: options.iconRegistry,
-      nativeScrollbars: options.nativeScrollbars
+      nativeScrollbars: options.nativeScrollbars,
+      scrollChaining: options.scrollChaining ?? treeViewDefaults.scrollChaining
     });
     this.filterBar = new TreeFilterBar(this._controller, this.document);
     this.element.insertBefore(this.filterBar.element, this.canvasHost);
@@ -120,6 +121,7 @@ export class TreeView {
       if (changed('rowActions')) controller.setRowActions(next.rowActions);
       if (changed('rowDrag')) controller.setRowDrag(next.rowDrag);
       if (changed('rowReorder')) controller.setRowReorder(next.rowReorder);
+      if (changed('scrollChaining')) controller.scrollChaining = next.scrollChaining;
       if (replaceData) {
         if (next.mode === 'tree')
           controller.setData(next.nodes ?? [], {

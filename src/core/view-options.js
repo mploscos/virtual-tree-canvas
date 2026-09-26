@@ -20,6 +20,7 @@ export const treeViewDefaults = Object.freeze({
   rowActions: Object.freeze([]),
   rowDrag: null,
   rowReorder: false,
+  scrollChaining: false,
   initialExpandDepth: 1,
   rowHeight: undefined,
   indentWidth: undefined,
@@ -101,6 +102,7 @@ export function validateTreeViewOptions(options) {
         'markUpdated',
         'editable',
         'rowReorder',
+        'scrollChaining',
         'showHeader'
       ].includes(key) &&
       typeof value !== 'boolean'

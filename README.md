@@ -71,6 +71,8 @@ explicitly reinstall data even when the same mutated reference is supplied.
   `undefined` to resume theme defaults. `initialExpandDepth` applies to future
   data installations; it does not expand or collapse the current tree.
 - `fontFamily: 'inherit'` follows the host font and refreshes after fonts load.
+- `scrollChaining: false` (default) keeps wheel scrolling inside the tree at its
+  edges. Set it to `true` to let a scrollable ancestor continue scrolling.
 - `iconsBaseUrl`, `iconRegistry` and `nativeScrollbars` are construction options.
 - `setInspectorValue(path, value, {emit: false})` updates a value without emitting
   `valuechange` or `modelchange`. Normal writes include `source: 'api'`; editor

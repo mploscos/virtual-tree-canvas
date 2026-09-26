@@ -1,4 +1,5 @@
 import { drawCheckbox } from '../renderers/checkbox.js';
+import { ROW_ACTION_SLOT_WIDTH } from '../core/row-action-layout.js';
 
 /** Accessible buttons for visible rows. Actions and their meaning belong to the host. */
 export class RowActions {
@@ -152,7 +153,7 @@ export class RowActions {
     setAttribute(button, 'aria-pressed', pressed === null ? null : String(pressed));
     const disabled = Boolean(resolve(action.disabled, node, state));
     setProperty(button, 'disabled', disabled);
-    setStyle(button, 'left', `${index * 28 + 1}px`);
+    setStyle(button, 'left', `${index * ROW_ACTION_SLOT_WIDTH + 1}px`);
     setStyle(button, 'top', `${y + 1}px`);
     setStyle(button, 'height', `${row.height - 2}px`);
     setStyle(button, 'clipPath', sticky ? 'none' : `inset(${Math.max(0, stickyBottom - y - 1)}px 0 0)`);

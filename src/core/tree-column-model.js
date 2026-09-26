@@ -1,3 +1,5 @@
+import { ROW_ACTION_SLOT_WIDTH } from './row-action-layout.js';
+
 export const builtInColumns = {
   tree: {
     id: 'name',
@@ -108,8 +110,8 @@ export class TreeColumnModel {
             id: '__vtc_actions',
             label: '',
             kind: 'text',
-            width: count * 28,
-            minWidth: count * 28,
+            width: count * ROW_ACTION_SLOT_WIDTH,
+            minWidth: count * ROW_ACTION_SLOT_WIDTH,
             sortable: false,
             resizable: false,
             value: () => ''

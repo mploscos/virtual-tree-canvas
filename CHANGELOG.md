@@ -2,12 +2,21 @@
 
 ## Unreleased
 
+### Changed
+
+- Wheel scrolling no longer chains to ancestor containers at tree edges by default. Set `scrollChaining: true` to opt in.
+- Wheel input over row-action controls such as favorite stars now scrolls the tree and follows its scroll-chaining policy.
+
+## 0.7.5 — 2026-09-25
+
 ### Added
 
 - External row dragging now includes every draggable row in the active selection through `items`, `nodeIds` and `count`, with a count badge for multi-row gestures.
 
 ### Changed
 
+- Range editors now keep the slider at a useful width and let the numeric input fill the remaining space before its unit and row actions.
+- Pane inspector rows reclaim leading row-action slots whose actions are hidden, allowing inputs and units to extend up to the first visible action without overlapping it.
 - Starting a drag on an unselected row selects and drags only that row, matching common multi-selection behavior.
 
 ## 0.7.2 — 2026-09-13

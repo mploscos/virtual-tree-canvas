@@ -32,6 +32,7 @@ import {
 import { TreeViewInputController } from './input/tree-view-input-controller.js';
 import { TreeRowRenderer } from './renderers/index.js';
 import { mergeDynamicStateChanged } from './core/dynamic-state.js';
+import { leadingHiddenRowActionWidth } from './core/row-action-layout.js';
 
 export class TreeViewController {
   constructor(options = {}) {
@@ -65,6 +66,7 @@ export class TreeViewController {
     this.columnModel.setRowActions(this.rowActions.length);
     this.rowReorder = Boolean(options.rowReorder);
     this.columnModel.setRowReorder(this.rowReorder);
+    this.scrollChaining = Boolean(options.scrollChaining);
     this.rowDrop = null;
     this.autoRender = Boolean(options.autoRender);
     this.renderFrame = null;
@@ -1420,6 +1422,7 @@ export class TreeViewController {
       theme: this.themeManager.get(),
       nodes: this.model.nodes,
       dynamicState: this.model.dynamicState,
+      rowActions: this.rowActions,
       selection: this.selection.selected,
       hoverNodeId: this.hoverId,
       hoverPart: this.hoverPart,
@@ -1495,7 +1498,14 @@ export class TreeViewController {
     const rowIndex = Math.floor(rowY / this.rowModel.rowHeight);
     const row = this.rowModel.getRow(rowIndex);
     if (!row) return null;
-    const column = this.columnModel.getColumnAt(x);
+    let column = this.columnModel.getColumnAt(x);
+    const paneColumn = this.columnModel.columns.find((item) => item.kind === 'inspectorPane');
+    if (
+      column?.id === '__vtc_actions' &&
+      paneColumn &&
+      x < paneColumn.x + this.#visibleInspectorPaneWidth(paneColumn, row)
+    )
+      column = paneColumn;
     if (!column)
       return {
         area: 'row',
@@ -1521,6 +1531,7 @@ export class TreeViewController {
     if (column.kind === 'inspectorPane') {
       const localX = x - column.x;
       const node = this.model.nodes[row.nodeIndex];
+      const paneWidth = this.#visibleInspectorPaneWidth(column, row);
       if (node?.data?.valueType === 'object') {
         const treeX = row.depth * this.rowModel.indentWidth;
         part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
@@ -1534,11 +1545,11 @@ export class TreeViewController {
         };
       }
       if (node?.data?.valueType === 'array') {
-        if (localX >= column.width - 54 && localX <= column.width - 32) part = 'arrayAdd';
-        else if (localX >= column.width - 28 && localX <= column.width - 6) part = 'arrayRemove';
+        if (localX >= paneWidth - 54 && localX <= paneWidth - 32) part = 'arrayAdd';
+        else if (localX >= paneWidth - 28 && localX <= paneWidth - 6) part = 'arrayRemove';
         else {
           const editorLeft = this.getInspectorPaneLayout(
-            this.#visibleInspectorPaneWidth(column),
+            paneWidth,
             row,
             node?.data?.editorType
           ).editorLeft;
@@ -1558,7 +1569,7 @@ export class TreeViewController {
         };
       }
       const layout = this.getInspectorPaneLayout(
-        this.#visibleInspectorPaneWidth(column),
+        paneWidth,
         row,
         node?.data?.editorType
       );
@@ -1609,11 +1620,21 @@ export class TreeViewController {
     return 'editor';
   }
 
-  #visibleInspectorPaneWidth(column) {
+  #visibleInspectorPaneWidth(column, row = null) {
+    const extension = row ? this.#leadingHiddenRowActionWidth(row) : 0;
     return Math.max(
       1,
-      Math.min(column.width, this.viewport.scrollX + this.viewport.contentViewportWidth - column.x)
+      Math.min(
+        column.width + extension,
+        this.viewport.scrollX + this.viewport.contentViewportWidth - column.x
+      )
     );
+  }
+
+  #leadingHiddenRowActionWidth(row) {
+    const node = row ? this.model.nodes[row.nodeIndex] : null;
+    const state = node ? this.model.dynamicState.get(node.id) ?? {} : {};
+    return node ? leadingHiddenRowActionWidth(this.rowActions, node, state) : 0;
   }
 
   getInspectorPaneLayout(width, row = null, editorType = '') {
@@ -1643,7 +1664,10 @@ export class TreeViewController {
         this.viewport.headerHeight +
         hit.row.y -
         this.viewport.scrollY,
-      width: hit.column.width,
+      width:
+        hit.column.kind === 'inspectorPane'
+          ? this.#visibleInspectorPaneWidth(hit.column, hit.row)
+          : hit.column.width,
       height: hit.row.height
     };
   }
@@ -1680,7 +1704,7 @@ export class TreeViewController {
 
     if (hit.column.kind === 'inspectorPane') {
       const data = node.data ?? {};
-      const visibleWidth = this.#visibleInspectorPaneWidth(hit.column);
+      const visibleWidth = this.#visibleInspectorPaneWidth(hit.column, hit.row);
       const layout = this.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
       if (hit.part === 'label' || hit.part === 'chevron') {
         const labelX = hit.row.depth * this.rowModel.indentWidth + (hit.row.hasChildren ? 28 : 24);

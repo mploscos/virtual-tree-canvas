@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getAtPath, inspectorColumns, inspectorPaneColumns, ModelInspectorBuilder, setAtPath, TreeViewController } from '../src/index.js';
+import { numericLayout } from '../src/inspector/numeric-layout.js';
 
 test('model inspector builder creates path-based nodes with wildcard metadata', () => {
   const model = { sensor: { range: 10 }, tracks: [{ speed: 5 }] };
@@ -314,6 +315,56 @@ test('range unit has a separate hit area in pane and table presentations', () =>
     const x = column.x + column.width - 15;
     assert.equal(controller.hitTest(x, 14).part, 'unit', presentation);
     assert.equal(controller.hitTest(x - 50, 14).part, 'number', presentation);
-    assert.equal(controller.hitTest(x - 120, 14).part, 'range', presentation);
+    assert.ok(
+      Array.from({ length: column.width }, (_, offset) =>
+        controller.hitTest(column.x + offset, 14)?.part
+      ).includes('range'),
+      presentation
+    );
   }
+});
+
+test('range numeric input grows into the space before its unit', () => {
+  const data = { value: 38.123, meta: { min: -180, max: 180, unit: '°' } };
+  const compact = numericLayout(280, data);
+  const wide = numericLayout(360, data);
+
+  assert.ok(compact.valueWidth > 64, 'compact layouts no longer cap the input at 64px');
+  assert.ok(wide.valueWidth > compact.valueWidth, 'extra width is assigned to the input');
+  assert.equal(wide.barWidth, compact.barWidth, 'the slider stops growing after its useful width');
+  assert.equal(wide.barWidth, 72);
+  assert.equal(wide.numberLeft + wide.valueWidth, wide.contentWidth);
+  assert.equal(wide.unitLeft, wide.contentWidth + 6);
+});
+
+test('pane inspector reclaims leading action slots hidden for a row', () => {
+  const controller = new TreeViewController({ rowHeight: 28, headerHeight: 0, initialExpandDepth: 2 });
+  controller.resize(400, 200);
+  controller.setRowActions([
+    {
+      id: 'dashboard',
+      label: 'Show in dashboard',
+      visible: (node) => node.data?.path === ''
+    },
+    {
+      id: 'favorite',
+      label: 'Toggle favorite',
+      visible: (node) => node.data?.path !== ''
+    }
+  ]);
+  controller.setModel(
+    { speed: 50 },
+    { speed: { min: 0, max: 100, unit: 'm/s' } },
+    { presentation: 'pane' }
+  );
+
+  const pane = controller.columnModel.columns.find((column) => column.kind === 'inspectorPane');
+  const reclaimedX = pane.x + pane.width + 10;
+  const rootHit = controller.hitTest(reclaimedX, 14);
+  const propertyHit = controller.hitTest(reclaimedX, 42);
+  const favoriteSlotHit = controller.hitTest(pane.x + pane.width + 28, 42);
+
+  assert.equal(rootHit.column.id, '__vtc_actions', 'visible first action keeps its slot');
+  assert.equal(propertyHit.column.kind, 'inspectorPane', 'hidden first action returns its slot');
+  assert.equal(favoriteSlotHit.column.id, '__vtc_actions', 'first visible action stays reserved');
 });

@@ -27,6 +27,8 @@ export interface TreeViewOptions {
   iconsBaseUrl?: string | URL;
   iconRegistry?: IconRegistry;
   rowReorder?: boolean;
+  /** Allow wheel scrolling to continue in an ancestor when the tree reaches an edge. Defaults to false. */
+  scrollChaining?: boolean;
   rowActions?: RowAction[];
   rowDrag?: RowDragResolver;
   autoRender?: boolean;
@@ -255,6 +257,8 @@ export interface TreeViewConfiguration {
   markUpdated?: boolean;
   editable?: boolean;
   rowReorder?: boolean;
+  /** Allow wheel scrolling to continue in an ancestor when the tree reaches an edge. Defaults to false. */
+  scrollChaining?: boolean;
   rowActions?: RowAction[];
   rowDrag?: RowDragResolver;
   initialExpandDepth?: number;

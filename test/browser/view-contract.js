@@ -291,6 +291,74 @@ export async function runViewContract(create) {
     same(a.widget.getRowOrder(), ['b', 'c', 'a'], 'order after changing icons');
     same(a.widget.controller.model.index.getNode('a').icon, 'person', 'icon resolver');
   });
+  await check('wheel scrolling stays in the tree unless chaining is enabled', async (a) => {
+    const scroller = document.createElement('div');
+    scroller.style.cssText = 'width:920px;height:120px;overflow:auto';
+    a.root.before(scroller);
+    scroller.append(a.root);
+    await wait();
+    const box = a.widget.controller.canvas.getBoundingClientRect();
+    const wheelDown = () =>
+      window.testMouse({
+        type: 'mouseWheel',
+        x: box.left + box.width / 2,
+        y: box.top + Math.min(80, box.height / 2),
+        deltaX: 0,
+        deltaY: 120
+      });
+
+    await wheelDown();
+    await wait();
+    same(scroller.scrollTop, 0, 'default wheel does not scroll the parent');
+
+    a.configure({ scrollChaining: true });
+    await wait();
+    await wheelDown();
+    await wait();
+    same(scroller.scrollTop > 0, true, 'enabled chaining scrolls the parent at the tree edge');
+  });
+  await check('wheel scrolling over row actions uses the tree scroll path', async (a) => {
+    const scroller = document.createElement('div');
+    scroller.style.cssText = 'width:920px;height:120px;overflow:auto';
+    a.root.before(scroller);
+    scroller.append(a.root);
+    a.configure({
+      rowReorder: false,
+      nodes: Array.from({ length: 40 }, (_, index) => ({
+        id: `row-${index}`,
+        label: `Row ${index}`
+      })),
+      rowActions: [{ id: 'favorite', label: 'Favorite', icon: 'star' }]
+    });
+    await wait();
+    const wheelOverAction = () => {
+      const box = a.root.querySelector('.vtc-row-action').getBoundingClientRect();
+      return window.testMouse({
+        type: 'mouseWheel',
+        x: box.left + box.width / 2,
+        y: box.top + box.height / 2,
+        deltaX: 0,
+        deltaY: 120
+      });
+    };
+
+    await wheelOverAction();
+    await wait();
+    same(a.widget.controller.viewport.scrollY > 0, true, 'action area scrolls the tree');
+    same(scroller.scrollTop, 0, 'action area retains wheel scrolling in the tree');
+
+    a.widget.controller.scrollTo(0, Number.POSITIVE_INFINITY);
+    await wait();
+    await wheelOverAction();
+    await wait();
+    same(scroller.scrollTop, 0, 'action area retains wheel scrolling at the tree edge');
+
+    a.configure({ scrollChaining: true });
+    await wait();
+    await wheelOverAction();
+    await wait();
+    same(scroller.scrollTop > 0, true, 'action area honors enabled scroll chaining');
+  });
   await check('real pointer dragging and keyboard ordering use the mounted canvas', async (a) => {
     await wait();
     const w = a.widget,
@@ -540,6 +608,59 @@ export async function runViewContract(create) {
       );
     }
   );
+  await check('pane ranges reclaim hidden leading action slots', async (a) => {
+    a.root.style.width = '404px';
+    a.configure({
+      mode: 'inspector',
+      presentation: 'pane',
+      showHeader: false,
+      initialExpandDepth: 3,
+      rowReorder: false,
+      rowActions: [
+        {
+          id: 'dashboard',
+          label: 'Show in dashboard',
+          kind: 'checkbox',
+          visible: (node) => node.data?.path === ''
+        },
+        {
+          id: 'favorite',
+          label: 'Toggle favorite',
+          icon: 'star',
+          visible: (node) => node.data?.path !== ''
+        }
+      ]
+    });
+    a.widget.setModel(
+      { surface: { azimuthToTrack: 14.5 } },
+      { 'surface.azimuthToTrack': { min: -180, max: 180, unit: '°' } }
+    );
+    await wait();
+
+    const c = a.widget.controller;
+    const row = c.rowModel.rows.find(
+      (candidate) => c.model.nodes[candidate.nodeIndex].data?.path === 'surface.azimuthToTrack'
+    );
+    const pane = c.columnModel.columns.find((column) => column.kind === 'inspectorPane');
+    const y = c.viewport.headerHeight + row.y - c.viewport.scrollY + row.height / 2;
+    const parts = Array.from({ length: c.viewport.contentViewportWidth }, (_, x) => ({
+      x,
+      part: c.hitTest(x, y)?.part
+    }));
+    const numberXs = parts.filter(({ part }) => part === 'number').map(({ x }) => x);
+
+    same(
+      c.hitTest(pane.x + pane.width + 10, y)?.column?.kind,
+      'inspectorPane',
+      'hidden dashboard slot is reclaimed'
+    );
+    same(numberXs.length > 80, true, 'numeric input receives the reclaimed width');
+    same(
+      c.hitTest(pane.x + pane.width + 28, y)?.column?.id,
+      '__vtc_actions',
+      'favorite slot remains reserved'
+    );
+  });
   await check('row actions update only dirty rows and retain focus', async (a) => {
     const evaluatedRows = [];
     a.configure({

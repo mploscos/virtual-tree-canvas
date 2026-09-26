@@ -32,6 +32,15 @@ test('visual configuration preserves row order, selection, live values and custo
   assert.equal(controller.initialExpandDepth, 0);
 });
 
+test('scroll chaining is disabled by default and remains configurable', () => {
+  const view = viewFixture();
+  assert.equal(view.controller.scrollChaining, false);
+  view.configure({ scrollChaining: true });
+  assert.equal(view.controller.scrollChaining, true);
+  view.configure({ scrollChaining: false });
+  assert.equal(view.controller.scrollChaining, false);
+});
+
 test('theme applies once, explicit dimensions win and can be reset to theme defaults', () => {
   const view = viewFixture(), controller = view.controller;
   let calls = 0;
@@ -80,6 +89,7 @@ test('invalid configuration is rejected before applying any option', () => {
   assert.throws(() => view.configure({ editable: false, theme: 'missing' }), /Unknown/);
   assert.equal(view.controller.editable, true);
   assert.throws(() => view.configure({ rowHeight: -1 }), /positive/);
+  assert.throws(() => view.configure({ scrollChaining: 'yes' }), /boolean/);
   assert.throws(() => view.configure({ mode: 'invalid' }), /mode/);
   assert.throws(() => view.setModel(undefined), /undefined/);
 });

@@ -1,5 +1,7 @@
 export class TreeViewInputController {
 
+  #wheelTargets;
+
   /**
    * @param {{
    *   controller: import('../tree-view-controller.js').TreeViewController,
@@ -18,9 +20,9 @@ export class TreeViewInputController {
     this.cellEditor = options.cellEditor ?? null;
     this.canvas.tabIndex = 0;
 
-    this.canvas.addEventListener('wheel', this.#onWheel, {
-      passive: false
-    });
+    this.#wheelTargets = [this.canvas, this.controller.actionOverlay?.element].filter(Boolean);
+    for (const target of this.#wheelTargets)
+      target.addEventListener('wheel', this.#onWheel, { passive: false });
     this.canvas.addEventListener('mousedown', this.#onMouseDown);
     this.canvas.addEventListener('mousemove', this.#onMouseMove);
     (this.canvas.ownerDocument.defaultView ?? window).addEventListener('mouseup', this.#onMouseUp);
@@ -31,7 +33,7 @@ export class TreeViewInputController {
   }
 
   destroy() {
-    this.canvas.removeEventListener('wheel', this.#onWheel);
+    for (const target of this.#wheelTargets) target.removeEventListener('wheel', this.#onWheel);
     this.canvas.removeEventListener('mousedown', this.#onMouseDown);
     this.canvas.removeEventListener('mousemove', this.#onMouseMove);
     (this.canvas.ownerDocument.defaultView ?? window).removeEventListener(
@@ -48,10 +50,9 @@ export class TreeViewInputController {
     this.cellEditor?.close?.();
     const { scrollX, scrollY } = this.controller.viewport;
     this.controller.scrollBy(event.shiftKey ? event.deltaY : event.deltaX, event.deltaY);
-    // Let the browser chain the wheel event to a scrollable ancestor when the
-    // tree has no room to move in the requested direction. This is essential
-    // for trees embedded in an accordion or other scrolling panel.
-    if (this.controller.viewport.scrollX !== scrollX || this.controller.viewport.scrollY !== scrollY)
+    const moved =
+      this.controller.viewport.scrollX !== scrollX || this.controller.viewport.scrollY !== scrollY;
+    if (!this.controller.scrollChaining || moved)
       event.preventDefault();
   };
 

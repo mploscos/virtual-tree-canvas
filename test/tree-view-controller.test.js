@@ -46,10 +46,11 @@ const nodes = [
   }
 ];
 
-function createController() {
+function createController(options = {}) {
   const controller = new TreeViewController({
     initialExpandDepth: 1,
-    rowHeight: 20
+    rowHeight: 20,
+    ...options
   });
   controller.resize(200, 60);
   controller.setData(nodes);
@@ -94,38 +95,66 @@ test('scrollToNode supports alignment modes', () => {
   assert.equal(controller.viewport.scrollY, 5 * 20 + 20 - 32);
 });
 
-test('wheel events bubble to a scrolling parent when the tree cannot scroll', () => {
-  const controller = createController();
+test('wheel events stay inside the tree by default', () => {
+  const controller = createWheelController();
+  const { canvas } = controller;
+  const input = new TreeViewInputController({ controller });
+
+  const down = wheelEvent(10);
+  canvas.dispatchEvent(down);
+  assert.equal(down.defaultPrevented, true, 'tree consumes the wheel while it can scroll');
+
+  controller.scrollTo(0, Number.POSITIVE_INFINITY);
+  const atBottom = wheelEvent(10);
+  canvas.dispatchEvent(atBottom);
+  assert.equal(atBottom.defaultPrevented, true, 'tree retains the wheel at the bottom');
+
+  controller.scrollTo(0, 0);
+  const atTop = wheelEvent(-10);
+  canvas.dispatchEvent(atTop);
+  assert.equal(atTop.defaultPrevented, true, 'tree retains the wheel at the top');
+  input.destroy();
+});
+
+test('scroll chaining can be enabled for tree edges', () => {
+  const controller = createWheelController({ scrollChaining: true });
+  const { canvas } = controller;
+  const input = new TreeViewInputController({ controller });
+
+  const down = wheelEvent(10);
+  canvas.dispatchEvent(down);
+  assert.equal(down.defaultPrevented, true, 'tree consumes the wheel while it can scroll');
+
+  controller.scrollTo(0, Number.POSITIVE_INFINITY);
+  const atBottom = wheelEvent(10);
+  canvas.dispatchEvent(atBottom);
+  assert.equal(atBottom.defaultPrevented, false, 'wheel is available to the parent at the bottom');
+
+  controller.scrollTo(0, 0);
+  const atTop = wheelEvent(-10);
+  canvas.dispatchEvent(atTop);
+  assert.equal(atTop.defaultPrevented, false, 'wheel is available to the parent at the top');
+  input.destroy();
+});
+
+function createWheelController(options = {}) {
+  const controller = createController(options);
   const canvas = new EventTarget();
   canvas.tabIndex = -1;
   canvas.ownerDocument = {
     defaultView: new EventTarget()
   };
   controller.canvas = canvas;
-  const input = new TreeViewInputController({ controller });
-  const wheel = (deltaY) => {
-    const event = new Event('wheel', { cancelable: true });
-    Object.defineProperty(event, 'deltaX', { value: 0 });
-    Object.defineProperty(event, 'deltaY', { value: deltaY });
-    Object.defineProperty(event, 'shiftKey', { value: false });
-    return event;
-  };
+  return controller;
+}
 
-  const down = wheel(10);
-  canvas.dispatchEvent(down);
-  assert.equal(down.defaultPrevented, true, 'tree consumes the wheel while it can scroll');
-
-  controller.scrollTo(0, Number.POSITIVE_INFINITY);
-  const atBottom = wheel(10);
-  canvas.dispatchEvent(atBottom);
-  assert.equal(atBottom.defaultPrevented, false, 'wheel is available to the parent at the bottom');
-
-  controller.scrollTo(0, 0);
-  const atTop = wheel(-10);
-  canvas.dispatchEvent(atTop);
-  assert.equal(atTop.defaultPrevented, false, 'wheel is available to the parent at the top');
-  input.destroy();
-});
+function wheelEvent(deltaY) {
+  const event = new Event('wheel', { cancelable: true });
+  Object.defineProperty(event, 'deltaX', { value: 0 });
+  Object.defineProperty(event, 'deltaY', { value: deltaY });
+  Object.defineProperty(event, 'shiftKey', { value: false });
+  return event;
+}
 
 test('structural changes above the viewport preserve the visible row anchor', () => {
   const controller = createController();

@@ -4,6 +4,7 @@ import { formatInspectorValue } from '../inspector/editor-resolver.js';
 import { inspectorPaneLayout } from '../inspector/pane-layout.js';
 import { numericLayout } from '../inspector/numeric-layout.js';
 import { IconRegistry } from '../core/icon-registry.js';
+import { leadingHiddenRowActionWidth } from '../core/row-action-layout.js';
 
 const DISABLED_ALPHA = 0.72;
 
@@ -270,6 +271,7 @@ export class TreeRowRenderer {
       columns,
       nodes,
       dynamicState,
+      rowActions = [],
       selection,
       hoverNodeId,
       hoverPart,
@@ -291,6 +293,10 @@ export class TreeRowRenderer {
     const y = row.y;
     const visibleX = viewport.scrollX;
     const visibleWidth = viewport.contentViewportWidth ?? viewport.viewportWidth;
+    const pane = columns.find((column) => column.kind === 'inspectorPane');
+    const paneExtension = pane
+      ? leadingHiddenRowActionWidth(rowActions, node, state)
+      : 0;
 
     const background = selected
       ? colors.rowSelected
@@ -305,10 +311,11 @@ export class TreeRowRenderer {
     this.#drawIndentGuides(ctx, row, colors);
 
     for (const column of columns) {
+      if (pane && column.id === '__vtc_actions') continue;
       const rect = {
         x: column.x,
         y,
-        width: column.width,
+        width: column.width + (column === pane ? paneExtension : 0),
         height: row.height
       };
       this.#drawCell(ctx, {
@@ -326,18 +333,19 @@ export class TreeRowRenderer {
       });
       ctx.strokeStyle = colors.border;
       ctx.beginPath();
-      ctx.moveTo(column.x + column.width + 0.5, y);
-      ctx.lineTo(column.x + column.width + 0.5, y + row.height);
+      ctx.moveTo(rect.x + rect.width + 0.5, y);
+      ctx.lineTo(rect.x + rect.width + 0.5, y + row.height);
       ctx.stroke();
     }
 
     const actions = columns.find((column) => column.id === '__vtc_actions');
     if (actions) {
+      const actionMaskWidth = Math.max(0, actions.width - paneExtension);
       ctx.fillStyle = background;
       ctx.fillRect(
-        visibleX + Math.max(0, visibleWidth - actions.width),
+        visibleX + Math.max(0, visibleWidth - actionMaskWidth),
         y,
-        actions.width,
+        actionMaskWidth,
         row.height
       );
     }
@@ -698,10 +706,9 @@ export class TreeRowRenderer {
     const max = meta.max ?? 100;
     const value = typeof data.value === 'number' ? data.value : min;
     const ratio = max === min ? 0 : clamp01((value - min) / (max - min));
-    const { valueWidth, barWidth } = numericLayout(width);
-    const gap = 8;
+    const { valueWidth, barWidth, rangeGap } = numericLayout(width);
     this.#drawMeterBar(ctx, x, y + 0.5, barWidth, 7, ratio, theme.colors.progressFill, theme);
-    this.#drawControlSurface(ctx, x + barWidth + gap, y - 6, valueWidth, 20, theme, {
+    this.#drawControlSurface(ctx, x + barWidth + rangeGap, y - 6, valueWidth, 20, theme, {
       hovered: Boolean(state.hoveredNumber),
       active: Boolean(state.activeNumber)
     });
@@ -711,7 +718,7 @@ export class TreeRowRenderer {
     drawTruncatedText(
       ctx,
       String(data.valueText ?? ''),
-      x + barWidth + gap + valueWidth - 6,
+      x + barWidth + rangeGap + valueWidth - 6,
       y + 4,
       valueWidth - 10
     );
