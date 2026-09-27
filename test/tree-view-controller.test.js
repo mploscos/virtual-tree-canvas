@@ -116,6 +116,18 @@ test('wheel events stay inside the tree by default', () => {
   input.destroy();
 });
 
+test('wheel events remain available to ancestors when the tree has no scrollbar', () => {
+  const controller = createWheelController();
+  controller.resize(200, 200);
+  const { canvas } = controller;
+  const input = new TreeViewInputController({ controller });
+
+  const down = wheelEvent(10);
+  canvas.dispatchEvent(down);
+  assert.equal(down.defaultPrevented, false, 'a tree without overflow leaves the wheel available');
+  input.destroy();
+});
+
 test('scroll chaining can be enabled for tree edges', () => {
   const controller = createWheelController({ scrollChaining: true });
   const { canvas } = controller;

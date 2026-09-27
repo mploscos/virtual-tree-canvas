@@ -296,6 +296,12 @@ export async function runViewContract(create) {
     scroller.style.cssText = 'width:920px;height:120px;overflow:auto';
     a.root.before(scroller);
     scroller.append(a.root);
+    a.configure({
+      nodes: Array.from({ length: 40 }, (_, index) => ({
+        id: `scroll-row-${index}`,
+        label: `Row ${index}`
+      }))
+    });
     await wait();
     const box = a.widget.controller.canvas.getBoundingClientRect();
     const wheelDown = () =>
@@ -311,11 +317,23 @@ export async function runViewContract(create) {
     await wait();
     same(scroller.scrollTop, 0, 'default wheel does not scroll the parent');
 
+    a.widget.controller.scrollTo(0, Number.POSITIVE_INFINITY);
     a.configure({ scrollChaining: true });
     await wait();
     await wheelDown();
     await wait();
     same(scroller.scrollTop > 0, true, 'enabled chaining scrolls the parent at the tree edge');
+
+    a.configure({
+      scrollChaining: false,
+      nodes: [{ id: 'only-row', label: 'Only row' }]
+    });
+    scroller.scrollTop = 0;
+    await wait();
+    await wheelDown();
+    await wait();
+    same(a.widget.controller.viewport.scrollY, 0, 'tree without overflow does not scroll');
+    same(scroller.scrollTop > 0, true, 'tree without overflow leaves the wheel to its parent');
   });
   await check('wheel scrolling over row actions uses the tree scroll path', async (a) => {
     const scroller = document.createElement('div');

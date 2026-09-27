@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+## 0.7.6 — 2026-09-27
+
 ### Changed
 
-- Wheel scrolling no longer chains to ancestor containers at tree edges by default. Set `scrollChaining: true` to opt in.
-- Wheel input over row-action controls such as favorite stars now scrolls the tree and follows its scroll-chaining policy.
+- Wheel scrolling stays within a scrollable tree by default, including at its edges, while trees without overflow leave scrolling to an ancestor. Set `scrollChaining: true` to let an ancestor continue scrolling at tree edges.
+
+### Fixed
+
+- Wheel input over row actions such as favorite stars now scrolls the tree and follows its scroll-chaining policy.
 
 ## 0.7.5 — 2026-09-25
 

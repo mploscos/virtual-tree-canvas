@@ -48,11 +48,16 @@ export class TreeViewInputController {
 
   #onWheel = (event) => {
     this.cellEditor?.close?.();
-    const { scrollX, scrollY } = this.controller.viewport;
-    this.controller.scrollBy(event.shiftKey ? event.deltaY : event.deltaX, event.deltaY);
+    const viewport = this.controller.viewport;
+    const { scrollX, scrollY } = viewport;
+    const deltaX = event.shiftKey ? event.deltaY : event.deltaX;
+    this.controller.scrollBy(deltaX, event.deltaY);
     const moved =
-      this.controller.viewport.scrollX !== scrollX || this.controller.viewport.scrollY !== scrollY;
-    if (!this.controller.scrollChaining || moved)
+      viewport.scrollX !== scrollX || viewport.scrollY !== scrollY;
+    const hasScrollableAxis =
+      (deltaX !== 0 && viewport.contentWidth > viewport.contentViewportWidth) ||
+      (event.deltaY !== 0 && viewport.contentHeight > viewport.rowViewportHeight);
+    if (hasScrollableAxis && (!this.controller.scrollChaining || moved))
       event.preventDefault();
   };
 
