@@ -357,7 +357,20 @@ export interface TreeViewEvents {
   focuschange: {nodeId: string | null};
   filterchange: {query: string; options: {caseSensitive: boolean; wholeWord: boolean}; visibleRows: number; worker?: boolean};
   searchchange: Omit<TreeSearchState, 'count'>;
-  nodeclick: {nodeId: string; row: any; originalEvent: any};
+  nodeclick: {
+    nodeId: string;
+    row: any;
+    part: string | null;
+    columnId: string | null;
+    originalEvent: any;
+  };
+  nodecontextmenu: {
+    nodeId: string;
+    row: any;
+    part: string | null;
+    columnId: string | null;
+    originalEvent: any;
+  };
   nodedblclick: {nodeId: string; row: any; originalEvent: any};
   editablechange: {editable: boolean};
   rowreorderchange: {enabled: boolean};

@@ -963,11 +963,18 @@ export class TreeViewController {
 
   collapse(nodeId) {
     const row = this.rowModel.getRowById(nodeId);
+    const sticky = this.rowReorder
+      ? null
+      : this.rowModel.getStickyRows(this.viewport).find((candidate) => candidate.nodeId === nodeId);
+    const viewportY = sticky?.stickyY ?? (row ? row.y - this.viewport.scrollY : null);
     const shouldCollapseFilterBranch = Boolean(this.filterQuery && row?.expanded);
     const changed = this.expansion.collapse(nodeId);
     if (shouldCollapseFilterBranch) this.rowModel.collapseFilterBranch(nodeId);
     if (!changed && !shouldCollapseFilterBranch) return false;
     this.#rebuildRows();
+    const collapsed = viewportY === null ? null : this.rowModel.getRowById(nodeId);
+    if (collapsed)
+      this.scrollTo(this.viewport.scrollX, collapsed.y - viewportY);
     this.events.emit('collapse', {
       nodeId,
       filter: shouldCollapseFilterBranch
@@ -1249,6 +1256,8 @@ export class TreeViewController {
     this.events.emit('nodeclick', {
       nodeId,
       row,
+      part: event.part ?? null,
+      columnId: event.columnId ?? null,
       originalEvent: event
     });
   }
@@ -1261,6 +1270,18 @@ export class TreeViewController {
       nodeId,
       row,
       originalEvent: event
+    });
+  }
+
+  contextMenuNode(nodeId, event = {}) {
+    const row = this.rowModel.getRowById(nodeId);
+    if (!row) return;
+    this.events.emit('nodecontextmenu', {
+      nodeId,
+      row,
+      part: event.part ?? null,
+      columnId: event.columnId ?? null,
+      originalEvent: event.originalEvent ?? event
     });
   }
 
@@ -1494,9 +1515,17 @@ export class TreeViewController {
     }
 
     if (localY >= this.viewport.headerHeight + this.viewport.rowViewportHeight) return null;
-    const rowY = localY - this.viewport.headerHeight + this.viewport.scrollY;
+    const viewportY = localY - this.viewport.headerHeight;
+    const stickyRow = this.rowReorder
+      ? null
+      : this.rowModel
+          .getStickyRows(this.viewport)
+          .findLast((candidate) =>
+            viewportY >= candidate.stickyY && viewportY < candidate.stickyY + candidate.height
+          );
+    const rowY = stickyRow?.y ?? viewportY + this.viewport.scrollY;
     const rowIndex = Math.floor(rowY / this.rowModel.rowHeight);
-    const row = this.rowModel.getRow(rowIndex);
+    const row = stickyRow ?? this.rowModel.getRow(rowIndex);
     if (!row) return null;
     let column = this.columnModel.getColumnAt(x);
     const paneColumn = this.columnModel.columns.find((item) => item.kind === 'inspectorPane');

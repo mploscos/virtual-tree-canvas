@@ -1070,8 +1070,10 @@ export async function runViewContract(create) {
     'units, precision, silent writes and user events work without host effects',
     async (a) => {
       const w = a.widget,
-        events = [];
+        events = [],
+        nodeClicks = [];
       const stop = a.subscribe('valuechange', (e) => events.push(e.detail));
+      const stopClicks = a.subscribe('nodeclick', (e) => nodeClicks.push(e.detail));
       for (const presentation of ['pane', 'table']) {
         a.configure({
           presentation,
@@ -1098,6 +1100,14 @@ export async function runViewContract(create) {
         const column = c.columnModel.columns.find((col) =>
           ['inspectorPane', 'inspectorValue'].includes(col.kind)
         );
+        const canvasRect = c.canvas.getBoundingClientRect();
+        c.canvas.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          clientX: canvasRect.left + column.x + column.width - 12,
+          clientY: canvasRect.top + c.viewport.headerHeight + c.rowModel.rowHeight / 2
+        }));
+        same(nodeClicks.at(-1).part, 'unit', 'unit click part');
+        same(nodeClicks.at(-1).columnId, column.id, 'unit click column');
         const hit = c.hitTest(
           column.x + column.width - 60,
           c.viewport.headerHeight + c.rowModel.rowHeight / 2
@@ -1134,6 +1144,7 @@ export async function runViewContract(create) {
       }
       same(events.length, 2, 'one value event per edit');
       stop();
+      stopClicks();
     }
   );
   await check('header filter works in readonly tables and remains open while typing', async (a) => {

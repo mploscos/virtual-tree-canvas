@@ -28,6 +28,7 @@ export class TreeViewInputController {
     (this.canvas.ownerDocument.defaultView ?? window).addEventListener('mouseup', this.#onMouseUp);
     this.canvas.addEventListener('mouseleave', this.#onMouseLeave);
     this.canvas.addEventListener('click', this.#onClick);
+    this.canvas.addEventListener('contextmenu', this.#onContextMenu);
     this.canvas.addEventListener('dblclick', this.#onDoubleClick);
     this.canvas.addEventListener('keydown', this.#onKeyDown);
   }
@@ -42,6 +43,7 @@ export class TreeViewInputController {
     );
     this.canvas.removeEventListener('mouseleave', this.#onMouseLeave);
     this.canvas.removeEventListener('click', this.#onClick);
+    this.canvas.removeEventListener('contextmenu', this.#onContextMenu);
     this.canvas.removeEventListener('dblclick', this.#onDoubleClick);
     this.canvas.removeEventListener('keydown', this.#onKeyDown);
   }
@@ -116,13 +118,25 @@ export class TreeViewInputController {
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
-      multi: this.canvas.dataset.multi === 'true'
+      multi: this.canvas.dataset.multi === 'true',
+      part: hit.part,
+      columnId: hit.column?.id ?? null
     });
   };
 
   #onDoubleClick = (event) => {
     const hit = this.#hitTest(event);
     if (hit?.area === 'row') this.controller.doubleClickNode(hit.row.nodeId, event);
+  };
+
+  #onContextMenu = (event) => {
+    const hit = this.#hitTest(event);
+    if (hit?.area !== 'row') return;
+    this.controller.contextMenuNode(hit.row.nodeId, {
+      part: hit.part,
+      columnId: hit.column?.id ?? null,
+      originalEvent: event
+    });
   };
 
   #onMouseDown = (event) => {

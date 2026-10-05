@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- `nodeclick` now reports the hit `part` and `columnId`, and `nodecontextmenu` exposes the same cell-level context with the original pointer event.
+
+### Fixed
+
+- Hit testing now resolves visually pinned ancestor rows, so selection, expansion, hover, tooltips and context menus target the sticky row instead of the scrolled row underneath.
+- Collapsing a pinned ancestor preserves that row's viewport position instead of anchoring a child that disappears.
+
 ## 0.7.6 — 2026-09-27
 
 ### Changed

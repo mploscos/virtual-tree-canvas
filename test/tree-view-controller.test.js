@@ -352,6 +352,35 @@ test('render scene exposes sticky ancestor rows for scrolled children', () => {
   );
 });
 
+test('collapsing a sticky row preserves its viewport position', () => {
+  const controller = createController();
+  controller.resize(200, 88);
+  controller.expandAll();
+  controller.scrollToNode('b1', 'start');
+  const sticky = controller.createRenderScene().stickyRows.find((row) => row.nodeId === 'b');
+
+  controller.collapse('b');
+
+  const collapsed = controller.rowModel.getRowById('b');
+  assert.equal(collapsed.y - controller.viewport.scrollY, sticky.stickyY);
+});
+
+test('hit testing resolves the sticky row instead of the scrolled row underneath', () => {
+  const controller = createController();
+  controller.resize(200, 88);
+  controller.expandAll();
+  controller.scrollToNode('b1', 'start');
+
+  const [root, branch] = controller.createRenderScene().stickyRows;
+  const rootHit = controller.hitTest(10, controller.viewport.headerHeight + root.stickyY + 10);
+  const branchHit = controller.hitTest(26, controller.viewport.headerHeight + branch.stickyY + 10);
+
+  assert.equal(rootHit.row.nodeId, 'root');
+  assert.equal(rootHit.part, 'chevron');
+  assert.equal(branchHit.row.nodeId, 'b');
+  assert.equal(branchHit.part, 'chevron');
+});
+
 test('sticky ancestor rows are replaced by sibling branches entering the sticky area', () => {
   const controller = new TreeViewController({
     initialExpandDepth: Number.MAX_SAFE_INTEGER,

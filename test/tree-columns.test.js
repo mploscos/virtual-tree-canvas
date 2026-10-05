@@ -64,6 +64,38 @@ test('hit testing detects tree column chevron vs regular cell', () => {
   assert.equal(cellHit.column.id, 'type');
 });
 
+test('node clicks expose the hit part and column', () => {
+  const controller = new TreeViewController({ initialExpandDepth: 1 });
+  controller.setData(nodes);
+  let detail;
+  controller.on('nodeclick', (event) => { detail = event.detail; });
+
+  controller.clickNode('root', { part: 'chevron', columnId: 'name' });
+
+  assert.equal(detail.nodeId, 'root');
+  assert.equal(detail.part, 'chevron');
+  assert.equal(detail.columnId, 'name');
+});
+
+test('node context menus expose the hit part, column and original event', () => {
+  const controller = new TreeViewController({ initialExpandDepth: 1 });
+  controller.setData(nodes);
+  let detail;
+  controller.on('nodecontextmenu', (event) => { detail = event.detail; });
+  const originalEvent = { clientX: 12, clientY: 34 };
+
+  controller.contextMenuNode('root', {
+    part: 'label',
+    columnId: 'name',
+    originalEvent
+  });
+
+  assert.equal(detail.nodeId, 'root');
+  assert.equal(detail.part, 'label');
+  assert.equal(detail.columnId, 'name');
+  assert.equal(detail.originalEvent, originalEvent);
+});
+
 test('render scene contains renderer-ready data', () => {
   const controller = new TreeViewController({ initialExpandDepth: 1 });
   controller.setColumns(defaultTreeTableColumns());
