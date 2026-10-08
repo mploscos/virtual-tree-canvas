@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.7.8 — 2026-10-08
 
 ### Added
 
 - `nodeclick` now reports the hit `part` and `columnId`, and `nodecontextmenu` exposes the same cell-level context with the original pointer event.
+- Themes can set `iconSize` independently from `rowHeight` for larger tree and inspector icons.
 
 ### Fixed
 
+- Registered bitmap and canvas icons preserve their intrinsic aspect ratio inside the configured icon box, with optional transparent-margin trimming through `{ image, trim: true }`.
 - Hit testing now resolves visually pinned ancestor rows, so selection, expansion, hover, tooltips and context menus target the sticky row instead of the scrolled row underneath.
 - Collapsing a pinned ancestor preserves that row's viewport position instead of anchoring a child that disappears.
 

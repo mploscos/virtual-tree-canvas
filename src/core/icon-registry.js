@@ -33,7 +33,18 @@ export class IconRegistry {
       return this.#registerImageUrl(name, source);
     }
 
-    const entry = { kind: 'image', image: icon, loaded: true };
+    if (icon && typeof icon === 'object' && 'image' in icon) {
+      const entry = {
+        kind: 'image',
+        image: icon.image,
+        loaded: true,
+        sourceRect: icon.trim === true ? alphaBounds(icon.image) : null
+      };
+      this.icons.set(name, entry);
+      return entry;
+    }
+
+    const entry = { kind: 'image', image: icon, loaded: true, sourceRect: null };
     this.icons.set(name, entry);
     return entry;
   }
@@ -66,7 +77,9 @@ export class IconRegistry {
       return;
     }
     if (icon.kind === 'image') {
-      if (icon.loaded && icon.image) ctx.drawImage(icon.image, x, y, size, size);
+      if (icon.loaded && icon.image) {
+        drawContainedImage(ctx, icon.image, x, y, size, icon.sourceRect);
+      }
       return;
     }
 
@@ -223,4 +236,51 @@ function devicePixelRatio() {
 function canvasPixelRatio(ctx, fallback) {
   const transform = ctx.getTransform?.();
   return Math.max(1, Math.abs(transform?.a) || fallback || 1);
+}
+
+function drawContainedImage(ctx, image, x, y, size, sourceRect) {
+  const sourceX = sourceRect?.x ?? 0;
+  const sourceY = sourceRect?.y ?? 0;
+  const width = sourceRect?.width ?? image.naturalWidth ?? image.width;
+  const height = sourceRect?.height ?? image.naturalHeight ?? image.height;
+  if (!(width > 0 && height > 0)) {
+    ctx.drawImage(image, x, y, size, size);
+    return;
+  }
+  const scale = Math.min(size / width, size / height);
+  const drawWidth = width * scale;
+  const drawHeight = height * scale;
+  const drawX = x + (size - drawWidth) * 0.5;
+  const drawY = y + (size - drawHeight) * 0.5;
+  if (sourceRect) {
+    ctx.drawImage(image, sourceX, sourceY, width, height, drawX, drawY, drawWidth, drawHeight);
+  } else {
+    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  }
+}
+
+function alphaBounds(image) {
+  if (typeof image.getContext !== 'function') {
+    throw new TypeError('trim is only supported for canvas icon sources');
+  }
+  const width = image.width;
+  const height = image.height;
+  const context = image.getContext('2d', { willReadFrequently: true });
+  const pixels = context.getImageData(0, 0, width, height).data;
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (pixels[(y * width + x) * 4 + 3] === 0) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  return right < left
+    ? null
+    : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
 }

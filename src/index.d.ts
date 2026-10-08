@@ -47,7 +47,8 @@ export class TreeTooltip {
 export type TreeViewAlign = 'start' | 'center' | 'end' | 'nearest';
 
 export type IconDrawFunction = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => void;
-export type IconSource = string | CanvasImageSource | IconDrawFunction;
+export type IconImageSource = { image: CanvasImageSource; trim?: boolean };
+export type IconSource = string | CanvasImageSource | IconImageSource | IconDrawFunction;
 
 export class IconRegistry {
   constructor(options?: { pixelRatio?: number; iconsBaseUrl?: string | URL });

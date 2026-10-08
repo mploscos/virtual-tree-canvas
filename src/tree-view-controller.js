@@ -1611,14 +1611,16 @@ export class TreeViewController {
       }
     } else if (column.kind === 'tree') {
       const localX = x - column.x;
+      const iconSize = this.themeManager.get().iconSize;
       const layout = treeCellLayout(
         row.depth,
         this.rowModel.indentWidth,
-        this.model.index.childrenByParent.size > 1
+        this.model.index.childrenByParent.size > 1,
+        iconSize
       );
       if (row.hasChildren && localX >= layout.chevronX - 6 && localX <= layout.chevronX + 12)
         part = 'chevron';
-      else if (localX >= layout.iconX - 1 && localX <= layout.iconX + 17) part = 'icon';
+      else if (localX >= layout.iconX - 1 && localX <= layout.iconX + iconSize + 1) part = 'icon';
       else if (localX >= layout.labelX - 2) part = 'label';
       else part = 'cell';
     } else if (column.kind === 'inspectorValue') {
@@ -1736,7 +1738,9 @@ export class TreeViewController {
       const visibleWidth = this.#visibleInspectorPaneWidth(hit.column, hit.row);
       const layout = this.getInspectorPaneLayout(visibleWidth, hit.row, data.editorType);
       if (hit.part === 'label' || hit.part === 'chevron') {
-        const labelX = hit.row.depth * this.rowModel.indentWidth + (hit.row.hasChildren ? 28 : 24);
+        const labelX =
+          hit.row.depth * this.rowModel.indentWidth +
+          (hit.row.hasChildren ? 28 : this.themeManager.get().iconSize + 9);
         text = node.label ?? node.id;
         width =
           data.valueType === 'object'
@@ -1752,7 +1756,8 @@ export class TreeViewController {
       const { labelX } = treeCellLayout(
         hit.row.depth,
         this.rowModel.indentWidth,
-        this.model.index.childrenByParent.size > 1
+        this.model.index.childrenByParent.size > 1,
+        this.themeManager.get().iconSize
       );
       text = node.label ?? node.id;
       width = Math.max(0, hit.column.width - labelX - 6);
@@ -2127,7 +2132,8 @@ export class TreeViewController {
       if (!node) continue;
       if (node.data?.valueType === 'object') continue;
       const indentX = row.depth * this.rowModel.indentWidth;
-      const labelX = indentX + (row.hasChildren ? 28 : 24);
+      const labelX =
+        indentX + (row.hasChildren ? 28 : this.themeManager.get().iconSize + 9);
       const labelWidth = String(node.label ?? node.id ?? '').length * 6.4;
       labelEnd = Math.max(labelEnd, labelX + labelWidth + 12);
     }

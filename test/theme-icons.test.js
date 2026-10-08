@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { IconRegistry, ThemeManager, TreeViewController, darkTheme, builtinIconNames } from '../src/index.js';
+import { treeCellLayout } from '../src/core/tree-cell-layout.js';
 
 test('all built-in SVGs resolve to the published resources directory by default', async () => {
   const registry = new IconRegistry();
@@ -60,6 +61,22 @@ test('ThemeManager resolves type styles correctly', () => {
   assert.equal(style.status.label, 'WARN');
 });
 
+test('theme icon size controls tree cell spacing', () => {
+  const manager = new ThemeManager({ iconSize: 24 });
+
+  assert.equal(manager.get().iconSize, 24);
+  assert.deepEqual(treeCellLayout(0, 18, true, 24), {
+    chevronX: 10,
+    iconX: 27,
+    labelX: 59,
+  });
+  assert.deepEqual(treeCellLayout(0, 18, false), {
+    chevronX: null,
+    iconX: 8,
+    labelX: 31,
+  });
+});
+
 test('IconRegistry caches icons by name', () => {
   const registry = new IconRegistry();
   const icon = () => {};
@@ -68,6 +85,36 @@ test('IconRegistry caches icons by name', () => {
 
   assert.equal(first, second);
   assert.equal(registry.get('custom'), first);
+});
+
+test('registered images preserve their aspect ratio inside the icon box', () => {
+  const registry = new IconRegistry();
+  const image = { width: 40, height: 20 };
+  const calls = [];
+  registry.register('wide-symbol', image);
+
+  registry.draw({ drawImage: (...args) => calls.push(args) }, 'wide-symbol', 4, 6, 30, '#ffffff');
+
+  assert.deepEqual(calls, [[image, 4, 13.5, 30, 15]]);
+});
+
+test('registered canvas images can trim transparent margins', () => {
+  const registry = new IconRegistry();
+  const pixels = new Uint8ClampedArray(5 * 4 * 4);
+  for (const [x, y] of [[1, 1], [2, 1], [3, 1], [1, 2], [2, 2], [3, 2]]) {
+    pixels[(y * 5 + x) * 4 + 3] = 255;
+  }
+  const image = {
+    width: 5,
+    height: 4,
+    getContext: () => ({ getImageData: () => ({ data: pixels }) })
+  };
+  const calls = [];
+  registry.register('trimmed-symbol', { image, trim: true });
+
+  registry.draw({ drawImage: (...args) => calls.push(args) }, 'trimmed-symbol', 4, 6, 30, '#ffffff');
+
+  assert.deepEqual(calls, [[image, 1, 1, 3, 2, 4, 11, 30, 20]]);
 });
 
 test('built-in icons are SVG sources and raster cache uses size, colour and DPR', async () => {

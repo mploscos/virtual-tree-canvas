@@ -107,13 +107,16 @@ export class TreeRowRenderer {
     for (const style of Object.values(theme.types ?? {})) {
       if (style?.icon) iconColors.set(style.icon, style.color ?? theme.colors.progressFill);
     }
-    const key = `${pixelRatio}|${[...iconColors].map(([icon, color]) => `${icon}:${color}`).join(',')}`;
+    const iconsKey = [...iconColors]
+      .map(([icon, color]) => `${icon}:${color}`)
+      .join(',');
+    const key = `${pixelRatio}|${theme.iconSize}|${iconsKey}`;
     if (key === this.preparedIconThemeKey) return;
     this.preparedIconThemeKey = key;
     for (const [icon, color] of iconColors) {
       this.iconRegistry.prepare?.({
         icons: [icon],
-        size: 15,
+        size: theme.iconSize,
         color,
         pixelRatio
       });
@@ -439,10 +442,17 @@ export class TreeRowRenderer {
     const cy = rect.y + rect.height / 2;
     let labelX = indentX + 28;
     if (!row.hasChildren && node.icon) {
-      this.iconRegistry.draw(ctx, style.icon, indentX + 3, rect.y + 6, 15, style.color);
-      labelX = indentX + 24;
+      this.iconRegistry.draw(
+        ctx,
+        style.icon,
+        indentX + 3,
+        rect.y + (rect.height - theme.iconSize) / 2,
+        theme.iconSize,
+        style.color
+      );
+      labelX = indentX + theme.iconSize + 9;
     } else if (!row.hasChildren) {
-      labelX = indentX + 24;
+      labelX = indentX + theme.iconSize + 9;
     } else {
       this.#drawChevron(ctx, indentX + 10, cy, row, colors);
     }
@@ -785,11 +795,19 @@ export class TreeRowRenderer {
     const layout = treeCellLayout(
       row.depth,
       theme.indentWidth,
-      this.scene.childrenByParent.size > 1
+      this.scene.childrenByParent.size > 1,
+      theme.iconSize
     );
     const cy = rect.y + rect.height / 2;
     if (row.hasChildren) this.#drawChevron(ctx, rect.x + layout.chevronX, cy, row, colors);
-    this.iconRegistry.draw(ctx, style.icon, rect.x + layout.iconX, rect.y + 6, 15, style.color);
+    this.iconRegistry.draw(
+      ctx,
+      style.icon,
+      rect.x + layout.iconX,
+      rect.y + (rect.height - theme.iconSize) / 2,
+      theme.iconSize,
+      style.color
+    );
     ctx.fillStyle = colors.text;
     ctx.font = theme.font;
     ctx.textBaseline = 'middle';

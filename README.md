@@ -222,6 +222,7 @@ Themes can map domain types to a colour and icon:
 ```js
 tree.setTheme({
   rowHeight: 28,
+  iconSize: 15,
   font: '12px system-ui',
   types: {
     root: { icon: 'folder', color: '#38bdf8' },
@@ -231,6 +232,9 @@ tree.setTheme({
   },
 });
 ```
+
+`rowHeight` controls the height of each node and `iconSize` controls its icon.
+Increase both when the tree needs larger, more readable entries.
 
 Built-in icons are editable SVG files in [`resources/icons`](./resources/icons).
 They are loaded on demand and rasterized once per icon, colour, CSS size and device

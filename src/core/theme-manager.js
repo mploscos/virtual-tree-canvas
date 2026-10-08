@@ -1,6 +1,7 @@
 export const darkTheme = {
   rowHeight: 28,
   indentWidth: 18,
+  iconSize: 15,
   font: '12px Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   unitFont: '11px ui-monospace, SFMono-Regular, Consolas, monospace',
   monoFont:
