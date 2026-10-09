@@ -388,5 +388,185 @@
     "label": "Favorito activo",
     "category": "Interfaz",
     "available": true
+  },
+  {
+    "id": "add",
+    "label": "Añadir",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "compass",
+    "label": "Brújula",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "edit",
+    "label": "Editar",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "eye",
+    "label": "Visible",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "eye-off",
+    "label": "Oculto",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "file",
+    "label": "Archivo",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "filter",
+    "label": "Filtro",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "folder-open",
+    "label": "Carpeta abierta",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "info",
+    "label": "Información",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "item",
+    "label": "Elemento genérico",
+    "category": "Objetos e instalaciones",
+    "available": true
+  },
+  {
+    "id": "json",
+    "label": "Documento JSON",
+    "category": "Inspector y documentos",
+    "available": true
+  },
+  {
+    "id": "layers",
+    "label": "Capas",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "location",
+    "label": "Ubicación",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "map",
+    "label": "Mapa",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "offline",
+    "label": "Sin conexión",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "pause",
+    "label": "Pausa",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "play",
+    "label": "Iniciar",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "refresh",
+    "label": "Actualizar",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "route",
+    "label": "Ruta",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "satellite",
+    "label": "Satélite",
+    "category": "Aviación y espacio",
+    "available": true
+  },
+  {
+    "id": "save",
+    "label": "Guardar",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "search",
+    "label": "Buscar",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "settings",
+    "label": "Configuración",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "stop",
+    "label": "Detener",
+    "category": "Acciones y controles",
+    "available": true
+  },
+  {
+    "id": "submarine",
+    "label": "Submarino",
+    "category": "Entorno marítimo",
+    "available": true
+  },
+  {
+    "id": "success",
+    "label": "Correcto",
+    "category": "Estados y alertas",
+    "available": true
+  },
+  {
+    "id": "truck",
+    "label": "Camión",
+    "category": "Transporte terrestre",
+    "available": true
+  },
+  {
+    "id": "vehicle",
+    "label": "Vehículo genérico",
+    "category": "Transporte terrestre",
+    "available": true
+  },
+  {
+    "id": "waypoint",
+    "label": "Punto de ruta",
+    "category": "Geografía y navegación",
+    "available": true
+  },
+  {
+    "id": "road",
+    "label": "Carretera",
+    "category": "Geografía y navegación",
+    "available": true
   }
 ]

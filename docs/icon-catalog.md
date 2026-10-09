@@ -1,6 +1,6 @@
 # Icon catalog
 
-The 65 bundled icons are available in `resources/icons/`. Open the
+The 95 bundled icons are available in `resources/icons/`. Open the
 [rendered visual catalog](https://htmlpreview.github.io/?https://github.com/mploscos/virtual-tree-canvas/blob/main/docs/icon-catalog.html)
 to compare them at different sizes on light and dark backgrounds. The
 [HTML source](./icon-catalog.html) is also available. `builtinIconNames` lists
@@ -15,7 +15,9 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 ```
 
 - `data-bus` represents a data bus; `bus-vehicle` represents a passenger bus.
-- `placeholder` is used when no specific icon is available.
+- `item` is the neutral default for a node without a more specific icon.
+- `placeholder` identifies an unknown or unavailable icon name.
+- `point` is reserved for geographic points; use `waypoint` for route vertices.
 - Pair icons with labels. For states such as warnings or errors, also provide
   text instead of relying on color alone.
 - To add a custom icon, call `view.registerIcon('custom', svgStringOrUrl)` and
@@ -80,6 +82,8 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `car` | Car |
 | `bicycle` | Bicycle |
 | `bus-vehicle` | Passenger bus |
+| `vehicle` | Generic vehicle |
+| `truck` | Truck |
 
 ### Aviation and space
 
@@ -89,12 +93,14 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `helicopter` | Helicopter |
 | `drone` | Drone |
 | `space` | Space domain |
+| `satellite` | Satellite |
 
 ### Maritime environment
 
 | ID | Meaning |
 | --- | --- |
 | `ship` | Ship |
+| `submarine` | Submarine |
 
 ### Objects and facilities
 
@@ -102,6 +108,7 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | --- | --- |
 | `box` | Box |
 | `building` | Building |
+| `item` | Generic item |
 
 ### Data and networks
 
@@ -112,6 +119,7 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `server` | Server |
 | `database` | Database |
 | `link` | Link |
+| `offline` | Disconnected or offline |
 
 ### Sensors and measurements
 
@@ -128,12 +136,22 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `globe` | Globe |
 | `point` | Point |
 | `track` | Track |
+| `map` | Map |
+| `layers` | Map or data layers |
+| `location` | Location |
+| `waypoint` | Route waypoint |
+| `route` | Route |
+| `road` | Road |
+| `compass` | Orientation |
 
 ### Inspector and documents
 
 | ID | Meaning |
 | --- | --- |
 | `folder` | Folder |
+| `folder-open` | Open folder |
+| `file` | File |
+| `json` | JSON document |
 | `inspector-object` | Data object |
 | `inspector-array` | Array |
 | `inspector-value` | Scalar value |
@@ -145,6 +163,9 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `warning` | Warning |
 | `error` | Error |
 | `placeholder` | Unknown type |
+| `info` | Information |
+| `success` | Successful state |
+| `offline` | Offline state |
 | `damage` | Damage |
 | `situation` | Situation |
 | `lock` | Locked |
@@ -161,6 +182,18 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `heart` | Favorite |
 | `grip` | Drag handle |
 | `trash` | Delete or remove |
+| `add` | Add |
+| `edit` | Edit |
+| `save` | Save |
+| `play` | Start or play |
+| `pause` | Pause |
+| `stop` | Stop |
+| `refresh` | Refresh |
+| `search` | Search |
+| `filter` | Filter |
+| `settings` | Settings |
+| `eye` | Visible |
+| `eye-off` | Hidden |
 
 ### Time and simulation
 

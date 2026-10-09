@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.9 — 2026-10-09
+
+### Added
+
+- Expand the built-in SVG catalogue from 65 to 95 icons with common document, navigation, platform, execution, editing, visibility and state symbols.
+
+### Changed
+
+- Nodes without explicit icon metadata now use the neutral `item` icon. `placeholder` is reserved for unknown icon names and `point` retains its geographic meaning.
+- Toolbar-scale action icons use distinct silhouettes, and `road` represents a road independently from a generic route.
+
+### Fixed
+
+- Transparent-margin trimming also works with image elements by reading their pixels through a temporary canvas.
+
 ## 0.7.8 — 2026-10-08
 
 ### Added

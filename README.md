@@ -399,7 +399,7 @@ Open [the reorder demo](./examples/reorder-table.html) through a local HTTP serv
 
 ## Icon catalogue
 
-65 SVGs are included, with a
+95 SVGs are included, with a
 [rendered visual sheet](https://htmlpreview.github.io/?https://github.com/mploscos/virtual-tree-canvas/blob/main/docs/icon-catalog.html), and a
 [reference of available icons](./docs/icon-catalog.md). `builtinIconNames`
 exposes available IDs.

@@ -331,7 +331,7 @@ export class ThemeManager extends EventTarget {
     const typeRule = this.theme.types[node?.type ?? ''] ?? {};
     const statusRule = this.resolveStatus(state.status);
     return {
-      icon: state.icon ?? node?.icon ?? typeRule.icon ?? 'placeholder',
+      icon: state.icon ?? node?.icon ?? typeRule.icon ?? 'item',
       color: state.color ?? typeRule.color ?? this.theme.colors.progressFill,
       typeColor: typeRule.color ?? this.theme.colors.progressFill,
       status: statusRule,

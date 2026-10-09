@@ -103,7 +103,7 @@ export class TreeRowRenderer {
   }
 
   #prepareThemeIcons(theme, pixelRatio) {
-    const iconColors = new Map([['placeholder', theme.colors.textMuted]]);
+    const iconColors = new Map([['item', theme.colors.textMuted]]);
     for (const style of Object.values(theme.types ?? {})) {
       if (style?.icon) iconColors.set(style.icon, style.color ?? theme.colors.progressFill);
     }
@@ -960,7 +960,7 @@ function resolveNodeStyle(theme, node, state = {}) {
     color: theme.colors.textMuted
   };
   return {
-    icon: state.icon ?? node?.icon ?? typeRule.icon ?? 'placeholder',
+    icon: state.icon ?? node?.icon ?? typeRule.icon ?? 'item',
     color: state.color ?? typeRule.color ?? theme.colors.progressFill,
     typeColor: typeRule.color ?? theme.colors.progressFill,
     status

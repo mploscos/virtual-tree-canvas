@@ -265,7 +265,13 @@ function alphaBounds(image) {
   }
   const width = image.width;
   const height = image.height;
-  const context = image.getContext('2d', { willReadFrequently: true });
+  const readback = image.ownerDocument?.createElement('canvas') ?? image;
+  if (readback !== image) {
+    readback.width = width;
+    readback.height = height;
+  }
+  const context = readback.getContext('2d', { willReadFrequently: true });
+  if (readback !== image) context.drawImage(image, 0, 0, width, height);
   const pixels = context.getImageData(0, 0, width, height).data;
   let left = width;
   let top = height;

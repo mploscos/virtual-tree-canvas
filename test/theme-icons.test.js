@@ -61,6 +61,14 @@ test('ThemeManager resolves type styles correctly', () => {
   assert.equal(style.status.label, 'WARN');
 });
 
+test('generic nodes use item while unknown icon names use placeholder', () => {
+  const manager = new ThemeManager(darkTheme);
+  const registry = new IconRegistry();
+
+  assert.equal(manager.resolveNodeStyle({ id: 'generic' }).icon, 'item');
+  assert.equal(registry.get('missing'), registry.get('placeholder'));
+});
+
 test('theme icon size controls tree cell spacing', () => {
   const manager = new ThemeManager({ iconSize: 24 });
 
