@@ -73,6 +73,19 @@ export class RowReorderInput {
         textAlign: 'center'
       });
       doc.body.appendChild(this.dragBadge);
+
+      this.dragGhost = doc.createElement('canvas');
+      this.dragGhost.className = 'vtc-row-drag-ghost';
+      this.dragGhost.hidden = true;
+      this.dragGhost.setAttribute('aria-hidden', 'true');
+      Object.assign(this.dragGhost.style, {
+        position: 'fixed',
+        zIndex: '2147483647',
+        pointerEvents: 'none',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+        opacity: '0.92'
+      });
+      doc.body.appendChild(this.dragGhost);
     }
     this.syncMode();
   }
@@ -91,21 +104,22 @@ export class RowReorderInput {
     const hit = this.controller.hitTest(point.x, point.y);
     if (!hit?.row) return;
     const node = this.controller.model.index.getNode(hit.row.nodeId);
-    const sourcePayload =
-      this.controller.rowDrag?.(node, this.controller.model.dynamicState.get(node.id) ?? {}) ??
-      null;
     const orderPart = ['rowDrag', 'rowUp', 'rowDown'].includes(hit.part);
+    const sourcePayload =
+      orderPart
+        ? null
+        : (this.controller.rowDrag?.(
+            node,
+            this.controller.model.dynamicState.get(node.id) ?? {}
+          ) ?? null);
     if (orderPart && node.reorderable === false) return;
     if (
       orderPart
-        ? !this.controller.canReorderRows() && !(sourcePayload != null && hit.part === 'rowDrag')
+        ? !this.controller.canReorderRows()
         : sourcePayload == null || !['label', 'row', 'icon', 'cell'].includes(hit.part)
     )
       return;
-    const items =
-      sourcePayload != null && (!orderPart || hit.part === 'rowDrag')
-        ? this.resolveDragItems(node, sourcePayload)
-        : [];
+    const items = sourcePayload == null ? [] : this.resolveDragItems(node, sourcePayload);
     this.canvas.focus({
       preventScroll: true
     });
@@ -121,6 +135,8 @@ export class RowReorderInput {
       startX: point.x,
       startY: point.y,
       point,
+      reorder:
+        orderPart && hit.part === 'rowDrag' && this.controller.canReorderRows(hit.row.nodeId),
       dragging: false
     };
     this.canvas.setPointerCapture?.(event.pointerId);
@@ -138,16 +154,18 @@ export class RowReorderInput {
       Math.hypot(gesture.point.x - gesture.startX, gesture.point.y - gesture.startY) < 5
     )
       return;
-    if (!gesture.dragging && gesture.payload != null) {
-      if (!gesture.sourceSelected) this.controller.setSelection([gesture.id]);
-      this.updateDragBadge(event);
-      this.emitDrag('rowdragstart', event);
+    if (!gesture.dragging) {
+      if (gesture.payload != null) {
+        if (!gesture.sourceSelected) this.controller.setSelection([gesture.id]);
+        this.emitDrag('rowdragstart', event);
+      }
     }
     gesture.dragging = true;
     if (gesture.payload != null) {
-      this.updateDragBadge(event);
       this.emitDrag('rowdragmove', event);
     }
+    if (gesture.reorder) this.updateDragGhost(event);
+    else this.updateDragBadge(event);
     this.canvas.style.cursor = 'grabbing';
     this.updateTarget();
     this.scheduleScroll();
@@ -158,7 +176,7 @@ export class RowReorderInput {
     const gesture = this.gesture;
     if (!gesture || event.pointerId !== gesture.pointerId) return;
     gesture.point = this.point(event);
-    const target = gesture.dragging
+    const target = gesture.dragging && gesture.reorder
       ? this.controller.getRowDropTarget(gesture.id, gesture.point.x, gesture.point.y)
       : null;
     const hit = this.controller.hitTest(gesture.point.x, gesture.point.y);
@@ -201,10 +219,9 @@ export class RowReorderInput {
 
   updateTarget() {
     const gesture = this.gesture;
+    if (!gesture.reorder) return;
     this.controller.setRowDrop(
-      gesture
-        ? this.controller.getRowDropTarget(gesture.id, gesture.point.x, gesture.point.y)
-        : null
+      this.controller.getRowDropTarget(gesture.id, gesture.point.x, gesture.point.y)
     );
   }
 
@@ -276,7 +293,7 @@ export class RowReorderInput {
   }
 
   updateDragBadge(event) {
-    const count = this.gesture?.items.length ?? 0;
+    const count = this.gesture.items.length;
     if (!this.dragBadge || count <= 1) return;
     const colors = this.controller.themeManager.get().colors;
     this.dragBadge.textContent = `×${count}`;
@@ -288,6 +305,47 @@ export class RowReorderInput {
     this.dragBadge.style.left = `${event.clientX + 12}px`;
     this.dragBadge.style.top = `${event.clientY + 12}px`;
     if (this.status) this.status.textContent = `${count} rows dragging`;
+  }
+
+  updateDragGhost(event) {
+    if (!this.dragGhost) return;
+    if (this.dragGhost.hidden) {
+      const viewport = this.controller.viewport;
+      const row = this.controller.rowModel.getRowById(this.gesture.id);
+      const pixelRatio = this.canvas.width / viewport.viewportWidth;
+      const width = viewport.contentViewportWidth;
+      const height = row.height;
+      this.dragGhost.width = Math.round(width * pixelRatio);
+      this.dragGhost.height = Math.round(height * pixelRatio);
+      this.dragGhost.style.width = `${width}px`;
+      this.dragGhost.style.height = `${height}px`;
+      this.gesture.ghostOffsetX = this.gesture.startX - viewport.renderInsetX;
+      this.gesture.ghostOffsetY =
+        this.gesture.startY -
+        (viewport.renderInsetY + viewport.headerHeight + row.y - viewport.scrollY);
+      const context = this.dragGhost.getContext('2d');
+      if (!context) throw new Error('Canvas2D context is not available');
+      context.drawImage(
+        this.canvas,
+        Math.round(viewport.renderInsetX * pixelRatio),
+        Math.round(
+          (viewport.renderInsetY + viewport.headerHeight + row.y - viewport.scrollY) * pixelRatio
+        ),
+        this.dragGhost.width,
+        this.dragGhost.height,
+        0,
+        0,
+        this.dragGhost.width,
+        this.dragGhost.height
+      );
+      this.dragGhost.hidden = false;
+      if (this.status) {
+        const node = this.controller.model.index.getNode(row.nodeId);
+        this.status.textContent = `${node.label ?? node.id} row dragging`;
+      }
+    }
+    this.dragGhost.style.left = `${event.clientX - this.gesture.ghostOffsetX}px`;
+    this.dragGhost.style.top = `${event.clientY - this.gesture.ghostOffsetY}px`;
   }
 
   cancel = (notify = true) => {
@@ -302,7 +360,8 @@ export class RowReorderInput {
       this.canvas.releasePointerCapture(gesture.pointerId);
     this.canvas.style.cursor = '';
     if (this.dragBadge) this.dragBadge.hidden = true;
-    this.controller.setRowDrop(null);
+    if (this.dragGhost) this.dragGhost.hidden = true;
+    if (gesture?.reorder) this.controller.setRowDrop(null);
   };
 
   destroy() {
@@ -318,6 +377,7 @@ export class RowReorderInput {
     for (const stop of this.stops) stop();
     this.status?.remove();
     this.dragBadge?.remove();
+    this.dragGhost?.remove();
   }
 
 }

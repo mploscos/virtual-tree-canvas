@@ -440,7 +440,8 @@ that row. Drag from a row label or the row-order handle. Editors, checkboxes,
 action buttons and expand/collapse controls retain their normal behavior. When
 the source row belongs to a multi-selection, all selected draggable rows take
 part in the gesture. Starting on an unselected row selects and drags only that
-row. A small count badge identifies multi-row drags.
+row. A small count badge identifies multi-row data drags. Manual reordering shows
+an exact canvas snapshot of the source row alongside the insertion line.
 
 The controller emits `rowdragstart`, `rowdragmove`, `rowdragend` and
 `rowdragcancel`. The backward-compatible `nodeId`, `payload` and `label` fields

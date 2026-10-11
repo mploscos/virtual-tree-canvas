@@ -264,6 +264,42 @@ test('external drag captures draggable selected rows and preserves source fields
   }
 });
 
+test('external drag never reorders rows when manual ordering is enabled', () => {
+  const { controller, view, canvas, input } = inputFixture();
+  controller.setRowDrag((node) => ({ reference: node.id }));
+  const events = [];
+  controller.on('rowdragend', (event) => events.push(event.detail));
+  try {
+    canvas.dispatchEvent(pointer('pointerdown', 125, 40));
+    view.dispatchEvent(pointer('pointermove', 125, 107));
+    assert.equal(input.gesture.reorder, false);
+    assert.equal(controller.rowDrop, null);
+    view.dispatchEvent(pointer('pointerup', 125, 107));
+    assert.deepEqual(controller.getRowOrder(), ['a', 'b', 'c']);
+    assert.equal(events.length, 1);
+  } finally {
+    input.destroy();
+  }
+});
+
+test('manual-order handle never starts an external data drag', () => {
+  const { controller, view, canvas, input } = inputFixture();
+  controller.setRowDrag((node) => ({ reference: node.id }));
+  const events = [];
+  controller.on('rowdragstart', (event) => events.push(event.detail));
+  try {
+    canvas.dispatchEvent(pointer('pointerdown', 12, 40));
+    view.dispatchEvent(pointer('pointermove', 12, 107));
+    assert.equal(input.gesture.reorder, true);
+    assert.equal(input.gesture.payload, null);
+    view.dispatchEvent(pointer('pointerup', 12, 107));
+    assert.deepEqual(controller.getRowOrder(), ['b', 'c', 'a']);
+    assert.deepEqual(events, []);
+  } finally {
+    input.destroy();
+  }
+});
+
 test('external drag on an unselected row replaces the selection when dragging starts', () => {
   const { controller, view, canvas, input } = inputFixture();
   controller.setRowReorder(false);

@@ -403,6 +403,19 @@ export async function runViewContract(create) {
       button: 'left',
       buttons: 1
     });
+    const dragGhost = document.querySelector('.vtc-row-drag-ghost');
+    same(dragGhost?.hidden, false, 'row drag ghost visible');
+    const pixelRatio = c.canvas.width / c.viewport.viewportWidth;
+    same(
+      dragGhost?.width,
+      Math.round(c.viewport.contentViewportWidth * pixelRatio),
+      'row drag ghost width'
+    );
+    same(
+      dragGhost?.height,
+      Math.round(c.rowModel.rowHeight * pixelRatio),
+      'row drag ghost height'
+    );
     await window.testMouse({
       type: 'mouseReleased',
       x,
@@ -427,6 +440,38 @@ export async function runViewContract(create) {
     same(events.length, 2, 'one keyboard event');
     same(events[1].source, 'keyboard', 'keyboard source');
     stop();
+  });
+  await check('the reorder gutter offsets hierarchy guides', async (a) => {
+    a.configure({
+      nodes: [
+        { id: 'root', label: 'Root' },
+        { id: 'child', parentId: 'root', label: 'Child' }
+      ]
+    });
+    const c = a.widget.controller;
+    c.expand('root');
+    c.render();
+    const row = c.rowModel.getRowById('child');
+    const treeColumn = c.columnModel.columns.find((column) => column.kind === 'tree');
+    const pixelRatio = c.canvas.width / c.viewport.viewportWidth;
+    const y = Math.floor(
+      (c.viewport.renderInsetY +
+        c.viewport.headerHeight +
+        row.y -
+        c.viewport.scrollY +
+        7) *
+        pixelRatio
+    );
+    const pixel = (x) =>
+      Array.from(c.canvas.getContext('2d').getImageData(Math.floor(x * pixelRatio), y, 1, 1).data);
+    const color = (value) =>
+      [1, 3, 5].map((index) => Number.parseInt(value.slice(index, index + 2), 16));
+    same(pixel(10).slice(0, 3), color(c.themeManager.get().colors.row), 'order gutter is clear');
+    same(
+      pixel(treeColumn.x + 10).slice(0, 3),
+      color(c.themeManager.get().colors.guide),
+      'guide starts inside the tree column'
+    );
   });
   await check('checkbox actions are independent of row selection and dragging', async (a) => {
     const checked = new Set(),

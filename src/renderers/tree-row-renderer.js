@@ -420,7 +420,7 @@ export class TreeRowRenderer {
     if (y < viewport.headerHeight || y > viewport.headerHeight + viewport.rowViewportHeight) return;
     ctx.save();
     ctx.strokeStyle = theme.colors.focus;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(3, y);
     ctx.lineTo(viewport.contentViewportWidth - 3, y);
@@ -923,11 +923,14 @@ export class TreeRowRenderer {
 
   #drawIndentGuides(ctx, row, colors) {
     if (!row.depth) return;
+    const treeColumn = this.scene.columns.find(
+      (column) => column.kind === 'tree' || column.kind === 'inspectorPane'
+    );
     ctx.strokeStyle = colors.guide;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let depth = 0; depth < row.depth; depth++) {
-      const guideX = depth * this.scene.theme.indentWidth + 10.5;
+      const guideX = treeColumn.x + depth * this.scene.theme.indentWidth + 10.5;
       ctx.moveTo(guideX, row.y);
       ctx.lineTo(guideX, row.y + row.height);
     }

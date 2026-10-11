@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.10 — 2026-10-11
+
+### Changed
+
+- Manual row ordering now starts only from its dedicated drag handle. Dragging a row from its content remains available exclusively for external data drops.
+- Manual ordering displays an exact canvas snapshot of the rendered source row while retaining the insertion indicator.
+
+### Fixed
+
+- Tree hierarchy guides account for the row-order gutter instead of crossing its controls.
+- The insertion indicator uses a finer line that does not obscure adjacent row content.
+
 ## 0.7.9 — 2026-10-09
 
 ### Added
