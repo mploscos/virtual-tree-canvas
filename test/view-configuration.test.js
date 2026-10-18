@@ -111,6 +111,17 @@ test('inspector write by path supports silent updates and preserves numeric unit
   assert.equal(events[0].detail.model, model);
 });
 
+test('inspector API updates readonly values without making them editable', () => {
+  const c = new TreeViewController();
+  c.setModel({ status: 'idle' }, { status: { readonly: true, disabled: true } });
+  const node = c.model.index.getNode('model:status');
+  assert.equal(node.data.readonly, true);
+  assert.equal(c.updateInspectorValue('model:status', 'user-change', 'text'), false);
+  assert.equal(c.setInspectorValue('status', 'running', { emit: false }), true);
+  assert.equal(node.data.value, 'running');
+  assert.equal(node.data.readonly, true);
+});
+
 test('editor close and editability are owned by the controller, without host listeners', () => {
   const c = new TreeViewController();
   let closed = 0;

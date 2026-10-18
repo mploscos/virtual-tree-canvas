@@ -155,7 +155,7 @@ test('sortBy sorts siblings by column value', () => {
   assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'b', 'a']);
 });
 
-test('sortBy uses a stable snapshot for dynamic columns', () => {
+test('sortBy keeps dynamic columns ordered as their values change', () => {
   const controller = new TreeViewController({ initialExpandDepth: 1 });
   controller.setColumns([
     { id: 'name', label: 'Name', width: 300, kind: 'tree', value: (node) => node.label },
@@ -169,15 +169,48 @@ test('sortBy uses a stable snapshot for dynamic columns', () => {
 
   controller.sortBy('value', 'asc');
   assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'b', 'a']);
+  const ascendingRebuildCount = controller.rebuildCount;
 
   controller.setDynamicState([
     { id: 'a', state: { value: 0 } },
     { id: 'b', state: { value: 99 } },
   ]);
-  controller.setFilter('a');
-  controller.clearFilter();
+  controller.flushDynamicState();
+
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'a', 'b']);
+  assert.equal(controller.rebuildCount, ascendingRebuildCount + 1);
+
+  controller.sortBy('value', 'desc');
+  const descendingRebuildCount = controller.rebuildCount;
+  controller.setDynamicState([
+    { id: 'a', state: { value: 100 } },
+    { id: 'b', state: { value: -1 } },
+  ]);
+  controller.flushDynamicState();
+
+  assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'a', 'b']);
+  assert.equal(controller.rebuildCount, descendingRebuildCount + 1);
+});
+
+test('dynamic sorting ignores patches that do not change the sorted value', () => {
+  const controller = new TreeViewController({ initialExpandDepth: 1 });
+  controller.setColumns([
+    { id: 'name', label: 'Name', width: 300, kind: 'tree', value: (node) => node.label },
+    { id: 'value', label: 'Value', width: 100, kind: 'value', value: (_node, state) => state.value ?? 0 },
+  ]);
+  controller.setData(nodes);
+  controller.setDynamicState([
+    { id: 'a', state: { value: 10 } },
+    { id: 'b', state: { value: 1 } },
+  ]);
+  controller.sortBy('value', 'asc');
+  const rebuildCount = controller.rebuildCount;
+
+  controller.setDynamicState([{ id: 'a', state: { highlighted: true } }]);
+  controller.flushDynamicState();
 
   assert.deepEqual(controller.rowModel.rows.map((row) => row.nodeId), ['root', 'b', 'a']);
+  assert.equal(controller.rebuildCount, rebuildCount);
 });
 
 test('setFilter shows matches and ancestors without changing expansion state', () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.11 — 2026-10-18
+
+### Changed
+
+- Active column sorting now follows live dynamic values, reordering sibling rows once per update batch in the selected ascending or descending direction.
+- Programmatic inspector writes can refresh readonly and disabled values while user editing remains blocked.
+
 ## 0.7.10 — 2026-10-11
 
 ### Changed

@@ -647,6 +647,12 @@ export class TreeRowRenderer {
       );
       this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
     } else {
+      if (isEmptyEditableControl(data)) {
+        this.#drawEmptyEditorFrame(ctx, x, y, width, height, theme, {
+          hovered: hovered && hoverPart === 'editor',
+          active: activePart === 'editor'
+        });
+      }
       if (numeric.unit) {
         ctx.font = theme.monoFont ?? theme.font;
         ctx.fillStyle = valueColor;
@@ -769,6 +775,17 @@ export class TreeRowRenderer {
       : hovered
         ? mixColor(colors.border, colors.focus, 0.5)
         : colors.border;
+    ctx.stroke();
+  }
+
+  #drawEmptyEditorFrame(ctx, x, y, width, height, theme, state = {}) {
+    const colors = theme.colors;
+    roundRect(ctx, x, y, width, height, 5);
+    ctx.strokeStyle = state.active
+      ? colors.focus
+      : state.hovered
+        ? mixColor(colors.borderStrong ?? colors.border, colors.focus, 0.45)
+        : (colors.borderStrong ?? colors.border);
     ctx.stroke();
   }
 
@@ -954,6 +971,15 @@ export class TreeRowRenderer {
     ctx.fill();
   }
 
+}
+
+function isEmptyEditableControl(data) {
+  return (
+    !data.readonly &&
+    !data.disabled &&
+    (data.editorType === 'text' || data.editorType === 'number') &&
+    String(data.valueText ?? '').trim() === ''
+  );
 }
 
 function resolveNodeStyle(theme, node, state = {}) {

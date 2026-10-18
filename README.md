@@ -77,7 +77,8 @@ explicitly reinstall data even when the same mutated reference is supplied.
 - `iconsBaseUrl`, `iconRegistry` and `nativeScrollbars` are construction options.
 - `setInspectorValue(path, value, {emit: false})` updates a value without emitting
   `valuechange` or `modelchange`. Normal writes include `source: 'api'`; editor
-  writes use `source: 'user'`. Both include the model in their event details.
+  writes use `source: 'user'`. Programmatic writes also refresh readonly values
+  without making them editable. Both include the model in their event details.
 
 Use `view.configure` for view configuration. Direct controller operations are
 available for interaction state (filtering, selection, sorting, navigation);
@@ -135,11 +136,13 @@ tree.setDynamicState([
 
 Calls made before the next animation frame are coalesced by node ID and property
 (the last value wins). Repeated values and changes wholly outside the current
-viewport/overscan do not repaint. `render()`, `createRenderScene()`, sorting,
-filtering, TreeView configuration flushes, inspector writes, search and selection
-operations apply pending patches before they read dynamic state. The controller's
-`flushDynamicState()` method is also available when an integration needs an
-explicit synchronous boundary.
+viewport/overscan do not repaint. When a patch changes the value of the active
+sort column, sibling rows are reordered in the selected ascending or descending
+direction; a batch of patches causes at most one row-list rebuild. `render()`,
+`createRenderScene()`, sorting, filtering, TreeView configuration flushes,
+inspector writes, search and selection operations apply pending patches before
+they read dynamic state. The controller's `flushDynamicState()` method is also
+available when an integration needs an explicit synchronous boundary.
 
 `setData()`, expand/collapse, sorting and filtering are structural operations
 and may rebuild the visible row list. For very large datasets,

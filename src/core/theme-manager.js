@@ -1,7 +1,7 @@
 export const darkTheme = {
   rowHeight: 28,
   indentWidth: 18,
-  iconSize: 15,
+  iconSize: 16,
   font: '12px Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   unitFont: '11px ui-monospace, SFMono-Regular, Consolas, monospace',
   monoFont:
@@ -199,6 +199,13 @@ export const lightTheme = {
     border: '#e2e8f0',
     borderStrong: '#cbd5e1',
     shadow: 'rgba(15,23,42,.1)'
+  },
+  types: {
+    ...darkTheme.types,
+    bus: {
+      ...darkTheme.types.bus,
+      color: '#0e7490'
+    }
   }
 };
 

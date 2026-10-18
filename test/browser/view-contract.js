@@ -1078,6 +1078,58 @@ export async function runViewContract(create) {
     same(c.rowModel.rowHeight, 36, 'row height');
     same(c.rowModel.indentWidth, 24, 'indent');
   });
+  await check('empty editable fields stay visible and editor overlays follow the theme', async (a) => {
+    a.configure({
+      mode: 'inspector',
+      presentation: 'pane',
+      model: { callsign: '' },
+      meta: { callsign: {} },
+      flatRoot: true,
+      editable: true,
+      rowReorder: false
+    });
+    a.widget.setTheme('light');
+    await wait();
+    const c = a.widget.controller;
+    c.render();
+    const row = c.rowModel.rows.find(
+      (candidate) => c.model.nodes[candidate.nodeIndex].data.path === 'callsign'
+    );
+    const column = c.columnModel.columns.find((candidate) => candidate.kind === 'inspectorPane');
+    const paneWidth = Math.min(column.width, c.viewport.contentViewportWidth - column.x);
+    const layout = c.getInspectorPaneLayout(paneWidth, row, 'text');
+    const dpr = c.canvas.width / c.viewport.viewportWidth;
+    const pixel = Array.from(
+      c.canvas
+        .getContext('2d')
+        .getImageData(
+          Math.floor((column.x + layout.editorLeft + 10) * dpr),
+          Math.floor((c.viewport.headerHeight + row.y + row.height / 2) * dpr),
+          1,
+          1
+        ).data
+    ).slice(0, 3);
+    const rowColor = [1, 3, 5].map((index) =>
+      Number.parseInt(c.themeManager.get().colors.row.slice(index, index + 2), 16)
+    );
+    same(JSON.stringify(pixel) === JSON.stringify(rowColor), false, 'empty editor frame');
+
+    const hit = c.hitTest(
+      column.x + layout.editorLeft + 20,
+      c.viewport.headerHeight + row.y + row.height / 2
+    );
+    same(c.cellEditor.handlePointerDown({}, hit), true, 'empty editor opens');
+    const input = c.cellEditor.overlay;
+    same(getComputedStyle(input).backgroundColor, 'rgb(255, 255, 255)', 'light editor background');
+    same(getComputedStyle(input).color, 'rgb(15, 23, 42)', 'light editor text');
+
+    a.widget.setTheme('dark');
+    await wait();
+    same(c.cellEditor.overlay === input, true, 'theme change preserves the draft editor');
+    same(getComputedStyle(input).backgroundColor, 'rgb(18, 27, 43)', 'dark editor background');
+    same(getComputedStyle(input).color, 'rgb(232, 237, 244)', 'dark editor text');
+    c.closeEditor();
+  });
   await check('same reference data and model refresh explicitly', async (a) => {
     const nodes = [
       {

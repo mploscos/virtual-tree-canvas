@@ -17,6 +17,7 @@ export class CellEditorManager {
     this.stopFilter = controller.on('filterchange', ({ detail }) => {
       if (this.overlayKind === 'filter' && this.overlay) this.overlay.value = detail.query;
     });
+    this.stopTheme = controller.on('themechange', () => this.#syncOverlayTheme());
     this.onMouseMove = this.#onMouseMove.bind(this);
     this.onMouseUp = this.#onMouseUp.bind(this);
   }
@@ -28,6 +29,7 @@ export class CellEditorManager {
 
   destroy() {
     this.stopFilter();
+    this.stopTheme();
     this.#removeOverlay();
     this.view.removeEventListener('mousemove', this.onMouseMove);
     this.view.removeEventListener('mouseup', this.onMouseUp);
@@ -137,11 +139,7 @@ export class CellEditorManager {
       margin: '0',
       outline: 'none',
       appearance: 'none',
-      border: '1px solid rgba(56, 189, 248, 0.65)',
       borderRadius: '6px',
-      background: '#0f172a',
-      color: '#e5e7eb',
-      boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.8), 0 8px 20px rgba(0, 0, 0, 0.28)',
       font: editorFont(data),
       padding:
         data.editorType === 'color'
@@ -151,6 +149,7 @@ export class CellEditorManager {
             : '0 8px',
       textAlign: data.editorType === 'number' || data.editorType === 'range' ? 'right' : 'left'
     });
+    applyEditorTheme(element, this.controller.themeManager.get());
     let committed = false;
     const commit = () => {
       if (committed || this.overlay !== element) return;
@@ -219,13 +218,11 @@ export class CellEditorManager {
       boxSizing: 'border-box',
       margin: '0',
       outline: 'none',
-      border: '1px solid #38bdf8',
       borderRadius: '4px',
-      background: '#0b1020',
-      color: '#e5e7eb',
       font: SANS_FONT,
       padding: '0 8px'
     });
+    applyEditorTheme(element, this.controller.themeManager.get());
     element.addEventListener('input', () => this.controller.setFilter(element.value));
     element.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#removeOverlay();
@@ -361,6 +358,10 @@ export class CellEditorManager {
     overlay?.remove();
   }
 
+  #syncOverlayTheme() {
+    if (this.overlay) applyEditorTheme(this.overlay, this.controller.themeManager.get());
+  }
+
   #toggleRangeMinMax(node, data) {
     const meta = data.meta ?? {};
     const min = Number.isFinite(meta.min) ? meta.min : 0;
@@ -370,6 +371,17 @@ export class CellEditorManager {
     this.controller.updateInspectorValue(node.id, current <= min ? max : min, 'range');
   }
 
+}
+
+function applyEditorTheme(element, theme) {
+  const colors = theme.colors;
+  Object.assign(element.style, {
+    border: `1px solid ${colors.focus}`,
+    background: colors.control ?? colors.background,
+    color: colors.text,
+    caretColor: colors.focus,
+    boxShadow: `0 0 0 1px ${colors.borderStrong ?? colors.border}, 0 8px 20px ${colors.shadow ?? 'transparent'}`
+  });
 }
 
 function createEditorElement(data) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { IconRegistry, ThemeManager, TreeViewController, darkTheme, builtinIconNames } from '../src/index.js';
+import { IconRegistry, ThemeManager, TreeViewController, darkTheme, lightTheme, builtinIconNames } from '../src/index.js';
 import { treeCellLayout } from '../src/core/tree-cell-layout.js';
 
 test('all built-in SVGs resolve to the published resources directory by default', async () => {
@@ -59,6 +59,14 @@ test('ThemeManager resolves type styles correctly', () => {
   assert.equal(style.icon, 'radar');
   assert.equal(style.color, darkTheme.types.sensor.color);
   assert.equal(style.status.label, 'WARN');
+});
+
+test('display themes keep small semantic icons legible', () => {
+  const manager = new ThemeManager(lightTheme);
+
+  assert.equal(darkTheme.iconSize, 16);
+  assert.equal(manager.get().iconSize, 16);
+  assert.equal(manager.resolveNodeStyle({ id: 'bus-1', type: 'bus' }).color, '#0e7490');
 });
 
 test('generic nodes use item while unknown icon names use placeholder', () => {

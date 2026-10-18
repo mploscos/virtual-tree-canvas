@@ -546,7 +546,7 @@ export class TreeViewController {
     const node = this.model.index.getNode(nodeId);
     if (!node?.data?.inspector || !this.inspector) return false;
     const data = node.data;
-    if (data.readonly || data.disabled) return false;
+    if ((data.readonly || data.disabled) && options.source !== 'api') return false;
     const oldValue = data.value;
     if (Object.is(oldValue, newValue)) return true;
     setAtPath(this.inspector.model, data.path, newValue);
@@ -877,6 +877,7 @@ export class TreeViewController {
     this.lastDirtyNodeCount = changedIds.size;
     this.performanceStats.nodesChanged += changedIds.size;
     this.renderer.updateDynamicState(changedPatches);
+    if (this.#refreshDynamicSort(changedIds)) this.#rebuildRows();
     if (this.#hasVisibleDirtyNode(changedIds)) {
       if (!this.invalidation.full) {
         const requestsRender = this.invalidation.dirtyNodeIds.size === 0;
@@ -888,6 +889,29 @@ export class TreeViewController {
       this.lastPatchCount = 0;
     }
     return changedIds;
+  }
+
+  /**
+   * Refresh cached values for the active sort column and report whether its
+   * ordering can have changed. Dynamic patches are coalesced before this runs,
+   * so a burst of updates causes at most one row rebuild per frame.
+   * @param {Set<string>} changedIds
+   */
+  #refreshDynamicSort(changedIds) {
+    const { columnId, direction } = this.columnModel.sort;
+    if (!columnId || !direction || !this.sortValueSnapshot) return false;
+    const column = this.columnModel.getColumn(columnId);
+    if (!column) return false;
+
+    let sortChanged = false;
+    for (const id of changedIds) {
+      const node = this.model.index.getNode(id);
+      if (!node) continue;
+      const nextValue = column.value(node, this.model.dynamicState.get(id) ?? {});
+      if (!Object.is(this.sortValueSnapshot.get(id), nextValue)) sortChanged = true;
+      this.sortValueSnapshot.set(id, nextValue);
+    }
+    return sortChanged;
   }
 
   setTheme(theme) {
