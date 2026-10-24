@@ -27,9 +27,12 @@ export interface TreeViewOptions {
   iconsBaseUrl?: string | URL;
   iconRegistry?: IconRegistry;
   rowReorder?: boolean;
+  /** Enable range and additive row selection. Defaults to false. */
+  multiSelect?: boolean;
   /** Allow wheel scrolling to continue in an ancestor when the tree reaches an edge. Defaults to false. */
   scrollChaining?: boolean;
   rowActions?: RowAction[];
+  /** Data drag payload. In multi-select mode, an unselected row starts range selection first. */
   rowDrag?: RowDragResolver;
   autoRender?: boolean;
   tooltip?: boolean;
@@ -111,13 +114,22 @@ export type Column = {
   /** Optional semantic type for value-column coloring; defaults to the raw value type. */
   valueType?: string | ((value: any, node: TreeNode, state: Record<string, any>) => string);
   sortable?: boolean;
+  resizable?: boolean;
   value?: (node: TreeNode, state: Record<string, any>) => string | number | boolean;
   /** Formats displayed text and tooltips without changing sorting values. */
   format?: (value: any, node: TreeNode, state: Record<string, any>) => string;
   render?: (ctx: CanvasRenderingContext2D, cell: any) => void;
 };
+export const builtInColumns: Record<string, Column>;
+export function defaultTreeTableColumns(): Column[];
+export function inspectorColumns(): Column[];
+export function inspectorPaneColumns(): Column[];
 
-export const themes: Record<string, any>;
+export { darkTheme, lightTheme, ThemeManager, resolveTheme } from './core/theme-manager.js';
+export const themes: {
+  dark: typeof import('./core/theme-manager.js').darkTheme;
+  light: typeof import('./core/theme-manager.js').lightTheme;
+};
 
 export class TreeRowRenderer {
   renderedRows: number;
@@ -145,6 +157,7 @@ export class TreeViewController {
   iconRegistry: IconRegistry;
   tooltip?: TreeTooltip | null;
   rowReorder: boolean;
+  multiSelect: boolean;
   editable: boolean;
   initialExpandDepth: number;
   filterOptions: {caseSensitive: boolean; wholeWord: boolean};
@@ -155,6 +168,8 @@ export class TreeViewController {
   setRowDrag(resolver: RowDragResolver): void;
   sortBy(id: string, direction?: string): boolean;
   clearSort(): void;
+  resizeColumn(id: string, width: number): boolean;
+  moveColumn(id: string, targetIndex: number): boolean;
   setEditable(enabled: boolean): void;
   setInitialExpandDepth(depth: number): void;
   setIconResolver(resolver: TreeViewConfiguration['iconResolver']): void;
@@ -168,6 +183,7 @@ export class TreeViewController {
   nextSearchResult(): string | null;
   previousSearchResult(): string | null;
   setRowReorder(enabled: boolean): void;
+  setMultiSelect(enabled: boolean): void;
   canReorderRows(nodeId?: string): boolean;
   getRowOrder(parentId?: string | null): string[];
   moveRow(nodeId: string, targetIndex: number, options?: {source?: RowReorderDetail["source"]}): boolean;
@@ -184,6 +200,8 @@ export class TreeViewController {
   off(type: string, listener: (event: any) => void): void;
   setData(nodes: TreeNode[], options?: { iconResolver?: TreeViewConfiguration['iconResolver'] }): void;
   setModel(model: any, meta?: Record<string, MetaRule>, options?: Record<string, any>): void;
+  enableWorkers(workerUrl?: string | URL): Promise<this>;
+  disableWorkers(): void;
   setColumns(columns: Column[] | null): void;
   setDynamicState(patches: DynamicPatch[]): void;
   flushDynamicState(): Set<string>;
@@ -194,10 +212,13 @@ export class TreeViewController {
   render(time?: number): void;
   renderMeasured(time?: number): any;
   getStats(): TreeViewStats;
+  getViewportState(): Record<string, number>;
   hitTest(clientX: number, clientY: number): any;
   getTooltipForHit(hit: any): any;
   search(query: string, options?: Record<string, any> & { caseSensitive?: boolean; wholeWord?: boolean }): any;
+  searchAsync(query: string, options?: Record<string, any> & { caseSensitive?: boolean; wholeWord?: boolean }): Promise<string[]>;
   setFilter(queryOrPredicate?: string | ((node: any, state: any) => boolean), options?: { caseSensitive?: boolean; wholeWord?: boolean }): void;
+  setFilterAsync(query?: string, options?: { caseSensitive?: boolean; wholeWord?: boolean }): Promise<any[]>;
   clearFilter(): void;
   focusNode(nodeId: string, options?: Record<string, any>): boolean;
   scrollToNode(nodeId: string, align?: TreeViewAlign): boolean;
@@ -205,6 +226,8 @@ export class TreeViewController {
   getSelection(): string[];
   setSelection(ids: string[]): void;
   clearSelection(): void;
+  expand(nodeId: string): boolean;
+  collapse(nodeId: string): boolean;
   toggle(nodeId: string): boolean;
   expandAll(): void;
   collapseAll(): void;
@@ -258,9 +281,12 @@ export interface TreeViewConfiguration {
   markUpdated?: boolean;
   editable?: boolean;
   rowReorder?: boolean;
+  /** Enable range and additive row selection. Defaults to false. */
+  multiSelect?: boolean;
   /** Allow wheel scrolling to continue in an ancestor when the tree reaches an edge. Defaults to false. */
   scrollChaining?: boolean;
   rowActions?: RowAction[];
+  /** Data drag payload. In multi-select mode, an unselected row starts range selection first. */
   rowDrag?: RowDragResolver;
   initialExpandDepth?: number;
   rowHeight?: number;
@@ -375,6 +401,14 @@ export interface TreeViewEvents {
   nodedblclick: {nodeId: string; row: any; originalEvent: any};
   editablechange: {editable: boolean};
   rowreorderchange: {enabled: boolean};
+  expand: {nodeId: string | null; filter?: boolean; all?: boolean};
+  collapse: {nodeId: string | null; filter?: boolean; all?: boolean};
+  sortchange: {columnId: string | null; direction: 'asc' | 'desc' | null};
+  columnschange: {columns: Column[]};
+  nodehover: {nodeId: string | null; part?: string | null};
+  themechange: {theme: Record<string, any>};
+  viewportchange: Record<string, number>;
+  layoutchange: Record<string, number>;
 }
 export type TreeViewEvent<K extends keyof TreeViewEvents> = {type: K; detail: TreeViewEvents[K]};
 
@@ -382,5 +416,14 @@ export type TreeViewEvent<K extends keyof TreeViewEvents> = {type: K; detail: Tr
 export function formatInspectorValue(value: any, meta?: MetaRule): string;
 
 export class ModelInspectorBuilder {
+  arrayItemTitle(meta: Record<string, MetaRule>, arrayPath: string, index: number, item: any): string;
   build(model: any, meta?: Record<string, MetaRule>, options?: {flatRoot?: boolean; enforceMeta?: boolean}): TreeNode[];
 }
+
+// Keep the curated high-level declarations above and expose every runtime
+// symbol from the supported subpath entry points.
+export * from './core/index.js';
+export * from './inspector/index.js';
+export * from './renderers/index.js';
+export * from './input/index.js';
+export * from './benchmark/index.js';

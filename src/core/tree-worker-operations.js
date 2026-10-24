@@ -1,3 +1,5 @@
+import { compareSortValues } from './tree-column-model.js';
+
 export function createWorkerTreeState(nodes) {
   const idToIndex = new Map();
   const childrenByParent = new Map();
@@ -146,8 +148,7 @@ function idsToRecords(state, ids) {
 function compareNodes(a, b, columnId, sortValues = null) {
   const aValue = sortValues ? sortValues.get(a?.id) : columnValue(a, columnId);
   const bValue = sortValues ? sortValues.get(b?.id) : columnValue(b, columnId);
-  if (typeof aValue === 'number' && typeof bValue === 'number') return aValue - bValue;
-  return String(aValue ?? '').localeCompare(String(bValue ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+  return compareSortValues(aValue, bValue);
 }
 
 function columnValue(node, columnId) {

@@ -34,7 +34,7 @@ function make(options = {}) {
 }
 
 test('manual row order preserves IDs, hierarchy, expansion, selection and live values', () => {
-  const controller = make();
+  const controller = make({ multiSelect: true });
   controller.setDynamicState([
     {
       id: 'a',
@@ -182,8 +182,8 @@ function pointer(type, x, y, pointerId = 1) {
   return event;
 }
 
-function inputFixture() {
-  const controller = make();
+function inputFixture(options = {}) {
+  const controller = make(options);
   controller.setData([
     {
       id: 'a'
@@ -235,7 +235,7 @@ test('pointer drag has a threshold and changes order only on a valid drop', () =
 });
 
 test('external drag captures draggable selected rows and preserves source fields', () => {
-  const { controller, view, canvas, input } = inputFixture();
+  const { controller, view, canvas, input } = inputFixture({ multiSelect: true });
   controller.setRowReorder(false);
   controller.setRowDrag((node) => (node.id === 'c' ? null : { reference: node.id }));
   controller.setSelection(['a', 'b', 'c']);
@@ -267,6 +267,7 @@ test('external drag captures draggable selected rows and preserves source fields
 test('external drag never reorders rows when manual ordering is enabled', () => {
   const { controller, view, canvas, input } = inputFixture();
   controller.setRowDrag((node) => ({ reference: node.id }));
+  controller.setSelection(['a']);
   const events = [];
   controller.on('rowdragend', (event) => events.push(event.detail));
   try {
@@ -300,8 +301,8 @@ test('manual-order handle never starts an external data drag', () => {
   }
 });
 
-test('external drag on an unselected row replaces the selection when dragging starts', () => {
-  const { controller, view, canvas, input } = inputFixture();
+test('an unselected row starts an external drag with only that row', () => {
+  const { controller, view, canvas, input } = inputFixture({ multiSelect: true });
   controller.setRowReorder(false);
   controller.setRowDrag((node) => node.id);
   controller.setSelection(['b', 'c']);
@@ -309,12 +310,29 @@ test('external drag on an unselected row replaces the selection when dragging st
   controller.on('rowdragstart', (event) => events.push(event.detail));
   try {
     canvas.dispatchEvent(pointer('pointerdown', 125, 40));
-    view.dispatchEvent(pointer('pointermove', 128, 40));
-    assert.deepEqual(controller.getSelection(), ['b', 'c']);
+    assert.equal(input.gesture.id, 'a');
     view.dispatchEvent(pointer('pointermove', 131, 40));
+    view.dispatchEvent(pointer('pointerup', 131, 40));
     assert.deepEqual(controller.getSelection(), ['a']);
     assert.deepEqual(events[0].nodeIds, ['a']);
     assert.equal(events[0].count, 1);
+  } finally {
+    input.destroy();
+  }
+});
+
+test('single-select data drag starts directly from an unselected row', () => {
+  const { controller, view, canvas, input } = inputFixture();
+  controller.setRowReorder(false);
+  controller.setRowDrag((node) => node.id);
+  controller.setSelection(['b']);
+  const events = [];
+  controller.on('rowdragstart', (event) => events.push(event.detail));
+  try {
+    canvas.dispatchEvent(pointer('pointerdown', 125, 40));
+    view.dispatchEvent(pointer('pointermove', 131, 40));
+    assert.deepEqual(controller.getSelection(), ['a']);
+    assert.deepEqual(events[0].nodeIds, ['a']);
     view.dispatchEvent(pointer('pointerup', 131, 40));
   } finally {
     input.destroy();

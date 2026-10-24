@@ -1,7 +1,7 @@
 let nextStatusId = 0;
 
 /**
- * Pointer interaction for the optional row-order column; persistence belongs to the host.
+ * Pointer interaction for manual row order and selected-row data dragging.
  */
 export class RowReorderInput {
   constructor(controller) {
@@ -105,6 +105,8 @@ export class RowReorderInput {
     if (!hit?.row) return;
     const node = this.controller.model.index.getNode(hit.row.nodeId);
     const orderPart = ['rowDrag', 'rowUp', 'rowDown'].includes(hit.part);
+    // Shift reserves row content for range selection.
+    if (!orderPart && event.shiftKey) return;
     const sourcePayload =
       orderPart
         ? null

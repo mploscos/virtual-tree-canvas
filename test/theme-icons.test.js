@@ -1,21 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
-import { IconRegistry, ThemeManager, TreeViewController, darkTheme, lightTheme, builtinIconNames } from '../src/index.js';
+import { readFile, readdir } from 'node:fs/promises';
+import { IconRegistry, ThemeManager, TreeViewController, darkTheme, lightTheme, themes, builtinIconNames } from '../src/index.js';
 import { treeCellLayout } from '../src/core/tree-cell-layout.js';
 
-test('all built-in SVGs resolve to the published resources directory by default', async () => {
+test('built-in SVG sources match the editable resource files', async () => {
   const registry = new IconRegistry();
+  const files = (await readdir(new URL('../resources/icons/', import.meta.url)))
+    .filter((name) => name.endsWith('.svg'))
+    .map((name) => name.slice(0, -4))
+    .sort();
+  assert.deepEqual([...builtinIconNames].sort(), files);
   assert.equal(registry.icons.size, builtinIconNames.length);
   for (const [name, icon] of registry.icons) {
     const expected = new URL(`../resources/icons/${name}.svg`, import.meta.url);
-    assert.equal(icon.url, expected.href);
-    assert.match(await readFile(expected, 'utf8'), /<svg/);
+    assert.equal(icon.url, null);
+    assert.equal(icon.source, (await readFile(expected, 'utf8')).trim());
   }
 });
 
 test('icon registries keep independent configurable base URLs', () => {
-  for (const base of ['/app/icons', 'node_modules/widget/resources/icons/', 'https://cdn.example.test/v1/icons/']) {
+  for (const base of ['/app/icons', './widget/icons/', 'https://cdn.example.test/v1/icons/']) {
     const registry = new IconRegistry({ iconsBaseUrl: base });
     assert.equal(registry.get('folder').url, `${base.replace(/\/$/, '')}/folder.svg`);
   }
@@ -52,6 +57,19 @@ test('browser icon loading is lazy, cached and uses the configured base', async 
   }
 });
 
+test('built-in icons rasterize without fetching SVG files', async () => {
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url) => { requests.push(url); throw new Error('unexpected fetch'); };
+  try {
+    const registry = new IconRegistry();
+    await registry.prepare({ icons: ['folder', 'radar'] });
+    assert.deepEqual(requests, []);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test('ThemeManager resolves type styles correctly', () => {
   const manager = new ThemeManager(darkTheme);
   const style = manager.resolveNodeStyle({ id: 'sensor-1', type: 'sensor' }, { status: 1 });
@@ -59,6 +77,12 @@ test('ThemeManager resolves type styles correctly', () => {
   assert.equal(style.icon, 'radar');
   assert.equal(style.color, darkTheme.types.sensor.color);
   assert.equal(style.status.label, 'WARN');
+});
+
+test('only dark and light are built-in theme choices', () => {
+  assert.deepEqual(Object.keys(themes), ['dark', 'light']);
+  assert.equal(new ThemeManager('light').get().colors.background, lightTheme.colors.background);
+  assert.throws(() => new ThemeManager('tactical'), /Unknown virtual tree theme/);
 });
 
 test('display themes keep small semantic icons legible', () => {

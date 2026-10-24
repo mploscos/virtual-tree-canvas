@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b111c" />
+    <title>Move nodes within and between trees · virtual-tree-canvas</title>
+    <script src="../site/theme.js"></script>
+    <link rel="stylesheet" href="../site/styles.css" />
+    <link rel="stylesheet" href="./transfer-between-trees.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="../index.html" aria-label="virtual-tree-canvas home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>virtual-tree-canvas</span>
+        </a>
+        <nav class="site-nav" aria-label="Main navigation"><a href="../index.html#demos">Demos</a><a href="../index.html#quick-start">Quick start</a><a href="../docs/guide.html">Guide</a><a href="../docs/api.html">API reference</a><a href="../docs/icon-catalog.html">Icons</a></nav>
+        <span class="version">v0.8.0</span>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode">
+          <span class="theme-icon theme-icon-sun" aria-hidden="true"></span>
+          <span class="theme-icon theme-icon-moon" aria-hidden="true"></span>
+        </button>
+      </div>
+    </header>
+    <main id="main" class="transfer-page container">
+      <div class="transfer-heading">
+        <div>
+          <p class="eyebrow">INTERACTIVE DEMO · TWO TREES</p>
+          <h1>Move a whole selection.</h1>
+          <p class="transfer-intro">Hold Shift and drag to select a range. Then drag any selected row and drop it inside a folder or between rows, in either tree. Branches keep their descendants.</p>
+        </div>
+        <button id="reset" class="reset-button" type="button">Reset example</button>
+      </div>
+      <div class="transfer-workspace">
+        <section class="tree-pane" id="pane-a" aria-labelledby="title-a">
+          <div class="pane-heading"><div><span class="pane-index">01</span><h2 id="title-a">Projects</h2></div><span class="pane-count" id="count-a"></span></div>
+          <div class="tree-host" id="tree-a"></div>
+          <div class="drop-marker" hidden aria-hidden="true"></div>
+          <div class="drop-hint" aria-hidden="true">Drop here</div>
+        </section>
+        <div class="transfer-arrow" aria-hidden="true">↔</div>
+        <section class="tree-pane" id="pane-b" aria-labelledby="title-b">
+          <div class="pane-heading"><div><span class="pane-index">02</span><h2 id="title-b">Archive</h2></div><span class="pane-count" id="count-b"></span></div>
+          <div class="tree-host" id="tree-b"></div>
+          <div class="drop-marker" hidden aria-hidden="true"></div>
+          <div class="drop-hint" aria-hidden="true">Drop here</div>
+        </section>
+      </div>
+      <div class="transfer-footer">
+        <p id="status" role="status" aria-live="polite">Hold Shift and drag to select several rows, then drag a selected row to move them.</p>
+        <p>The line inserts before or after a row; the outline moves into a folder. Use <kbd>Shift</kbd> + drag to extend a selection, or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + click to select separate rows.</p>
+      </div>
+    </main>
+    <script type="module" src="./transfer-between-trees.js"></script>
+  </body>
+</html>

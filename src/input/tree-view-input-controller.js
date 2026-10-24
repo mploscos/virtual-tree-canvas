@@ -17,7 +17,11 @@ export class TreeViewInputController {
     this.canvas = options.controller.canvas;
     this.hoveredId = null;
     this.resizeDrag = null;
+    this.selectionDrag = null;
+    this.selectionFrame = null;
+    this.suppressSelectionClick = false;
     this.cellEditor = options.cellEditor ?? null;
+    this.view = this.canvas.ownerDocument.defaultView ?? window;
     this.canvas.tabIndex = 0;
 
     this.#wheelTargets = [this.canvas, this.controller.actionOverlay?.element].filter(Boolean);
@@ -25,7 +29,7 @@ export class TreeViewInputController {
       target.addEventListener('wheel', this.#onWheel, { passive: false });
     this.canvas.addEventListener('mousedown', this.#onMouseDown);
     this.canvas.addEventListener('mousemove', this.#onMouseMove);
-    (this.canvas.ownerDocument.defaultView ?? window).addEventListener('mouseup', this.#onMouseUp);
+    this.view.addEventListener('mouseup', this.#onMouseUp);
     this.canvas.addEventListener('mouseleave', this.#onMouseLeave);
     this.canvas.addEventListener('click', this.#onClick);
     this.canvas.addEventListener('contextmenu', this.#onContextMenu);
@@ -37,10 +41,8 @@ export class TreeViewInputController {
     for (const target of this.#wheelTargets) target.removeEventListener('wheel', this.#onWheel);
     this.canvas.removeEventListener('mousedown', this.#onMouseDown);
     this.canvas.removeEventListener('mousemove', this.#onMouseMove);
-    (this.canvas.ownerDocument.defaultView ?? window).removeEventListener(
-      'mouseup',
-      this.#onMouseUp
-    );
+    this.view.removeEventListener('mouseup', this.#onMouseUp);
+    this.#endSelectionDrag();
     this.canvas.removeEventListener('mouseleave', this.#onMouseLeave);
     this.canvas.removeEventListener('click', this.#onClick);
     this.canvas.removeEventListener('contextmenu', this.#onContextMenu);
@@ -64,6 +66,7 @@ export class TreeViewInputController {
   };
 
   #onMouseMove = (event) => {
+    if (this.selectionDrag) return;
     if (this.controller.rowReorderInput?.gesture) return;
     if (this.resizeDrag) {
       const rect = this.canvas.getBoundingClientRect();
@@ -74,7 +77,7 @@ export class TreeViewInputController {
       return;
     }
     const hit = this.#hitTest(event);
-    this.canvas.style.cursor = cursorForHit(hit);
+    this.canvas.style.cursor = cursorForHit(hit, this.controller);
     const id = hit?.row?.nodeId ?? null;
     const key = hitKey(hit);
     if (id === this.hoveredId && key === this.hoveredHitKey) return;
@@ -92,6 +95,11 @@ export class TreeViewInputController {
   };
 
   #onClick = (event) => {
+    if (this.suppressSelectionClick) {
+      this.suppressSelectionClick = false;
+      event.preventDefault();
+      return;
+    }
     if (this.controller.rowReorderInput?.suppressClick) {
       this.controller.rowReorderInput.suppressClick = false;
       event.preventDefault();
@@ -118,7 +126,6 @@ export class TreeViewInputController {
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
       metaKey: event.metaKey,
-      multi: this.canvas.dataset.multi === 'true',
       part: hit.part,
       columnId: hit.column?.id ?? null
     });
@@ -126,7 +133,12 @@ export class TreeViewInputController {
 
   #onDoubleClick = (event) => {
     const hit = this.#hitTest(event);
-    if (hit?.area === 'row') this.controller.doubleClickNode(hit.row.nodeId, event);
+    if (hit?.area !== 'row') return;
+    if ([
+      'arrayAdd', 'arrayRemove', 'button', 'checkbox', 'editor', 'range',
+      'number', 'rowDrag', 'rowUp', 'rowDown', 'chevron'
+    ].includes(hit.part)) return;
+    this.controller.doubleClickNode(hit.row.nodeId, event);
   };
 
   #onContextMenu = (event) => {
@@ -140,6 +152,8 @@ export class TreeViewInputController {
   };
 
   #onMouseDown = (event) => {
+    this.suppressSelectionClick = false;
+    if (event.button !== 0) return;
     if (this.controller.rowReorderInput?.gesture) return;
     const hit = this.#hitTest(event);
     if (['rowDrag', 'rowUp', 'rowDown'].includes(hit?.part)) return;
@@ -148,22 +162,98 @@ export class TreeViewInputController {
       event.preventDefault();
       return;
     }
-    if (hit?.area !== 'header' || hit.part !== 'resize' || !hit.column) return;
-    const rect = this.canvas.getBoundingClientRect();
-    this.resizeDrag = {
-      columnId: hit.column.id,
-      startX: event.clientX - rect.left,
-      startWidth: hit.column.width
+    if (hit?.area === 'header' && hit.part === 'resize' && hit.column) {
+      const rect = this.canvas.getBoundingClientRect();
+      this.resizeDrag = {
+        columnId: hit.column.id,
+        startX: event.clientX - rect.left,
+        startWidth: hit.column.width
+      };
+      this.canvas.style.cursor = 'col-resize';
+      event.preventDefault();
+      return;
+    }
+    if (hit?.area !== 'row' || !['label', 'row', 'icon', 'cell'].includes(hit.part)) return;
+    if (!this.controller.multiSelect || !event.shiftKey) return;
+    const startIndex = hit.row.rowIndex;
+    const anchor = event.shiftKey && this.controller.anchorRowIndex !== null
+      ? this.controller.anchorRowIndex : startIndex;
+    this.selectionDrag = {
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      anchor,
+      additive: event.ctrlKey || event.metaKey,
+      previous: this.controller.getSelection(),
+      endIndex: null,
+      active: false
     };
-    this.canvas.style.cursor = 'col-resize';
-    event.preventDefault();
+    this.view.addEventListener('mousemove', this.#onSelectionMove);
   };
 
   #onMouseUp = () => {
+    if (this.selectionDrag?.active) this.suppressSelectionClick = true;
+    this.#endSelectionDrag();
     this.resizeDrag = null;
     this.canvas.style.cursor = '';
     this.controller.setActiveHit(null);
   };
+
+  #onSelectionMove = (event) => {
+    if (!this.selectionDrag || !(event.buttons & 1)) return;
+    this.selectionDrag.x = event.clientX;
+    this.selectionDrag.y = event.clientY;
+    this.#updateSelectionDrag();
+    if (this.selectionDrag.active) event.preventDefault();
+  };
+
+  #updateSelectionDrag() {
+    const drag = this.selectionDrag;
+    if (!drag) return;
+    if (!drag.active && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < 5) return;
+    drag.active = true;
+    const rect = this.canvas.getBoundingClientRect();
+    const viewport = this.controller.viewport;
+    const rows = this.controller.rowModel.rows;
+    if (!rows.length) return;
+    const contentY = drag.y - rect.top - viewport.renderInsetY - viewport.headerHeight + viewport.scrollY;
+    const endIndex = Math.max(0, Math.min(rows.length - 1, Math.floor(contentY / this.controller.rowModel.rowHeight)));
+    if (endIndex !== drag.endIndex) {
+      drag.endIndex = endIndex;
+      const selected = drag.additive ? new Set(drag.previous) : new Set();
+      for (let index = Math.min(drag.anchor, endIndex); index <= Math.max(drag.anchor, endIndex); index++)
+        selected.add(rows[index].nodeId);
+      this.controller.setSelection([...selected]);
+      this.controller.anchorRowIndex = drag.anchor;
+    }
+    this.#scheduleSelectionScroll();
+  }
+
+  #scheduleSelectionScroll() {
+    if (this.selectionFrame !== null || !this.selectionDrag?.active) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const viewport = this.controller.viewport;
+    const y = this.selectionDrag.y - rect.top - viewport.renderInsetY;
+    const top = viewport.headerHeight;
+    const bottom = top + viewport.rowViewportHeight;
+    const delta = y < top + 24 ? -12 : y > bottom - 24 ? 12 : 0;
+    if (!delta) return;
+    this.selectionFrame = this.view.requestAnimationFrame(() => {
+      this.selectionFrame = null;
+      if (!this.selectionDrag?.active) return;
+      const previous = viewport.scrollY;
+      this.controller.scrollBy(0, delta);
+      if (viewport.scrollY !== previous) this.#updateSelectionDrag();
+    });
+  }
+
+  #endSelectionDrag() {
+    this.selectionDrag = null;
+    this.view.removeEventListener('mousemove', this.#onSelectionMove);
+    if (this.selectionFrame !== null) this.view.cancelAnimationFrame(this.selectionFrame);
+    this.selectionFrame = null;
+  }
 
   #onKeyDown = (event) => {
     if (this.controller.handleKey(event)) {
@@ -180,22 +270,20 @@ export class TreeViewInputController {
 
 }
 
-function cursorForHit(hit) {
+function cursorForHit(hit, controller) {
   if (hit?.part === 'rowDrag') return 'grab';
   if (hit?.part === 'rowUp' || hit?.part === 'rowDown') return 'pointer';
   if (hit?.area === 'header' && hit.part === 'resize') return 'col-resize';
   if (hit?.area === 'header' && hit.part === 'filter') return 'text';
   if (hit?.area !== 'row') return '';
-  if (
-    hit.part === 'button' ||
-    hit.part === 'checkbox' ||
-    hit.part === 'arrayAdd' ||
-    hit.part === 'arrayRemove' ||
-    hit.part === 'chevron'
-  )
-    return 'pointer';
-  if (hit.part === 'editor' || hit.part === 'number') return 'text';
-  if (hit.part === 'range') return 'ew-resize';
+  const data = controller.model.nodes[hit.row.nodeIndex]?.data;
+  const editable = controller.editable && !data?.readonly && !data?.disabled;
+  if (hit.part === 'chevron') return 'pointer';
+  if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove' || hit.part === 'button')
+    return controller.editable && !data?.disabled ? 'pointer' : '';
+  if (hit.part === 'checkbox') return editable ? 'pointer' : '';
+  if (hit.part === 'editor' || hit.part === 'number') return editable ? 'text' : '';
+  if (hit.part === 'range') return editable ? 'ew-resize' : '';
   return '';
 }
 

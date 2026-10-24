@@ -32,6 +32,7 @@ import {
 import { TreeViewInputController } from './input/tree-view-input-controller.js';
 import { TreeRowRenderer } from './renderers/index.js';
 import { mergeDynamicStateChanged } from './core/dynamic-state.js';
+import { compareSortValues } from './core/tree-column-model.js';
 import { leadingHiddenRowActionWidth } from './core/row-action-layout.js';
 
 export class TreeViewController {
@@ -63,6 +64,7 @@ export class TreeViewController {
     this.columnModel = new TreeColumnModel(options.columns);
     this.rowActions = options.rowActions ?? [];
     this.rowDrag = options.rowDrag ?? null;
+    this.multiSelect = options.multiSelect ?? false;
     this.columnModel.setRowActions(this.rowActions.length);
     this.rowReorder = Boolean(options.rowReorder);
     this.columnModel.setRowReorder(this.rowReorder);
@@ -301,7 +303,7 @@ export class TreeViewController {
       this.columnModel.setColumns([]);
     }
     this.#replaceTree(nodes, preserveExpansion);
-    this.searchIndex.rebuild(this.model);
+    this.searchIndex.invalidate(this.model);
     this.workerClient?.setData(this.model.nodes);
     this.#rebuildRows();
     this.events.emit('datachange', {});
@@ -332,7 +334,7 @@ export class TreeViewController {
     const nodes = resolveNodeIcons(source, resolver);
     this.model.nodes = nodes;
     this.model.index.rebuild(nodes);
-    this.searchIndex.rebuild(this.model);
+    this.searchIndex.invalidate(this.model);
     this.workerClient?.setData(nodes);
     this.#rebuildRows();
   }
@@ -365,6 +367,17 @@ export class TreeViewController {
     });
   }
 
+  setMultiSelect(enabled) {
+    validateTreeViewOptions({ multiSelect: enabled });
+    if (this.multiSelect === enabled) return;
+    this.multiSelect = enabled;
+    if (!enabled && this.selection.selected.size > 1) {
+      const id = this.selection.selected.has(this.focusedId)
+        ? this.focusedId : this.getSelection().at(-1);
+      this.setSelection([id]);
+    }
+  }
+
   canReorderRows(nodeId) {
     return (
       this.rowReorder &&
@@ -387,7 +400,7 @@ export class TreeViewController {
     if (!detail) return false;
     this.workerRevision++;
     this.workerClient?.setData(this.model.nodes);
-    this.searchIndex.rebuild(this.model);
+    this.searchIndex.invalidate(this.model);
     this.#rebuildRows();
     this.anchorRowIndex = this.rowModel.getRowById(anchorId)?.rowIndex ?? null;
     this.focusedId = nodeId;
@@ -532,7 +545,7 @@ export class TreeViewController {
     if (!sameLayout)
       this.setColumns(presentation === 'pane' ? inspectorPaneColumns() : inspectorColumns());
     this.#replaceTree(nodes, preserveExpansion);
-    this.searchIndex.rebuild(this.model);
+    this.searchIndex.invalidate(this.model);
     this.#rebuildRows();
     this.events.emit('datachange', {});
     this.events.emit('modelchange', {
@@ -559,6 +572,23 @@ export class TreeViewController {
           ? 'object'
           : typeof newValue;
     data.valueText = formatInspectorValue(newValue, data.meta);
+    let summaryChanged = false;
+    for (let itemNode = node; itemNode; itemNode = this.model.index.getNode(itemNode.parentId)) {
+      const index = itemNode.data?.arrayIndex;
+      if (!Number.isInteger(index)) continue;
+      const arrayPath = this.model.index.getNode(itemNode.parentId)?.data?.path ?? '';
+      const title = this.inspector.builder.arrayItemTitle(
+        this.inspector.meta,
+        arrayPath,
+        index,
+        getAtPath(this.inspector.model, itemNode.data.path)
+      );
+      if (itemNode.data.arrayItemTitle === title) continue;
+      itemNode.data.arrayItemTitle = title;
+      itemNode.label = title || `[${index}]`;
+      summaryChanged = true;
+    }
+    if (summaryChanged) this.searchIndex.invalidate(this.model);
     if (this.inspector.options.markUpdated !== false) {
       this.setDynamicState([
         {
@@ -646,6 +676,7 @@ export class TreeViewController {
     return true;
   }
 
+  /** @param {string | URL} [workerUrl] */
   enableWorkers(workerUrl) {
     if (this.workerClient) return Promise.resolve(this);
     const client = new TreeWorkerClient(workerUrl);
@@ -721,10 +752,10 @@ export class TreeViewController {
       this.model.nodes,
       this.model.dynamicState
     );
-    this.rowModel.setSortComparator(
-      (a, b) =>
-        compareColumnValues(column, a, b, this.model.dynamicState, this.sortValueSnapshot) *
-        (nextDirection === 'desc' ? -1 : 1)
+    const values = this.sortValueSnapshot;
+    const multiplier = nextDirection === 'desc' ? -1 : 1;
+    this.rowModel.setSortIdComparator(
+      (aId, bId) => compareSortValues(values.get(aId), values.get(bId)) * multiplier
     );
     this.#rebuildRows();
     this.events.emit('sortchange', {
@@ -1225,6 +1256,7 @@ export class TreeViewController {
 
   setSelection(ids) {
     if (!Array.isArray(ids)) throw new TypeError('ids must be an array');
+    if (!this.multiSelect && ids.length > 1) ids = ids.slice(-1);
     this.selection.selected.clear();
     for (const id of ids) this.selection.selected.add(id);
     this.selection.focused = ids[ids.length - 1] ?? null;
@@ -1312,12 +1344,12 @@ export class TreeViewController {
   selectRow(rowIndex, event = {}) {
     const row = this.rowModel.getRow(rowIndex);
     if (!row) return false;
-    if (event.shiftKey && this.anchorRowIndex !== null) {
+    if (this.multiSelect && event.shiftKey && this.anchorRowIndex !== null) {
       this.selection.selected.clear();
       const start = Math.min(this.anchorRowIndex, rowIndex);
       const end = Math.max(this.anchorRowIndex, rowIndex);
       for (let i = start; i <= end; i++) this.selection.selected.add(this.rowModel.rows[i].nodeId);
-    } else if (event.ctrlKey || event.metaKey || event.multi) {
+    } else if (this.multiSelect && (event.ctrlKey || event.metaKey)) {
       if (this.selection.selected.has(row.nodeId)) this.selection.selected.delete(row.nodeId);
       else this.selection.selected.add(row.nodeId);
       this.anchorRowIndex = rowIndex;
@@ -1349,6 +1381,7 @@ export class TreeViewController {
       return true;
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      if (!this.multiSelect) return true;
       this.selection.selected.clear();
       for (const row of this.rowModel.rows) this.selection.selected.add(row.nodeId);
       const focusedRow = this.rowModel.getRow(this.#focusedRowIndex());
@@ -1454,6 +1487,7 @@ export class TreeViewController {
     this.flushDynamicState();
     const visibleRange = this.rowModel.getVisibleRange(this.viewport, 4);
     return {
+      editable: this.editable,
       rowDrag: this.rowDrag,
       rowReorder: this.rowReorder,
       canReorderRows: this.canReorderRows(),
@@ -1765,7 +1799,9 @@ export class TreeViewController {
         const labelX =
           hit.row.depth * this.rowModel.indentWidth +
           (hit.row.hasChildren ? 28 : this.themeManager.get().iconSize + 9);
-        text = node.label ?? node.id;
+        text = Number.isInteger(data.arrayIndex)
+          ? `${data.arrayIndex}${data.arrayItemTitle ? ` ${data.arrayItemTitle}` : ''}`
+          : node.label ?? node.id;
         width =
           data.valueType === 'object'
             ? Math.max(0, visibleWidth - labelX - 8)
@@ -1783,7 +1819,9 @@ export class TreeViewController {
         this.model.index.childrenByParent.size > 1,
         this.themeManager.get().iconSize
       );
-      text = node.label ?? node.id;
+      text = Number.isInteger(node.data?.arrayIndex)
+        ? `${node.data.arrayIndex}${node.data.arrayItemTitle ? ` ${node.data.arrayItemTitle}` : ''}`
+        : node.label ?? node.id;
       width = Math.max(0, hit.column.width - labelX - 6);
     } else if (hit.column.kind === 'inspectorValue') {
       text = inspectorTooltipValue(node);
@@ -2239,7 +2277,7 @@ export class TreeViewController {
     this.model.setTree(nodes);
     this.expansion.model.expanded = expanded;
     if (focusId) this.expansion.expandAncestors(focusId);
-    this.searchIndex.rebuild(this.model);
+    this.searchIndex.invalidate(this.model);
     this.#rebuildRows();
     if (focusId) this.focusedId = focusId;
   }
@@ -2404,16 +2442,6 @@ function createSortValueSnapshot(column, nodes, dynamicState) {
   return new Map(
     nodes.map((node) => [node.id, column.value(node, dynamicState.get(node.id) ?? {})])
   );
-}
-
-function compareColumnValues(column, a, b, dynamicState, snapshot = null) {
-  const aValue = snapshot ? snapshot.get(a.id) : column.value(a, dynamicState.get(a.id) ?? {});
-  const bValue = snapshot ? snapshot.get(b.id) : column.value(b, dynamicState.get(b.id) ?? {});
-  if (typeof aValue === 'number' && typeof bValue === 'number') return aValue - bValue;
-  return String(aValue ?? '').localeCompare(String(bValue ?? ''), undefined, {
-    numeric: true,
-    sensitivity: 'base'
-  });
 }
 
 function matchesFilter(node, state, path, query, options = {}) {

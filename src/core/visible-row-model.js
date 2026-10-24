@@ -40,12 +40,20 @@ export class VisibleRowModel extends EventTarget {
     this.contentWidth = 0;
     this.contentHeight = 0;
     this.sortComparator = null;
+    this.sortIdComparator = null;
     this.filterPredicate = null;
     this.filterCollapsed = new Set();
   }
 
   setSortComparator(comparator) {
     this.sortComparator = comparator;
+    this.sortIdComparator = null;
+  }
+
+  /** Sort IDs without resolving nodes for every comparison. */
+  setSortIdComparator(comparator) {
+    this.sortIdComparator = comparator;
+    this.sortComparator = null;
   }
 
   setFilterPredicate(predicate) {
@@ -91,9 +99,11 @@ export class VisibleRowModel extends EventTarget {
     };
 
     const sortedChildren = (id) => {
-      const children = this.model.index
-        .getChildren(id)
-        .filter((childId) => subtreeIncluded(childId));
+      const allChildren = this.model.index.getChildren(id);
+      const children = this.filterPredicate
+        ? allChildren.filter((childId) => subtreeIncluded(childId))
+        : allChildren;
+      if (this.sortIdComparator) return children.slice().sort(this.sortIdComparator);
       if (!this.sortComparator) return children;
       return children.slice().sort((aId, bId) => {
         const a = this.model.index.getNode(aId);
@@ -129,7 +139,8 @@ export class VisibleRowModel extends EventTarget {
     };
 
     const roots = this.model.index.roots.filter((rootId) => subtreeIncluded(rootId));
-    if (this.sortComparator) {
+    if (this.sortIdComparator) roots.sort(this.sortIdComparator);
+    else if (this.sortComparator) {
       roots.sort((aId, bId) =>
         this.sortComparator(this.model.index.getNode(aId), this.model.index.getNode(bId), aId, bId)
       );

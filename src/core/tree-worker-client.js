@@ -1,7 +1,10 @@
 export class TreeWorkerClient {
-  constructor(workerUrl = new URL('../workers/tree-worker.js', import.meta.url)) {
+  /** @param {string | URL} [workerUrl] */
+  constructor(workerUrl) {
     if (typeof Worker === 'undefined') throw new Error('Worker is not available');
-    this.worker = new Worker(workerUrl, { type: 'module' });
+    this.worker = workerUrl === undefined
+      ? new Worker(new URL('../workers/tree-worker.js', import.meta.url), { type: 'module' })
+      : new Worker(workerUrl, { type: 'module' });
     this.nextId = 1;
     this.pending = new Map();
     this.ready = Promise.resolve();

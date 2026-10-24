@@ -14,7 +14,7 @@ export async function runBrowser(root, entry = '/test/browser/view.html') {
       const file = path.resolve(root, '.' + name);
       if (!file.startsWith(path.resolve(root) + path.sep)) throw new Error('Invalid path');
       const bytes = await readFile(file);
-      response.setHeader('Content-Type', ({ '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html', '.svg': 'image/svg+xml' })[path.extname(file)] ?? 'application/octet-stream');
+      response.setHeader('Content-Type', ({ '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html', '.css': 'text/css', '.svg': 'image/svg+xml' })[path.extname(file)] ?? 'application/octet-stream');
       response.end(bytes);
     } catch { response.statusCode = 404; response.end('Not found'); }
   });

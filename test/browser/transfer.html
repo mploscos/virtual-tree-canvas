@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<style>
+  body { margin: 20px; background: #0b111c; }
+  .workspace { display: grid; grid-template-columns: 450px 450px; gap: 24px; }
+  .tree-pane { position: relative; border: 1px solid #334155; }
+  .tree-host { height: 380px; }
+</style>
+<div class="workspace">
+  <div class="tree-pane" id="pane-a"><div id="count-a"></div><div class="tree-host" id="tree-a"></div><div class="drop-marker" hidden></div><div class="drop-hint"></div></div>
+  <div class="tree-pane" id="pane-b"><div id="count-b"></div><div class="tree-host" id="tree-b"></div><div class="drop-marker" hidden></div><div class="drop-hint"></div></div>
+</div>
+<button id="reset">Reset</button><div id="status"></div>
+<script type="module">
+  const results = [];
+  try {
+    await import('../../examples/transfer-between-trees.js');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const source = document.querySelector('#tree-a canvas');
+    const destination = document.querySelector('#pane-b');
+    const box = source.getBoundingClientRect();
+    const target = destination.getBoundingClientRect();
+    const x = box.left + 145;
+    const y = (row) => box.top + 28 + row * 28 + 14;
+    const mouse = (type, x, y, buttons, modifiers = 0) => window.testMouse({
+      type, x, y, button: 'left', buttons, clickCount: 1, modifiers
+    });
+
+    // Shift drag from a child selects two sibling leaves, without starting a transfer.
+    await mouse('mousePressed', x, y(2), 1, 8);
+    await mouse('mouseMoved', x, y(3), 1, 8);
+    await mouse('mouseReleased', x, y(3), 0, 8);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const selectedWithoutTransfer = document.querySelector('#count-a').textContent === '7 nodes' &&
+      document.querySelector('#count-b').textContent === '5 nodes' &&
+      !document.querySelector('#status').textContent.includes('Dragging');
+
+    // Drag any selected row across the two canvases.
+    await mouse('mousePressed', x, y(2), 1);
+    await mouse('mouseMoved', x + 25, y(2), 1);
+    await mouse('mouseMoved', target.left + 120, target.bottom - 30, 1);
+    const highlighted = destination.classList.contains('is-drop-target');
+    await mouse('mouseReleased', target.left + 120, target.bottom - 30, 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const moved = document.querySelector('#count-a').textContent === '5 nodes' &&
+      document.querySelector('#count-b').textContent === '7 nodes' &&
+      document.querySelector('#status').textContent.includes('Moved 2 branches') &&
+      document.querySelector('#status').textContent.includes('2 nodes');
+    results.push({ name: 'Shift drag from a child selects siblings, then moves both', passed: selectedWithoutTransfer && highlighted && moved });
+
+    const receivingCanvas = document.querySelector('#tree-b canvas').getBoundingClientRect();
+    const reverseX = receivingCanvas.left + 145;
+    const reverseY = receivingCanvas.top + 28 + 6 * 28 + 14;
+    await mouse('mousePressed', reverseX, reverseY, 1);
+    await mouse('mouseMoved', reverseX + 25, reverseY, 1);
+    await mouse('mouseMoved', box.left + 120, box.top + 120, 1);
+    await mouse('mouseReleased', box.left + 120, box.top + 120, 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    results.push({ name: 'transferred branch can be dragged back', passed:
+      document.querySelector('#count-a').textContent === '7 nodes' &&
+      document.querySelector('#count-b').textContent === '5 nodes' &&
+      document.querySelector('#status').textContent.includes('2 nodes') });
+
+    document.querySelector('#reset').click();
+    results.push({ name: 'reset restores both trees', passed:
+      document.querySelector('#count-a').textContent === '7 nodes' &&
+      document.querySelector('#count-b').textContent === '5 nodes' });
+
+    // Drop in the center of a folder in the same tree, then reorder before a sibling.
+    await mouse('mousePressed', x, y(7), 1);
+    await mouse('mouseReleased', x, y(7), 0);
+    await mouse('mousePressed', x, y(7), 1);
+    await mouse('mouseMoved', x + 25, y(7), 1);
+    await mouse('mouseMoved', x, y(1), 1);
+    const insideMarker = document.querySelector('#pane-a .drop-marker');
+    const markedInside = !insideMarker.hidden && insideMarker.classList.contains('is-inside');
+    await mouse('mouseReleased', x, y(1), 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    results.push({ name: 'same-tree drop reparents into a folder', passed: markedInside &&
+      document.querySelector('#status').textContent.includes('inside Design') &&
+      document.querySelector('#count-a').textContent === '7 nodes' });
+
+    await mouse('mousePressed', x, y(4), 1);
+    await mouse('mouseMoved', x + 25, y(4), 1);
+    await mouse('mouseMoved', x, box.top + 28 + 2 * 28 + 4, 1);
+    const beforeMarker = document.querySelector('#pane-a .drop-marker');
+    const markedBefore = !beforeMarker.hidden && !beforeMarker.classList.contains('is-inside');
+    await mouse('mouseReleased', x, box.top + 28 + 2 * 28 + 4, 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    results.push({ name: 'same-tree drop reorders before another row', passed: markedBefore &&
+      document.querySelector('#status').textContent.includes('before Wireframes') &&
+      document.querySelector('#count-a').textContent === '7 nodes' });
+
+    document.querySelector('#reset').click();
+
+    // A click selects one row; its next drag moves just that row.
+    await mouse('mousePressed', x, y(7), 1);
+    await mouse('mouseReleased', x, y(7), 0);
+    await mouse('mousePressed', x, y(7), 1);
+    await mouse('mouseMoved', x + 25, y(7), 1);
+    await mouse('mouseMoved', target.left + 120, target.top + 120, 1);
+    await mouse('mouseReleased', target.left + 120, target.top + 120, 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    results.push({ name: 'click then drag moves one row', passed:
+      document.querySelector('#count-a').textContent === '6 nodes' &&
+      document.querySelector('#count-b').textContent === '6 nodes' &&
+      document.querySelector('#status').textContent.includes('1 node') });
+
+    const restoredCanvas = document.querySelector('#tree-a canvas');
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    results.push({ name: 'back-forward cache keeps transfer trees mounted', passed:
+      document.querySelector('#tree-a canvas') === restoredCanvas });
+  } catch (error) {
+    results.push({ name: 'two-tree transfer demo', passed: false, error: String(error) });
+  }
+  window.testResult = results;
+</script>
+</html>

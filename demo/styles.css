@@ -19,15 +19,30 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  min-height: 44px;
-  flex-wrap: wrap;
+  height: 44px;
+  flex-wrap: nowrap;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
   border-bottom: 1px solid #2a343d;
   background: #151b21;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
+
+.demo-home-link {
+  flex: none;
+  color: #80e1d5;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.demo-home-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.demo-home-link:focus-visible { outline: 2px solid #80e1d5; outline-offset: 3px; }
 
 .toolbar strong {
   font-size: 14px;
@@ -79,7 +94,8 @@ button:hover {
   background: #27333e;
 }
 
-#stats {
+#stats,
+#sort-note {
   color: #9ba8b3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -163,6 +179,55 @@ button:hover {
   background: #0f1419;
 }
 
+/* The benchmark has more controls than the compact inspector toolbar. */
+.benchmark-demo {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.benchmark-demo .toolbar {
+  position: relative;
+  inset: auto;
+  height: auto;
+  min-height: 44px;
+  flex: none;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 6px 14px;
+  overflow: visible;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.toolbar-brand { flex: 0 0 auto; gap: 10px; }
+#toggle-metrics { display: none; }
+.toolbar-search { flex: 1 1 440px; flex-wrap: wrap; }
+.toolbar-search input {
+  width: auto;
+  min-width: 100px;
+  flex: 1 1 140px;
+}
+.toolbar-settings { flex: 1 1 380px; flex-wrap: wrap; }
+.toolbar-actions { flex: 1 1 350px; flex-wrap: wrap; }
+.toolbar-feedback { flex: 1 1 150px; overflow: hidden; }
+.toolbar-feedback #stats { flex: 1 1 auto; min-width: 0; }
+.toolbar-benchmark button,
+.toolbar-benchmark select { flex: none; white-space: nowrap; }
+
+.benchmark-demo .tree-shell {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 #tree {
   display: block;
   width: 100%;
@@ -176,8 +241,15 @@ button:hover {
   border-color: #46a7ff;
 }
 
-@media (max-width: 760px) {
-  .tree-shell {
-    inset-block-start: 84px;
+@media (max-width: 900px) {
+  .toolbar-brand { gap: 6px; }
+  #toggle-metrics { display: inline-block; margin-left: 2px; }
+  #benchmark-panel { display: none; }
+  #benchmark-panel.is-open {
+    display: block;
+    width: min(280px, calc(100% - 20px));
+    max-height: min(70%, 580px);
+    overflow: auto;
+    pointer-events: auto;
   }
 }

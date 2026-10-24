@@ -1,4 +1,6 @@
 export class TreeSearchIndex {
+  #pendingModel = null;
+
   constructor() {
     this.records = [];
     this.results = [];
@@ -8,6 +10,7 @@ export class TreeSearchIndex {
 
   /** @param {import('./tree-model.js').TreeModel} model */
   rebuild(model) {
+    this.#pendingModel = null;
     this.records = model.nodes.map((node) => {
       const path = model.index.pathById.get(node.id) ?? '';
       const searchId = searchableNodeId(node);
@@ -25,12 +28,19 @@ export class TreeSearchIndex {
     });
   }
 
+  /** @param {import('./tree-model.js').TreeModel} model */
+  invalidate(model) {
+    this.records = [];
+    this.#pendingModel = model;
+  }
+
   /**
    * @param {string} query
    * @param {{ fields?: string[], limit?: number, caseSensitive?: boolean, wholeWord?: boolean }} options
    */
   search(query, options = {}) {
     const q = normalizeSearchValue(query.trim(), options);
+    if (q && this.#pendingModel) this.rebuild(this.#pendingModel);
     this.lastQuery = query;
     if (!q) {
       this.results = [];

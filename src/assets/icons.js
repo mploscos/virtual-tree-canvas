@@ -1,9 +1,9 @@
 /**
- * Resolve built-in SVG resources independently of the bundled JavaScript location.
- * @param {string | URL} [iconsBaseUrl] Directory URL, with or without a trailing slash.
+ * Resolve an optional external directory of built-in SVG files.
+ * @param {string | URL} iconsBaseUrl Directory URL, with or without a trailing slash.
  */
 export function createBuiltinIconUrls(iconsBaseUrl) {
-  const base = String(iconsBaseUrl ?? new URL('../../resources/icons/', import.meta.url)).replace(
+  const base = String(iconsBaseUrl).replace(
     /\/+$/,
     ''
   );

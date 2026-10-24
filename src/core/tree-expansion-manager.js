@@ -51,7 +51,8 @@ export class TreeExpansionManager extends EventTarget {
   expandToDepth(maxDepth) {
     this.model.expanded.clear();
     const visit = (id, depth) => {
-      if (depth < maxDepth && this.hasChildren(id)) this.model.expanded.add(id);
+      if (depth >= maxDepth) return;
+      if (this.hasChildren(id)) this.model.expanded.add(id);
       for (const childId of this.model.index.getChildren(id)) visit(childId, depth + 1);
     };
     for (const rootId of this.model.index.roots) visit(rootId, 0);

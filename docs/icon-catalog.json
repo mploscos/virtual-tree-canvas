@@ -1,572 +1,572 @@
 [
   {
     "id": "person",
-    "label": "Persona",
-    "category": "Personas y organización",
+    "label": "Person",
+    "category": "People and organization",
     "available": true
   },
   {
     "id": "people",
-    "label": "Grupo",
-    "category": "Personas y organización",
+    "label": "Group",
+    "category": "People and organization",
     "available": true
   },
   {
     "id": "child",
-    "label": "Infancia",
-    "category": "Personas y organización",
+    "label": "Child",
+    "category": "People and organization",
     "available": true
   },
   {
     "id": "dog",
-    "label": "Perro",
-    "category": "Animales",
+    "label": "Dog",
+    "category": "Animals",
     "available": true
   },
   {
     "id": "cat",
-    "label": "Gato",
-    "category": "Animales",
+    "label": "Cat",
+    "category": "Animals",
     "available": true
   },
   {
     "id": "bird",
-    "label": "Ave",
-    "category": "Animales",
+    "label": "Bird",
+    "category": "Animals",
     "available": true
   },
   {
     "id": "fish",
-    "label": "Pez",
-    "category": "Animales",
+    "label": "Fish",
+    "category": "Animals",
     "available": true
   },
   {
     "id": "insect",
-    "label": "Insecto",
-    "category": "Animales",
+    "label": "Insect",
+    "category": "Animals",
     "available": true
   },
   {
     "id": "tree",
-    "label": "Árbol",
-    "category": "Plantas y ecosistemas",
+    "label": "Tree",
+    "category": "Plants and ecosystems",
     "available": true
   },
   {
     "id": "leaf",
-    "label": "Hoja",
-    "category": "Plantas y ecosistemas",
+    "label": "Leaf",
+    "category": "Plants and ecosystems",
     "available": true
   },
   {
     "id": "flower",
-    "label": "Flor",
-    "category": "Plantas y ecosistemas",
+    "label": "Flower",
+    "category": "Plants and ecosystems",
     "available": true
   },
   {
     "id": "seedling",
-    "label": "Brote",
-    "category": "Plantas y ecosistemas",
+    "label": "Seedling",
+    "category": "Plants and ecosystems",
     "available": true
   },
   {
     "id": "sun",
-    "label": "Sol",
-    "category": "Tiempo atmosférico",
+    "label": "Sun",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "moon",
-    "label": "Luna",
-    "category": "Tiempo atmosférico",
+    "label": "Moon",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "cloud",
-    "label": "Nube",
-    "category": "Tiempo atmosférico",
+    "label": "Cloud",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "rain",
-    "label": "Lluvia",
-    "category": "Tiempo atmosférico",
+    "label": "Rain",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "snow",
-    "label": "Nieve",
-    "category": "Tiempo atmosférico",
+    "label": "Snow",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "wind",
-    "label": "Viento",
-    "category": "Tiempo atmosférico",
+    "label": "Wind",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "storm",
-    "label": "Tormenta",
-    "category": "Tiempo atmosférico",
+    "label": "Storm",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "fog",
-    "label": "Niebla",
-    "category": "Tiempo atmosférico",
+    "label": "Fog",
+    "category": "Weather",
     "available": true
   },
   {
     "id": "ground",
-    "label": "Dominio terrestre",
-    "category": "Terreno y agua",
+    "label": "Ground domain",
+    "category": "Terrain and water",
     "available": true
   },
   {
     "id": "surface",
-    "label": "Dominio de superficie",
-    "category": "Terreno y agua",
+    "label": "Surface domain",
+    "category": "Terrain and water",
     "available": true
   },
   {
     "id": "subsurface",
-    "label": "Dominio submarino",
-    "category": "Terreno y agua",
+    "label": "Subsurface domain",
+    "category": "Terrain and water",
     "available": true
   },
   {
     "id": "car",
-    "label": "Coche",
-    "category": "Transporte terrestre",
+    "label": "Car",
+    "category": "Ground transportation",
     "available": true
   },
   {
     "id": "bicycle",
-    "label": "Bicicleta",
-    "category": "Transporte terrestre",
+    "label": "Bicycle",
+    "category": "Ground transportation",
     "available": true
   },
   {
     "id": "bus-vehicle",
-    "label": "Autobús de pasajeros",
-    "category": "Transporte terrestre",
+    "label": "Passenger bus",
+    "category": "Ground transportation",
     "available": true
   },
   {
     "id": "aircraft",
-    "label": "Avión",
-    "category": "Aviación y espacio",
+    "label": "Aircraft",
+    "category": "Aviation and space",
     "available": true
   },
   {
     "id": "helicopter",
-    "label": "Helicóptero",
-    "category": "Aviación y espacio",
+    "label": "Helicopter",
+    "category": "Aviation and space",
     "available": true
   },
   {
     "id": "drone",
-    "label": "Dron",
-    "category": "Aviación y espacio",
+    "label": "Drone",
+    "category": "Aviation and space",
     "available": true
   },
   {
     "id": "space",
-    "label": "Dominio espacial",
-    "category": "Aviación y espacio",
+    "label": "Space domain",
+    "category": "Aviation and space",
     "available": true
   },
   {
     "id": "ship",
-    "label": "Buque",
-    "category": "Entorno marítimo",
+    "label": "Ship",
+    "category": "Maritime environment",
     "available": true
   },
   {
     "id": "box",
-    "label": "Caja",
-    "category": "Objetos e instalaciones",
+    "label": "Box",
+    "category": "Objects and facilities",
     "available": true
   },
   {
     "id": "building",
-    "label": "Edificio",
-    "category": "Objetos e instalaciones",
+    "label": "Building",
+    "category": "Objects and facilities",
     "available": true
   },
   {
     "id": "data-bus",
-    "label": "Bus de datos",
-    "category": "Datos y redes",
+    "label": "Data bus",
+    "category": "Data and networks",
     "available": true
   },
   {
     "id": "network",
-    "label": "Red",
-    "category": "Datos y redes",
+    "label": "Network",
+    "category": "Data and networks",
     "available": true
   },
   {
     "id": "server",
-    "label": "Servidor",
-    "category": "Datos y redes",
+    "label": "Server",
+    "category": "Data and networks",
     "available": true
   },
   {
     "id": "database",
-    "label": "Base de datos",
-    "category": "Datos y redes",
+    "label": "Database",
+    "category": "Data and networks",
     "available": true
   },
   {
     "id": "link",
-    "label": "Enlace",
-    "category": "Datos y redes",
+    "label": "Link",
+    "category": "Data and networks",
     "available": true
   },
   {
     "id": "sensor",
-    "label": "Sensor genérico",
-    "category": "Sensores y mediciones",
+    "label": "Generic sensor",
+    "category": "Sensors and measurements",
     "available": true
   },
   {
     "id": "radar",
     "label": "Radar",
-    "category": "Sensores y mediciones",
+    "category": "Sensors and measurements",
     "available": true
   },
   {
     "id": "thermometer",
-    "label": "Termómetro",
-    "category": "Sensores y mediciones",
+    "label": "Thermometer",
+    "category": "Sensors and measurements",
     "available": true
   },
   {
     "id": "globe",
-    "label": "Globo terrestre",
-    "category": "Geografía y navegación",
+    "label": "Globe",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "point",
-    "label": "Punto",
-    "category": "Geografía y navegación",
+    "label": "Point",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "track",
-    "label": "Traza",
-    "category": "Geografía y navegación",
+    "label": "Track",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "folder",
-    "label": "Carpeta",
-    "category": "Inspector y documentos",
+    "label": "Folder",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "inspector-object",
-    "label": "Objeto de datos",
-    "category": "Inspector y documentos",
+    "label": "Data object",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "inspector-array",
     "label": "Array",
-    "category": "Inspector y documentos",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "inspector-value",
-    "label": "Valor escalar",
-    "category": "Inspector y documentos",
+    "label": "Scalar value",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "warning",
-    "label": "Advertencia",
-    "category": "Estados y alertas",
+    "label": "Warning",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "error",
     "label": "Error",
-    "category": "Estados y alertas",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "placeholder",
-    "label": "Tipo desconocido",
-    "category": "Estados y alertas",
+    "label": "Unknown type",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "damage",
-    "label": "Daño",
-    "category": "Estados y alertas",
+    "label": "Damage",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "situation",
-    "label": "Situación",
-    "category": "Estados y alertas",
+    "label": "Situation",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "lock",
-    "label": "Bloqueado",
-    "category": "Estados y alertas",
+    "label": "Locked",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "control",
     "label": "Control",
-    "category": "Acciones y controles",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "task",
-    "label": "Tarea",
-    "category": "Acciones y controles",
+    "label": "Task",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "star",
-    "label": "Favorito",
-    "category": "Acciones y controles",
+    "label": "Favorite",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "pin",
-    "label": "Fijado",
-    "category": "Acciones y controles",
+    "label": "Pinned",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "heart",
-    "label": "Preferencia afectiva",
-    "category": "Acciones y controles",
+    "label": "Favorite",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "grip",
-    "label": "Asa de arrastre",
-    "category": "Acciones y controles",
+    "label": "Drag handle",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "clock",
-    "label": "Reloj",
-    "category": "Tiempo y simulación",
+    "label": "Clock",
+    "category": "Time and simulation",
     "available": true
   },
   {
     "id": "calendar",
-    "label": "Calendario",
-    "category": "Tiempo y simulación",
+    "label": "Calendar",
+    "category": "Time and simulation",
     "available": true
   },
   {
     "id": "munition",
-    "label": "Munición",
-    "category": "Tiempo y simulación",
+    "label": "Munition",
+    "category": "Time and simulation",
     "available": true
   },
   {
     "id": "trash",
-    "label": "Eliminar",
-    "category": "Interfaz",
+    "label": "Delete or remove",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "star-filled",
-    "label": "Favorito activo",
-    "category": "Interfaz",
+    "label": "Active favorite",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "add",
-    "label": "Añadir",
-    "category": "Acciones y controles",
+    "label": "Add",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "compass",
-    "label": "Brújula",
-    "category": "Geografía y navegación",
+    "label": "Compass",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "edit",
-    "label": "Editar",
-    "category": "Acciones y controles",
+    "label": "Edit",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "eye",
     "label": "Visible",
-    "category": "Acciones y controles",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "eye-off",
-    "label": "Oculto",
-    "category": "Acciones y controles",
+    "label": "Hidden",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "file",
-    "label": "Archivo",
-    "category": "Inspector y documentos",
+    "label": "File",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "filter",
-    "label": "Filtro",
-    "category": "Acciones y controles",
+    "label": "Filter",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "folder-open",
-    "label": "Carpeta abierta",
-    "category": "Inspector y documentos",
+    "label": "Open folder",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "info",
-    "label": "Información",
-    "category": "Estados y alertas",
+    "label": "Information",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "item",
-    "label": "Elemento genérico",
-    "category": "Objetos e instalaciones",
+    "label": "Generic item",
+    "category": "Objects and facilities",
     "available": true
   },
   {
     "id": "json",
-    "label": "Documento JSON",
-    "category": "Inspector y documentos",
+    "label": "JSON document",
+    "category": "Inspector and documents",
     "available": true
   },
   {
     "id": "layers",
-    "label": "Capas",
-    "category": "Geografía y navegación",
+    "label": "Layers",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "location",
-    "label": "Ubicación",
-    "category": "Geografía y navegación",
+    "label": "Location",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "map",
-    "label": "Mapa",
-    "category": "Geografía y navegación",
+    "label": "Map",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "offline",
-    "label": "Sin conexión",
-    "category": "Estados y alertas",
+    "label": "Offline",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "pause",
-    "label": "Pausa",
-    "category": "Acciones y controles",
+    "label": "Pause",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "play",
-    "label": "Iniciar",
-    "category": "Acciones y controles",
+    "label": "Start or play",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "refresh",
-    "label": "Actualizar",
-    "category": "Acciones y controles",
+    "label": "Refresh",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "route",
-    "label": "Ruta",
-    "category": "Geografía y navegación",
+    "label": "Route",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "satellite",
-    "label": "Satélite",
-    "category": "Aviación y espacio",
+    "label": "Satellite",
+    "category": "Aviation and space",
     "available": true
   },
   {
     "id": "save",
-    "label": "Guardar",
-    "category": "Acciones y controles",
+    "label": "Save",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "search",
-    "label": "Buscar",
-    "category": "Acciones y controles",
+    "label": "Search",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "settings",
-    "label": "Configuración",
-    "category": "Acciones y controles",
+    "label": "Settings",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "stop",
-    "label": "Detener",
-    "category": "Acciones y controles",
+    "label": "Stop",
+    "category": "Actions and controls",
     "available": true
   },
   {
     "id": "submarine",
-    "label": "Submarino",
-    "category": "Entorno marítimo",
+    "label": "Submarine",
+    "category": "Maritime environment",
     "available": true
   },
   {
     "id": "success",
-    "label": "Correcto",
-    "category": "Estados y alertas",
+    "label": "Success",
+    "category": "States and alerts",
     "available": true
   },
   {
     "id": "truck",
-    "label": "Camión",
-    "category": "Transporte terrestre",
+    "label": "Truck",
+    "category": "Ground transportation",
     "available": true
   },
   {
     "id": "vehicle",
-    "label": "Vehículo genérico",
-    "category": "Transporte terrestre",
+    "label": "Generic vehicle",
+    "category": "Ground transportation",
     "available": true
   },
   {
     "id": "waypoint",
-    "label": "Punto de ruta",
-    "category": "Geografía y navegación",
+    "label": "Waypoint",
+    "category": "Geography and navigation",
     "available": true
   },
   {
     "id": "road",
-    "label": "Carretera",
-    "category": "Geografía y navegación",
+    "label": "Road",
+    "category": "Geography and navigation",
     "available": true
   }
 ]

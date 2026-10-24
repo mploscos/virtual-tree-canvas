@@ -90,6 +90,7 @@ test('invalid configuration is rejected before applying any option', () => {
   assert.equal(view.controller.editable, true);
   assert.throws(() => view.configure({ rowHeight: -1 }), /positive/);
   assert.throws(() => view.configure({ scrollChaining: 'yes' }), /boolean/);
+  assert.throws(() => view.configure({ multiSelect: 'yes' }), /boolean/);
   assert.throws(() => view.configure({ mode: 'invalid' }), /mode/);
   assert.throws(() => view.setModel(undefined), /undefined/);
 });

@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><title>Numeric units — virtual-tree-canvas</title>
 <style>
-body{margin:24px;background:#0a0f1c;color:#e8edf4;font:14px system-ui}h1{font-size:21px}p{color:#8ea0b5}.host{position:relative;height:230px;border:1px solid #2b3b52;border-radius:8px;overflow:hidden;margin:16px 0;max-width:1050px}canvas{display:block;width:100%;height:100%}#result{font-family:monospace}
+body{margin:24px;background:#0a0f1c;color:#e8edf4;font:14px system-ui}h1{font-size:21px}p{color:#8ea0b5}nav a{display:inline-block;margin-bottom:14px;color:#80e1d5;text-decoration:none;font-weight:650}nav a:hover{text-decoration:underline}nav a:focus-visible{outline:2px solid #80e1d5;outline-offset:3px}.host{position:relative;height:230px;border:1px solid #2b3b52;border-radius:8px;overflow:hidden;margin:16px 0;max-width:1050px}canvas{display:block;width:100%;height:100%}#result{font-family:monospace}
 </style>
-<h1>Values with units</h1><p>Units remain visible while editing. Display precision never changes the stored numeric value.</p>
+<nav aria-label="Demo navigation"><a href="../index.html">← All demos</a></nav>
+<h1>Values with units</h1><p>Units remain visible while editing. Display precision never changes the stored numeric value. Outlined values are editable; acceleration is intentionally read-only.</p>
 <div id="pane" class="host"></div><div id="table" class="host"></div><div id="result"></div>
 <script type="module">
 import { TreeView } from '../src/index.js';
@@ -17,7 +18,10 @@ for (const presentation of ['pane','table']) {
  });controllers.push(c);views.push(view);
 }
 window.unitControllers=controllers;
-window.addEventListener('pagehide',()=>views.forEach(view=>view.destroy()));
+const redraw=()=>{if(!document.hidden)views.forEach(view=>view.controller.requestRender(true));};
+document.addEventListener('visibilitychange',redraw);
+window.addEventListener('pageshow',event=>{if(event.persisted)redraw();});
+window.addEventListener('pagehide',event=>{if(!event.persisted)views.forEach(view=>view.destroy());});
 // Small browser integration check, activated explicitly for automated validation.
 if (new URLSearchParams(location.search).has('test')) {
  const assert=(v,m)=>{if(!v)throw Error(m)};

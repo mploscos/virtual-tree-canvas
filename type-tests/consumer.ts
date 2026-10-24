@@ -1,0 +1,21 @@
+import { TreeView, TreeViewController, ModelInspectorBuilder, builtinIconNames, darkTheme, lightTheme, themes } from 'virtual-tree-canvas';
+import { TreeModel } from 'virtual-tree-canvas/core';
+import { ModelInspectorBuilder as InspectorBuilder } from 'virtual-tree-canvas/inspector';
+import { Canvas2DRenderer } from 'virtual-tree-canvas/renderers';
+import { PointerController } from 'virtual-tree-canvas/input';
+import { BenchmarkStats } from 'virtual-tree-canvas/benchmark';
+import 'virtual-tree-canvas/workers/tree-worker.js';
+
+const tree = new TreeViewController({ autoRender: true, rowReorder: true });
+tree.setData([{ id: 'a', label: 'First' }]);
+tree.setTheme(themes.light);
+tree.setTheme(darkTheme);
+void lightTheme;
+const view: TreeView | undefined = undefined;
+const names: readonly string[] = builtinIconNames;
+const builder: ModelInspectorBuilder | InspectorBuilder | undefined = undefined;
+const model: TreeModel | undefined = undefined;
+const renderer: Canvas2DRenderer | undefined = undefined;
+const pointer: PointerController | undefined = undefined;
+const stats: BenchmarkStats | undefined = undefined;
+void [view, names, builder, model, renderer, pointer, stats];

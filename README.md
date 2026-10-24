@@ -8,7 +8,7 @@ keyboard navigation—without creating a DOM node for every row. It renders only
 what is visible with Canvas2D, so it stays responsive as data and live updates
 grow.
 
-![Editable model inspector built with virtual-tree-canvas](./docs/inspector-demo.png)
+Try the [live tree and editable inspector](https://mploscos.github.io/virtual-tree-canvas/#demos) in the browser.
 
 ## Why use it?
 
@@ -16,7 +16,7 @@ grow.
 - **Interactive by default.** Tree-table columns, sorting, resizing, selection, focus, tooltips and keyboard navigation are included.
 - **Good for live data.** Batched state patches update status, progress and values without rebuilding the tree.
 - **Framework-free.** Use it directly from browser JavaScript; no React or Web Component runtime is required.
-- **Easy to style.** Built-in dark, light and tactical themes, type-based styling, and editable SVG icons.
+- **Easy to style.** Built-in dark and light themes, type-based styling, and editable SVG icons.
 - **Ready for inspectors.** Turn plain JavaScript objects into compact editable forms or property tables.
 
 See [the changelog](./CHANGELOG.md) for migration notes and additions.
@@ -26,6 +26,27 @@ See [the changelog](./CHANGELOG.md) for migration notes and additions.
 ```bash
 npm install virtual-tree-canvas
 ```
+
+## Choose between `setData` and `setModel`
+
+Both display a tree. The difference is who creates its rows:
+
+| Method | Pass in | Use it for |
+| --- | --- | --- |
+| `setData(nodes)` | A flat array of rows with stable `id` values and optional `parentId` links | Application-defined trees and tables: assets, files, live status, sorting and manual row order |
+| `setModel(model, meta?)` | An ordinary JavaScript object or array; no row IDs needed | Inspecting and editing its properties, including nested objects and arrays |
+
+`setData()` displays the rows you define. It does not turn the properties of each
+row's `data` into child rows or editors. Configure columns to display values, and
+use `setDynamicState()` for frequent updates.
+
+`setModel()` walks the model and creates property rows and suitable editors.
+Optional metadata (`meta`) adds labels, limits, choices and other editing rules.
+User edits update the supplied model and emit `valuechange` / `modelchange`.
+Calling either method on `TreeView` switches to its corresponding mode (`tree`
+or `inspector`). For an array of objects without IDs, use `setModel()` to
+inspect its indexed items. Use `setData()` when each item is an application row
+and you can give it a stable ID.
 
 ## Quick start: complete DOM view
 
@@ -41,8 +62,7 @@ import { TreeView } from 'virtual-tree-canvas';
 
 const view = new TreeView(document.querySelector('#assets-tree'), {
   initialExpandDepth: 2,
-  rowReorder: true,
-  iconsBaseUrl: '/node_modules/virtual-tree-canvas/resources/icons/'
+  rowReorder: true
 });
 view.setData([
   { id: 'fleet', label: 'Fleet', icon: 'folder' },
@@ -98,8 +118,6 @@ The controller owns state and editing, including `setEditable`,
 `setInspectorValue`, `closeEditor` and layout precedence. With `autoRender`
 omitted, use your existing explicit `tree.render()` loop.
 
-![Virtual tree-table with status, progress and SVG icons](./docs/tree-demo.png)
-
 ## Common tasks
 
 ```js
@@ -148,6 +166,9 @@ available when an integration needs an explicit synchronous boundary.
 and may rebuild the visible row list. For very large datasets,
 `enableWorkers()` moves search and filtered row rebuilds off the main thread
 when Workers are available.
+Vite and webpack 5 emit the worker automatically. With bundlers that do not
+process `new Worker(new URL(...))`, emit `virtual-tree-canvas/workers/tree-worker.js`
+as a separate worker entry and pass its deployed URL to `enableWorkers(workerUrl)`.
 
 Row actions can also use checkboxes styled like inspector controls. Set `kind: 'checkbox'` and provide
 `checked` as a boolean or a function of `(node, state)`. The `rowaction` event
@@ -200,13 +221,15 @@ numeric text uses the same precision as inspector values (up to three decimals).
 
 ## Themes and icons
 
-Three themes are included:
+Two themes are included:
 
 ```js
-import { darkTheme, lightTheme, tacticalTheme } from 'virtual-tree-canvas';
+import { darkTheme, lightTheme } from 'virtual-tree-canvas';
 
-tree.setTheme(tacticalTheme);
+tree.setTheme(lightTheme);
 ```
+
+Use `tree.setTheme(darkTheme)` to switch back, or pass `"dark"` / `"light"`.
 
 Inspector values and columns with `kind: 'value'` use `theme.valueColors` to
 distinguish numbers, strings, booleans, enums and empty values. Read-only values
@@ -239,23 +262,22 @@ tree.setTheme({
 `rowHeight` controls the height of each node and `iconSize` controls its icon.
 Increase both when the tree needs larger, more readable entries.
 
-Built-in icons are editable SVG files in [`resources/icons`](./resources/icons).
-They are loaded on demand and rasterized once per icon, colour, CSS size and device
-pixel ratio. Rendering rows then uses a cached `drawImage`, not SVG parsing or
-path drawing.
+Built-in icons come from the editable SVG files in [`resources/icons`](./resources/icons).
+Their sources are included in the JavaScript package, so built-in icons work in native ESM,
+Vite and other bundlers without a public asset path or extra HTTP requests. The renderer
+rasterizes only the icons it uses, once per colour, CSS size and device pixel ratio,
+then draws the cached image. Run `npm run icons:generate` after changing an SVG.
 
-When bundling the library, configure the public directory containing its built-in SVGs:
+To host a replacement icon directory instead, set `iconsBaseUrl` when constructing
+`TreeView`, `TreeViewController` or `IconRegistry`:
 
 ```js
-const tree = new TreeViewController({
-  canvas,
-  iconsBaseUrl: '/node_modules/virtual-tree-canvas/resources/icons/'
-});
+const tree = new TreeViewController({ canvas, iconsBaseUrl: '/icons/' });
 ```
 
-`iconsBaseUrl` also works with `new IconRegistry({ iconsBaseUrl })`. It accepts an absolute URL (including a CDN), a root-relative path, or a document-relative path. A trailing slash is optional. Supply it when constructing the controller or registry, before built-in icons begin loading. A custom `iconRegistry` takes precedence over the controller's `iconsBaseUrl`.
-
-Without this option, unbundled modules load the icons from the package's `resources/icons/` directory. Publish that directory alongside the package; the bundler does not need to extract or rename its SVGs.
+The option accepts an absolute URL (including a CDN), a root-relative path or a
+document-relative path. The directory must provide `<name>.svg` for each icon
+used. A custom `iconRegistry` takes precedence.
 
 Register application icons from an SVG URL, inline SVG or an image:
 
@@ -271,8 +293,9 @@ available when an application wants to warm a known icon set before display.
 
 ## Model inspector
 
-`setModel()` renders JSON-like data as an editable inspector. Metadata controls
-the editor, bounds, choices, labels and descriptions.
+`setModel()` renders a JavaScript object or array as an editable inspector;
+you do not create nodes or IDs yourself. Metadata controls the editor, bounds,
+choices, labels and descriptions.
 
 ```js
 tree.setModel(
@@ -283,6 +306,7 @@ tree.setModel(
   {
     'sensor.range': { min: 0, max: 120, step: 1, integer: true },
     'sensor.mode': { options: { Search: 'search', Track: 'track' } },
+    tracks: { itemTitle: (index, item) => item.id || `Track ${index + 1}` },
     'tracks.*.speed': { min: 0, max: 900, step: 5, unit: 'm/s', precision: 2 },
     'tracks.*.id': { readonly: true },
   },
@@ -294,6 +318,14 @@ Choose `presentation: 'pane'` for a compact folder-and-controls view, or
 `presentation: 'table'` for Property / Value / Type / Description columns.
 Editors are inferred from data and metadata: checkbox, range, number, text,
 select, colour, button, object and array.
+
+Array elements occupy one row each. Their index is shown quietly in the tree
+gutter; primitive values are edited on that row. Object elements expand to their
+properties and show a short summary from `name`, `label`, `title` or `id`, or
+from their first two simple fields. Nested arrays show their length beside the
+index and expand directly to their own elements. Set `itemTitle(index, item)`
+on the array's metadata to choose a different summary. Paths and node IDs
+still use zero-based array indices.
 
 Numeric metadata supports `unit` (a display-only string suffix) and `precision`
 (decimal places, 0–20). The unit has a reserved slot beside the number in both
@@ -326,8 +358,14 @@ The payload is always available as `event.detail`.
 
 ## API overview
 
+The [web API reference](https://mploscos.github.io/virtual-tree-canvas/docs/api.html) covers the DOM view, controller,
+configuration, filtering, columns, inspector metadata, row actions and events.
+For the complete view, start with `TreeView`; access `view.controller` for
+lower-level operations such as sorting a column or enabling workers.
+
 ```js
 tree.setData(nodes);
+tree.setModel(model, meta);
 tree.setDynamicState(patches);
 tree.setTheme(theme);
 tree.setColumns(columns);
@@ -360,14 +398,33 @@ tree.disableWorkers();
 npm run demo
 ```
 
-Open <http://localhost:4173/demo/> for the large-tree benchmark, or
-<http://localhost:4173/demo/inspector.html> for the editable inspector demo.
+Open <http://localhost:4173/> for interactive trees, an editable inspector, row ordering and streaming cryptocurrency quotes. The gallery also links to the units example and icon catalogue.
 
-## Tests
+The market table uses [crypto-ai.dev's public WebSocket](https://crypto-ai.dev/docs) without an API key. Its free feed is about 15 seconds delayed. The demo creates the rows once and applies incoming prices with `setDynamicState()`. The feed runs only while the table is visible and the page is active; the Pause feed button closes the connection. Quotes are for demonstration, not a benchmark workload or investment advice. The component itself makes no network requests.
+
+## Tests and type declarations
 
 ```bash
+npm install
 npm test
+npm run test:types
+npm run test:browser
 ```
+
+The package includes `.d.ts` declarations for the root entry and public subpaths, so editors can autocomplete the API in JavaScript projects and check types when enabled. No separate `@types` package is needed.
+
+The browser suite requires Chromium. See [CONTRIBUTING.md](./CONTRIBUTING.md) for local development and declaration generation.
+
+## Selecting rows
+
+Selection is limited to one row by default, including `setSelection(ids)`. Set `multiSelect: true` to allow multiple rows:
+
+```js
+const view = new TreeView(host, { nodes, multiSelect: true });
+// Later: view.configure({ multiSelect: false });
+```
+
+With `multiSelect: true`, a normal click selects one row; Ctrl/Command + click adds or removes a row, and Shift + click selects a range. Hold Shift while dragging across row content to select a continuous range of visible rows; Ctrl/Command + Shift + drag adds the range to the existing selection. When `rowDrag` is configured, dragging without Shift exports the selection if the source row is selected, or just the source row otherwise. With `multiSelect: false`, dragging a row exports only that row. The dedicated row-order handle continues to reorder rows. Editors, action buttons and expand/collapse controls keep their own gestures.
 
 ## Manual row order
 
@@ -376,7 +433,6 @@ npm test
 ```js
 const tree = new TreeViewController({
   canvas, host,
-  iconsBaseUrl: '/node_modules/virtual-tree-canvas/resources/icons/',
   rowReorder: true,
   autoRender: true,
   tooltip: true,
@@ -398,12 +454,12 @@ tree.on('rowreorder', ({ detail }) => saveOrder(detail.order));
 - `tooltip: true` creates a reusable tooltip in `host` (or the canvas parent). The host must provide a positioned container. `attachTooltip({ host })` is also available.
 - `setData(nodes, { iconResolver })` allows host-independent visual mapping without mutating the input nodes.
 
-Open [the reorder demo](./examples/reorder-table.html) through a local HTTP server to try a table with live values. The demo's localStorage is illustrative; the library never persists user data itself.
+Open [the reorder demo](https://mploscos.github.io/virtual-tree-canvas/examples/reorder-table.html) to try a table with live values. The demo's localStorage is illustrative; the library never persists user data itself.
 
 ## Icon catalogue
 
 95 SVGs are included, with a
-[rendered visual sheet](https://htmlpreview.github.io/?https://github.com/mploscos/virtual-tree-canvas/blob/main/docs/icon-catalog.html), and a
+[rendered visual sheet](https://mploscos.github.io/virtual-tree-canvas/docs/icon-catalog.html), and a
 [reference of available icons](./docs/icon-catalog.md). `builtinIconNames`
 exposes available IDs.
 
@@ -438,12 +494,14 @@ view.on('rowaction', ({detail}) => {
 with Tab and work with Enter/Space. Only visible-row buttons are mounted; live
 value updates preserve their identity and focus.
 
-`rowDrag(node, dynamicState)` returns a payload, or `null` to disable dragging
-that row. Drag from a row label or the row-order handle. Editors, checkboxes,
-action buttons and expand/collapse controls retain their normal behavior. When
-the source row belongs to a multi-selection, all selected draggable rows take
-part in the gesture. Starting on an unselected row selects and drags only that
-row. A small count badge identifies multi-row data drags. Manual reordering shows
+`rowDrag(node, dynamicState)` returns a payload, or `null` to disable data dragging
+for that row. With `multiSelect: true`, hold Shift and drag to select a range, then drag
+any selected row to export all selected draggable rows. A plain drag from an unselected
+row exports that row directly. With the default single-selection mode, dragging any draggable row exports that row.
+The resolver only supplies data; it does not need to inspect the
+selection to choose the gesture. The row-order handle only reorders rows. Editors, checkboxes,
+action buttons and expand/collapse controls retain their normal behavior.
+A small count badge identifies multi-row data drags. Manual reordering shows
 an exact canvas snapshot of the source row alongside the insertion line.
 
 The controller emits `rowdragstart`, `rowdragmove`, `rowdragend` and
@@ -455,6 +513,11 @@ Rows whose `rowDrag` resolver returns `null` are omitted. Except on cancellation
 application's drop manager to highlight destinations and handle the drop.
 The payload is captured at pointer-down; use a stable reference instead of a
 snapshot of a live value. The library never moves or deletes exported data.
+
+The [two-tree transfer demo](./examples/transfer-between-trees.html) enables `multiSelect: true` and shows a
+complete drop handler. Hold Shift while dragging to select a range, then drag a selected row to export the group. Drop before or after a row,
+inside a folder, or in empty space, within either tree. The application updates
+the arrays and calls `setData()`; the component does not mutate the source data.
 
 Dragging uses Pointer Events within a document. Escape, pointer cancellation,
 loss of pointer capture, removal of the source row and destruction cancel the

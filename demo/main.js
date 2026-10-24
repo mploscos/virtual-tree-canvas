@@ -14,6 +14,7 @@ const shell = document.querySelector('.tree-shell');
 const stats = document.querySelector('#stats');
 const message = document.querySelector('#message');
 const panel = document.querySelector('#benchmark-panel');
+const metricsToggle = document.querySelector('#toggle-metrics');
 const searchInput = document.querySelector('#search');
 const filterInput = document.querySelector('#filter');
 const searchPrevButton = document.querySelector('#search-prev');
@@ -22,6 +23,8 @@ const themeSelect = document.querySelector('#theme');
 const datasetSelect = document.querySelector('#dataset-size');
 const scenarioSelect = document.querySelector('#scenario');
 const updateRateSelect = document.querySelector('#update-rate');
+const toggleUpdatesButton = document.querySelector('#toggle-updates');
+const sortNote = document.querySelector('#sort-note');
 const multiMode = document.querySelector('#multi-mode');
 const expandAllButton = document.querySelector('#expand-all');
 const collapseAllButton = document.querySelector('#collapse-all');
@@ -54,8 +57,14 @@ let simulationWorker = null;
 let simulationWorkerReady = false;
 let simulationWorkerBusy = false;
 let simulationWorkerPatches = [];
+let updatesPaused = false;
 
 await startRenderer();
+
+metricsToggle.addEventListener('click', () => {
+  const open = panel.classList.toggle('is-open');
+  metricsToggle.setAttribute('aria-expanded', String(open));
+});
 
 searchInput.addEventListener('input', () => {
   lastInputAt = performance.now();
@@ -95,6 +104,12 @@ scenarioSelect.addEventListener('change', () => applyScenario());
 updateRateSelect.addEventListener('change', () => {
   benchmark = new BenchmarkStats();
 });
+toggleUpdatesButton.addEventListener('click', () => {
+  updatesPaused = !updatesPaused;
+  simulationWorkerPatches = [];
+  toggleUpdatesButton.textContent = updatesPaused ? 'Resume updates' : 'Pause updates';
+  toggleUpdatesButton.setAttribute('aria-pressed', String(updatesPaused));
+});
 expandAllButton.addEventListener('click', () => controller.expandAll());
 collapseAllButton.addEventListener('click', () => controller.collapseAll());
 copyResultsButton.addEventListener('click', () => copyResults());
@@ -105,7 +120,7 @@ focusRandomButton.addEventListener('click', () => {
 });
 
 multiMode.addEventListener('change', () => {
-  canvas.dataset.multi = multiMode.checked ? 'true' : 'false';
+  controller.setMultiSelect(multiMode.checked);
 });
 
 function getDataset(size) {
@@ -122,10 +137,9 @@ async function startRenderer({ keepState = true } = {}) {
   shell.querySelector('canvas')?.remove();
   shell.insertAdjacentHTML('afterbegin', '<canvas id="tree"></canvas>');
   canvas = shell.querySelector('#tree');
-  canvas.dataset.multi = multiMode.checked ? 'true' : 'false';
   message.textContent = '';
 
-  const nextController = new TreeViewController({ canvas, initialExpandDepth: 2 });
+  const nextController = new TreeViewController({ canvas, initialExpandDepth: 2, multiSelect: multiMode.checked });
   nextController.setColumns(defaultTreeTableColumns());
   nextController.setTheme(themes[themeSelect.value]);
   nextController.setData(nodes);
@@ -148,6 +162,8 @@ async function startRenderer({ keepState = true } = {}) {
     if (typeof event.detail.totalMs === 'number') benchmark.recordOperation('filter', event.detail.totalMs);
     if (typeof event.detail.workerMs === 'number') benchmark.recordOperation('worker', event.detail.workerMs);
   });
+  controller.on('sortchange', updateSortNote);
+  updateSortNote();
 
   benchmark = new BenchmarkStats();
   startingRenderer = false;
@@ -173,9 +189,10 @@ function animate(now) {
   lastFrameAt = now;
   if (scenarioSelect.value === 'scroll') controller.scrollBy(0, 14);
 
-  const patches = nextSimulationPatches(now);
+  const patches = updatesPaused ? [] : nextSimulationPatches(now);
   const patchStart = performance.now();
   controller.setDynamicState(patches);
+  controller.flushDynamicState();
   const patchMs = performance.now() - patchStart;
   const measured = controller.renderMeasured(now);
   const inputLatencyMs = lastInputAt ? now - lastInputAt : 0;
@@ -217,7 +234,7 @@ function startSimulationWorker(datasetNodes) {
     }
     if (data?.type === 'patches') {
       simulationWorkerBusy = false;
-      simulationWorkerPatches = Array.isArray(data.patches) ? data.patches : [];
+      simulationWorkerPatches = updatesPaused ? [] : data.patches;
       if (typeof data.durationMs === 'number') benchmark.recordOperation('worker', data.durationMs);
     }
   });
@@ -230,6 +247,12 @@ function startSimulationWorker(datasetNodes) {
     type: 'configure',
     nodes: datasetNodes.map((node) => ({ id: node.id, type: node.type ?? '' })),
   });
+}
+
+function updateSortNote() {
+  const { columnId, direction } = controller.columnModel.sort;
+  const label = columnId ? controller.columnModel.getColumn(columnId).label : '';
+  sortNote.textContent = direction ? `${label} ${direction === 'asc' ? '↑' : '↓'} · sorted within each parent` : '';
 }
 
 function stopSimulationWorker() {
@@ -293,7 +316,7 @@ function updateStats() {
   const current = controller.getStats();
   const sample = benchmark.snapshot();
   const result = currentResult(current, sample);
-  stats.textContent = `${current.totalNodes.toLocaleString()} nodes · ${current.visibleRows.toLocaleString()} visible rows · ${current.renderedRows} rendered · ${current.patchesFrame}/frame patches · ${Math.round(sample.fps)} FPS`;
+  stats.textContent = `${current.totalNodes.toLocaleString()} nodes · ${current.visibleRows.toLocaleString()} visible rows · ${current.renderedRows} rendered · ${Math.round(sample.patchesPerSecond).toLocaleString()} patches/s · ${Math.round(sample.fps)} FPS`;
   panel.innerHTML =
     rows({
     Dataset: datasetSelect.options[datasetSelect.selectedIndex].text,
@@ -336,7 +359,7 @@ function currentResult(current, sample) {
     updateRate: Number(updateRateSelect.value),
     renderedRows: current.renderedRows,
     visibleRows: current.visibleRows,
-    patchesFrame: current.patchesFrame,
+    patchesFrame: sample.patchesFrame,
     dirtyNodes: current.dirtyNodes,
     fps: sample.fps,
     patchesPerSecond: sample.patchesPerSecond,

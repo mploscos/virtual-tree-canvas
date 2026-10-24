@@ -1,5 +1,13 @@
 import { ROW_ACTION_SLOT_WIDTH } from './row-action-layout.js';
 
+const sortCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/** Compare raw column values consistently in the main thread and tree worker. */
+export function compareSortValues(aValue, bValue) {
+    if (typeof aValue === 'number' && typeof bValue === 'number') return aValue - bValue;
+    return sortCollator.compare(String(aValue ?? ''), String(bValue ?? ''));
+}
+
 export const builtInColumns = {
   tree: {
     id: 'name',

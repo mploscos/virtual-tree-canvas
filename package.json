@@ -1,6 +1,6 @@
 {
   "name": "virtual-tree-canvas",
-  "version": "0.7.11",
+  "version": "0.8.0",
   "description": "High-performance Canvas2D virtual tree/table widget for very large hierarchical datasets.",
   "type": "module",
   "main": "./src/index.js",
@@ -11,18 +11,64 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
-    "./core": "./src/core/index.js",
-    "./inspector": "./src/inspector/index.js",
-    "./renderers": "./src/renderers/index.js",
-    "./input": "./src/input/index.js",
-    "./benchmark": "./src/benchmark/index.js",
-    "./workers/tree-worker.js": "./src/workers/tree-worker.js"
+    "./core": {
+      "types": "./src/core/index.d.ts",
+      "default": "./src/core/index.js"
+    },
+    "./inspector": {
+      "types": "./src/inspector/index.d.ts",
+      "default": "./src/inspector/index.js"
+    },
+    "./renderers": {
+      "types": "./src/renderers/index.d.ts",
+      "default": "./src/renderers/index.js"
+    },
+    "./input": {
+      "types": "./src/input/index.d.ts",
+      "default": "./src/input/index.js"
+    },
+    "./benchmark": {
+      "types": "./src/benchmark/index.d.ts",
+      "default": "./src/benchmark/index.js"
+    },
+    "./workers/tree-worker.js": {
+      "types": "./src/workers/tree-worker.d.ts",
+      "default": "./src/workers/tree-worker.js"
+    },
+    "./resources/icons/*": "./resources/icons/*",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "core": [
+        "src/core/index.d.ts"
+      ],
+      "inspector": [
+        "src/inspector/index.d.ts"
+      ],
+      "renderers": [
+        "src/renderers/index.d.ts"
+      ],
+      "input": [
+        "src/input/index.d.ts"
+      ],
+      "benchmark": [
+        "src/benchmark/index.d.ts"
+      ],
+      "workers/tree-worker.js": [
+        "src/workers/tree-worker.d.ts"
+      ]
+    }
   },
   "files": [
     "src",
     "resources",
+    "index.html",
+    "site",
+    "demo",
     "docs",
     "README.md",
+    "CONTRIBUTING.md",
     "LICENSE",
     "examples",
     "CHANGELOG.md"
@@ -35,6 +81,9 @@
     "demo": "python3 -m http.server 4173 --bind localhost",
     "test": "node --test test/*.test.js",
     "test:browser": "node test/run-browser.mjs",
+    "test:types": "tsc -p type-tests/tsconfig.node.json && tsc -p type-tests/tsconfig.bundler.json",
+    "types:generate": "node scripts/generate-types.mjs",
+    "icons:generate": "node scripts/generate-icons.mjs",
     "benchmark:dynamic": "node scripts/diagnostics/profile-dynamic-updates.mjs"
   },
   "keywords": [
@@ -46,5 +95,16 @@
     "tree-table",
     "hierarchy"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mploscos/virtual-tree-canvas.git"
+  },
+  "homepage": "https://mploscos.github.io/virtual-tree-canvas/",
+  "bugs": {
+    "url": "https://github.com/mploscos/virtual-tree-canvas/issues"
+  }
 }

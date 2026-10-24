@@ -6,46 +6,59 @@
     <title>virtual-tree-canvas demo</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
-    <header class="toolbar">
-      <strong>virtual-tree-canvas</strong>
-      <input id="search" type="search" placeholder="Search id, label, path, tag or type" />
-      <input id="filter" type="search" placeholder="Filter visible rows" />
-      <button id="search-prev" type="button">Prev</button>
-      <button id="search-next" type="button">Next</button>
-      <select id="theme">
-        <option value="dark">Dark</option>
-        <option value="light">Light</option>
-        <option value="tactical">Tactical</option>
-      </select>
-      <select id="dataset-size">
-        <option value="10000">10k</option>
-        <option value="50000">50k</option>
-        <option value="100000">100k</option>
-      </select>
-      <select id="scenario">
-        <option value="normal">Normal</option>
-        <option value="collapsed">All collapsed</option>
-        <option value="expanded">All expanded</option>
-        <option value="heavy">Heavy updates</option>
-        <option value="scroll">Fast scrolling</option>
-      </select>
-      <select id="update-rate">
-        <option value="260">260/frame</option>
-        <option value="1000">1000/frame</option>
-        <option value="3000">3000/frame</option>
-      </select>
-      <label class="toggle"><input id="multi-mode" type="checkbox" /> Multi</label>
-      <button id="expand-all" type="button">Expand all</button>
-      <button id="collapse-all" type="button">Collapse all</button>
-      <button id="focus-random" type="button">Focus random</button>
-      <button id="copy-results" type="button">Copy JSON</button>
-      <span id="stats"></span>
-      <span id="message"></span>
+  <body class="benchmark-demo">
+    <header class="toolbar toolbar-benchmark">
+      <div class="toolbar-group toolbar-brand">
+        <a class="demo-home-link" href="../index.html">← All demos</a>
+        <strong>virtual-tree-canvas</strong>
+        <button id="toggle-metrics" type="button" aria-controls="benchmark-panel" aria-expanded="false">Stats</button>
+      </div>
+      <div class="toolbar-group toolbar-search" role="search" aria-label="Tree search and filter">
+        <input id="search" type="search" aria-label="Search nodes" placeholder="Search id, label, path, tag or type" />
+        <input id="filter" type="search" aria-label="Filter rows" placeholder="Filter visible rows" />
+        <button id="search-prev" type="button">Prev</button>
+        <button id="search-next" type="button">Next</button>
+      </div>
+      <div class="toolbar-group toolbar-settings" role="group" aria-label="Demo settings">
+        <select id="theme" aria-label="Theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+        <select id="dataset-size" aria-label="Dataset size">
+          <option value="10000">10k</option>
+          <option value="50000">50k</option>
+          <option value="100000">100k</option>
+        </select>
+        <select id="scenario" aria-label="Scenario">
+          <option value="normal">Normal</option>
+          <option value="collapsed">All collapsed</option>
+          <option value="expanded">All expanded</option>
+          <option value="heavy">Heavy updates</option>
+          <option value="scroll">Fast scrolling</option>
+        </select>
+        <select id="update-rate" aria-label="Update rate">
+          <option value="260">260/frame</option>
+          <option value="1000">1000/frame</option>
+          <option value="3000">3000/frame</option>
+        </select>
+        <button id="toggle-updates" type="button" aria-pressed="false">Pause updates</button>
+        <label class="toggle" title="Enable Ctrl/Command + click, Shift + click and Shift + drag selection"><input id="multi-mode" type="checkbox" /> Multi-select</label>
+      </div>
+      <div class="toolbar-group toolbar-actions" role="group" aria-label="Tree actions">
+        <button id="expand-all" type="button">Expand all</button>
+        <button id="collapse-all" type="button">Collapse all</button>
+        <button id="focus-random" type="button">Focus random</button>
+        <button id="copy-results" type="button">Copy JSON</button>
+      </div>
+      <div class="toolbar-group toolbar-feedback">
+        <span id="stats"></span>
+        <span id="sort-note"></span>
+        <span id="message" role="status"></span>
+      </div>
     </header>
     <main class="tree-shell">
       <canvas id="tree"></canvas>
-      <aside id="benchmark-panel"></aside>
+      <aside id="benchmark-panel" aria-label="Performance metrics"></aside>
     </main>
     <dialog id="json-dialog">
       <form method="dialog">

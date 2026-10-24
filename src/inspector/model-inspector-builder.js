@@ -2,6 +2,10 @@ import { formatInspectorValue, resolveEditorType, valueTypeOf } from './editor-r
 import { joinPath, resolveMetaForPath } from './model-path.js';
 
 export class ModelInspectorBuilder {
+  arrayItemTitle(meta, arrayPath, index, item) {
+    return inspectorArrayItemTitle(meta, arrayPath, index, item);
+  }
+
   build(model, meta = {}, options = {}) {
     const nodes = [];
     const context = {
@@ -18,7 +22,7 @@ export class ModelInspectorBuilder {
     return nodes;
   }
 
-  #visit({ nodes, value, key, path, parentId, context }) {
+  #visit({ nodes, value, key, path, parentId, context, arrayIndex = null, arrayItemTitle = '' }) {
     const { rule, hasMeta } = resolveMetaForPath(context.meta, path);
     const valueType = valueTypeOf(value);
     const editorType = resolveEditorType(value, rule);
@@ -36,6 +40,8 @@ export class ModelInspectorBuilder {
         inspector: true,
         path,
         key,
+        arrayIndex,
+        arrayItemTitle,
         value,
         valueText: formatInspectorValue(value, rule),
         valueType,
@@ -50,9 +56,17 @@ export class ModelInspectorBuilder {
     if (Array.isArray(value)) {
       value.forEach((item, index) => {
         const childPath = joinPath(path, index);
-        const { rule: itemRule } = resolveMetaForPath(context.meta, childPath);
-        const itemTitle = rule.itemTitle?.(index, item) ?? itemRule.label ?? `[${index}]`;
-        this.#visit({ nodes, value: item, key: itemTitle, path: childPath, parentId: id, context });
+        const itemTitle = this.arrayItemTitle(context.meta, path, index, item);
+        this.#visit({
+          nodes,
+          value: item,
+          key: itemTitle || `[${index}]`,
+          path: childPath,
+          parentId: id,
+          context,
+          arrayIndex: index,
+          arrayItemTitle: itemTitle ? String(itemTitle) : '',
+        });
       });
     } else if (value && typeof value === 'object') {
       for (const [childKey, childValue] of Object.entries(value)) {
@@ -60,6 +74,31 @@ export class ModelInspectorBuilder {
       }
     }
   }
+}
+
+function inspectorArrayItemTitle(meta, arrayPath, index, item) {
+  const { rule: arrayRule } = resolveMetaForPath(meta, arrayPath);
+  const { rule: itemRule } = resolveMetaForPath(meta, joinPath(arrayPath, index));
+  const title = itemRule.label ?? arrayRule.itemTitle?.(index, item) ?? arrayItemSummary(item);
+  return title == null ? '' : String(title);
+}
+
+function arrayItemSummary(value) {
+  if (Array.isArray(value)) return `Array(${value.length})`;
+  if (!value || typeof value !== 'object') return '';
+  for (const key of ['name', 'label', 'title', 'id']) {
+    const field = value[key];
+    if ((typeof field === 'string' && field.trim()) || typeof field === 'number')
+      return String(field);
+  }
+  const preview = Object.entries(value)
+    .filter(([, field]) => field === null || ['string', 'number', 'boolean'].includes(typeof field))
+    .slice(0, 2)
+    .map(([key, field]) => `${key}: ${formatInspectorValue(field)}`)
+    .join(' · ');
+  if (preview) return preview;
+  const count = Object.keys(value).length;
+  return count ? `Object (${count})` : 'Empty object';
 }
 
 export function inspectorNodeId(path) {

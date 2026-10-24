@@ -121,6 +121,7 @@ export class TreeView {
       if (changed('rowActions')) controller.setRowActions(next.rowActions);
       if (changed('rowDrag')) controller.setRowDrag(next.rowDrag);
       if (changed('rowReorder')) controller.setRowReorder(next.rowReorder);
+      if (changed('multiSelect')) controller.setMultiSelect(next.multiSelect);
       if (changed('scrollChaining')) controller.scrollChaining = next.scrollChaining;
       if (replaceData) {
         if (next.mode === 'tree')

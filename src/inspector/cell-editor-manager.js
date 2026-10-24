@@ -74,6 +74,10 @@ export class CellEditorManager {
       this.view.addEventListener('mouseup', this.onMouseUp);
       return true;
     }
+    // A native select created during mousedown can receive the matching mouseup,
+    // which immediately closes its picker. Open it after the click instead.
+    if (data.editorType === 'select' && this.view.HTMLSelectElement?.prototype?.showPicker)
+      return false;
     if (shouldOpenOverlayOnPointerDown(data, hit)) {
       const node = this.controller.model.nodes[hit.row.nodeIndex];
       this.#showOverlay(node, hit, {
@@ -105,7 +109,7 @@ export class CellEditorManager {
       }
     }
     if (this.overlay) return true;
-    this.#showOverlay(node, hit);
+    this.#showOverlay(node, hit, { showPicker: data.editorType === 'select' });
     return true;
   }
 
@@ -131,7 +135,7 @@ export class CellEditorManager {
       left: `${rect.x - hostRect.left}px`,
       top: `${rect.y - hostRect.top}px`,
       width: `${Math.max(24, rect.width)}px`,
-      height: `${Math.max(20, rect.height)}px`,
+      height: `${Math.max(18, rect.height)}px`,
       minWidth: '0',
       maxWidth: `${Math.max(24, rect.width)}px`,
       zIndex: 20,
@@ -139,7 +143,7 @@ export class CellEditorManager {
       margin: '0',
       outline: 'none',
       appearance: 'none',
-      borderRadius: '6px',
+      borderRadius: '5px',
       font: editorFont(data),
       padding:
         data.editorType === 'color'
@@ -176,13 +180,15 @@ export class CellEditorManager {
     });
     element.select?.();
     if (options.showPicker && element.showPicker) {
-      requestAnimationFrame(() => {
+      const open = () => {
         try {
           element.showPicker();
         } catch (_error) {
           // Some browsers restrict showPicker to specific input types or gestures.
         }
-      });
+      };
+      if (data.editorType === 'select') open();
+      else requestAnimationFrame(open);
     }
   }
 
@@ -252,7 +258,8 @@ export class CellEditorManager {
     if (step) value = Math.round(value / step) * step;
     if (meta.integer) value = Math.round(value);
     value = Math.max(min, Math.min(max, value));
-    this.controller.updateInspectorValue(node.id, value, 'range');
+    if (this.controller.updateInspectorValue(node.id, value, 'range'))
+      this.#syncRangeOverlay(node.id);
   }
 
   #onMouseMove(event) {
@@ -268,7 +275,7 @@ export class CellEditorManager {
   #isEditableHit(hit) {
     return (
       hit?.area === 'row' &&
-      hit.part !== 'unit' &&
+      !['unit', 'label', 'chevron'].includes(hit.part) &&
       (hit.column?.kind === 'inspectorValue' || hit.column?.kind === 'inspectorPane')
     );
   }
@@ -278,9 +285,9 @@ export class CellEditorManager {
     if (hit.column?.kind !== 'inspectorPane') {
       return {
         x: rect.x + 10,
-        y: rect.y + 4,
+        y: rect.y + 5,
         width: Math.max(24, rect.width - 20),
-        height: rect.height - 8
+        height: rect.height - 10
       };
     }
     const visibleWidth = Math.max(
@@ -295,9 +302,9 @@ export class CellEditorManager {
     );
     return {
       x: rect.x + editorLeft + 10,
-      y: rect.y + 4,
+      y: rect.y + 5,
       width: Math.max(24, editorWidth - 20),
-      height: rect.height - 8
+      height: rect.height - 10
     };
   }
 
@@ -305,11 +312,16 @@ export class CellEditorManager {
     const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
     const rect = this.#editorContentRect(hit);
     const layout = numericLayout(rect.width, data);
+    if (data.editorType === 'select') {
+      return { ...rect, width: Math.min(layout.contentWidth, 180) };
+    }
     if (hit.part === 'number' && data.editorType === 'range') {
       return {
         ...rect,
         x: rect.x + layout.numberLeft,
-        width: layout.valueWidth
+        y: rect.y - 1,
+        width: layout.valueWidth,
+        height: rect.height + 2
       };
     }
     if (layout.unit)
@@ -317,7 +329,6 @@ export class CellEditorManager {
         ...rect,
         width: layout.contentWidth
       };
-    if (hit.column?.kind !== 'inspectorPane') return this.controller.getCellClientRect(hit);
     return rect;
   }
 
@@ -362,26 +373,55 @@ export class CellEditorManager {
     if (this.overlay) applyEditorTheme(this.overlay, this.controller.themeManager.get());
   }
 
+  #syncRangeOverlay(nodeId) {
+    if (
+      this.overlayKind !== 'value' ||
+      this.overlayNode?.id !== nodeId ||
+      this.overlayNode.data?.editorType !== 'range' ||
+      !this.overlay
+    ) return;
+    const value = this.controller.model.index.getNode(nodeId)?.data?.value;
+    this.overlay.value = value == null ? '' : String(value);
+  }
+
   #toggleRangeMinMax(node, data) {
     const meta = data.meta ?? {};
     const min = Number.isFinite(meta.min) ? meta.min : 0;
     const max = Number.isFinite(meta.max) ? meta.max : 100;
     const current =
       typeof data.value === 'number' && Number.isFinite(data.value) ? data.value : min;
-    this.controller.updateInspectorValue(node.id, current <= min ? max : min, 'range');
+    if (this.controller.updateInspectorValue(node.id, current <= min ? max : min, 'range'))
+      this.#syncRangeOverlay(node.id);
   }
 
 }
 
 function applyEditorTheme(element, theme) {
   const colors = theme.colors;
+  const isSelect = element.tagName === 'SELECT';
   Object.assign(element.style, {
     border: `1px solid ${colors.focus}`,
-    background: colors.control ?? colors.background,
-    color: colors.text,
+    backgroundColor: isSelect ? colors.progressTrack : (colors.control ?? colors.background),
+    color: isSelect ? (theme.valueColors?.enum ?? colors.text) : colors.text,
     caretColor: colors.focus,
+    font: element.classList.contains('vtc-editor-number') || element.classList.contains('vtc-editor-range')
+      ? (theme.monoFont ?? MONO_FONT)
+      : (theme.font ?? SANS_FONT),
     boxShadow: `0 0 0 1px ${colors.borderStrong ?? colors.border}, 0 8px 20px ${colors.shadow ?? 'transparent'}`
   });
+  if (isSelect) {
+    const chevron = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" fill="none" stroke="${colors.chevron}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    Object.assign(element.style, {
+      backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(chevron)}")`,
+      backgroundRepeat: 'no-repeat',
+      backgroundPosition: 'right 10px center',
+      backgroundSize: '12px 12px'
+    });
+    for (const option of element.options) {
+      option.style.backgroundColor = colors.control ?? colors.background;
+      option.style.color = colors.text;
+    }
+  }
 }
 
 function createEditorElement(data) {

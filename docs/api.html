@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Public API reference for virtual-tree-canvas 0.8.0" />
+    <title>API reference · virtual-tree-canvas</title>
+    <script src="../site/theme.js"></script>
+    <link rel="stylesheet" href="../site/styles.css" />
+    <link rel="stylesheet" href="./docs.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>virtual-tree-canvas</a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <a href="../index.html#demos">Demos</a>
+          <a href="../index.html#quick-start">Quick start</a>
+          <a href="./guide.html">Guide</a>
+          <a href="./api.html" aria-current="page">API reference</a>
+          <a href="./icon-catalog.html">Icons</a>
+        </nav>
+        <span class="version">v0.8.0</span>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode"><span class="theme-icon theme-icon-sun" aria-hidden="true"></span><span class="theme-icon theme-icon-moon" aria-hidden="true"></span></button>
+      </div>
+    </header>
+    <main id="main" class="guide api container">
+      <p class="eyebrow">DOCUMENTATION / API</p>
+      <h1>API reference.</h1>
+      <p class="api-lede">Everything needed to build a tree, inspect a model and connect interaction to your application. Start with <a href="./guide.html">the guide</a> for a working example.</p>
+      <nav class="guide-nav" aria-label="On this page">
+        <a href="#view">TreeView</a><a href="#options">Options</a><a href="#data">Data &amp; filtering</a><a href="#columns">Columns &amp; themes</a><a href="#inspector">Inspector</a><a href="#interaction">Interaction</a><a href="#events">Events</a><a href="#controller">Controller</a>
+      </nav>
+
+      <section id="view">
+        <h2>TreeView</h2>
+        <p><code>TreeView</code> creates the canvas, filter control, editor and tooltip inside a host element. Give that element a height. The package is JavaScript ESM with bundled declarations for editor autocomplete. The <code>element</code>, <code>canvas</code>, <code>controller</code> and <code>destroyed</code> properties expose the mounted view state.</p>
+        <div class="code-panel"><div class="code-panel-header"><span>JavaScript</span><span>DOM view</span></div><pre><code><span class="code-keyword">import</span> { TreeView } <span class="code-keyword">from</span> <span class="code-string">'virtual-tree-canvas'</span>;
+
+<span class="code-keyword">const</span> view = <span class="code-keyword">new</span> TreeView(host, { filter: <span class="code-keyword">true</span>, initialExpandDepth: <span class="code-number">2</span> });
+view.setData(nodes);
+view.on(<span class="code-string">'selectionchange'</span>, ({ detail }) =&gt; console.log(detail.selection));
+<span class="code-muted">// On permanent unmount: view.destroy();</span></code></pre></div>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><code>configure(options)</code> / <code>flush()</code></td><td>Apply a configuration patch. Changes are batched; <code>flush()</code> applies a pending patch immediately.</td></tr>
+          <tr><td><code>setData(nodes)</code> / <code>setModel(model, meta?)</code></td><td>Install application rows or inspect a JavaScript value. Either call switches to the matching mode.</td></tr>
+          <tr><td><code>setColumns(columns)</code> / <code>setTheme(theme)</code></td><td>Replace the columns or theme. Pass <code>null</code> to <code>setColumns</code> for the current presentation's defaults.</td></tr>
+          <tr><td><code>setDynamicState(patches)</code></td><td>Patch live values by row ID without reinstalling the tree.</td></tr>
+          <tr><td><code>setInspectorValue(path, value, options?)</code></td><td>Write a model value by property path. Returns whether the write was accepted; use <code>{ emit: false }</code> to suppress edit events.</td></tr>
+          <tr><td><code>on(type, listener)</code> / <code>off(type, listener)</code></td><td>Subscribe to component events or remove a listener. <code>on</code> returns an unsubscribe function.</td></tr>
+          <tr><td><code>registerIcon(name, source)</code></td><td>Register an application SVG URL, SVG string, image or Canvas draw function.</td></tr>
+          <tr><td><code>destroy()</code></td><td>Release observers, events, editors and rendering resources on permanent unmount.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="options">
+        <h2>Configuration options</h2>
+        <p>Pass these to the constructor or <code>view.configure(options)</code>. The component defaults to one selected row, an editable tree and a visible filter.</p>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Option</th><th>Purpose</th></tr></thead><tbody>
+          <tr><td><code>mode</code>, <code>presentation</code></td><td><code>'tree'</code> or <code>'inspector'</code>; inspector layout <code>'pane'</code> or <code>'table'</code>.</td></tr>
+          <tr><td><code>nodes</code>, <code>model</code>, <code>meta</code></td><td>Initial row data or inspected value and metadata. Explicit <code>setData</code> and <code>setModel</code> calls are also available.</td></tr>
+          <tr><td><code>columns</code>, <code>theme</code></td><td>Column definitions and a built-in theme name or theme object.</td></tr>
+          <tr><td><code>filter</code>, <code>filterPlacement</code></td><td>Show the built-in filter (default <code>true</code>). Placement: <code>'auto'</code>, <code>'bar'</code> or <code>'header'</code>. Hiding it retains the current query; call <code>clearFilter()</code> to clear it.</td></tr>
+          <tr><td><code>editable</code>, <code>multiSelect</code></td><td>Allow editing (default <code>true</code>) and multiple selected rows (default <code>false</code>).</td></tr>
+          <tr><td><code>rowReorder</code>, <code>rowActions</code>, <code>rowDrag</code></td><td>Sibling order controls, row buttons and data drag payloads. Each is optional.</td></tr>
+          <tr><td><code>initialExpandDepth</code>, <code>flatRoot</code>, <code>enforceMeta</code></td><td>Control initial expansion and inspector structure. Expansion depth applies when installing data.</td></tr>
+          <tr><td><code>showHeader</code>, <code>headerHeight</code></td><td>Show or hide column headings and set their height. Hiding headings does not hide the filter bar.</td></tr>
+          <tr><td><code>rowHeight</code>, <code>indentWidth</code>, <code>fontFamily</code></td><td>Layout metrics and text font. Explicit row and indent sizes override theme values.</td></tr>
+          <tr><td><code>iconResolver</code>, <code>markUpdated</code></td><td>Map row icons without mutating nodes; mark changed inspector values.</td></tr>
+          <tr><td><code>scrollChaining</code></td><td>Let wheel scrolling reach an ancestor at the tree's edges. Default <code>false</code>.</td></tr>
+          <tr><td><code>iconsBaseUrl</code>, <code>iconRegistry</code>, <code>nativeScrollbars</code></td><td>Constructor-only icon and scrollbar options. Built-in icons need no asset URL.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="data">
+        <h2>Rows, live values, search and filtering</h2>
+        <p>For <code>setData</code>, each row needs a stable <code>id</code>. Use <code>parentId</code> for children. Optional row fields include <code>label</code>, <code>type</code>, <code>icon</code>, <code>image</code>, <code>tags</code>, <code>data</code> and <code>reorderable</code>. Dynamic patches have an <code>id</code> and a <code>state</code> object, such as <code>{ id: 'btc', state: { value: 42 } }</code>.</p>
+        <p>The built-in filter is enabled by default and keeps matching descendants visible with their ancestors. Search highlights matches and can move focus. Use filtering to narrow the visible tree; use search to navigate results. Compare the <a href="../index.html#hero-tree">bar above the large tree</a> and the <a href="../index.html#units-title">header filter in the units table</a>.</p>
+        <div class="code-panel"><div class="code-panel-header"><span>JavaScript</span><span>Filter and search</span></div><pre><code>view.setFilter(<span class="code-string">'radar'</span>);
+view.setFilter(<span class="code-string">'radar'</span>, { caseSensitive: <span class="code-keyword">true</span>, wholeWord: <span class="code-keyword">true</span> });
+view.setFilter((node, state) =&gt; state.status === <span class="code-string">'warning'</span>);
+view.clearFilter();
+
+view.search(<span class="code-string">'radar'</span>);
+view.nextSearchResult();
+view.clearSearch();</code></pre></div>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><code>setFilter(queryOrPredicate, options?)</code> / <code>clearFilter()</code></td><td>Filter visible rows with text or a predicate; text options are <code>caseSensitive</code> and <code>wholeWord</code>.</td></tr>
+          <tr><td><code>search(query, options?)</code> / <code>clearSearch()</code></td><td>Highlight matches and clear them. Search options include <code>limit</code>, <code>fields</code>, <code>expand</code>, <code>focus</code> and <code>select</code>.</td></tr>
+          <tr><td><code>getSearchState()</code> / <code>nextSearchResult()</code> / <code>previousSearchResult()</code></td><td>Read the current query and results or navigate between them.</td></tr>
+          <tr><td><code>focusNode(id, options?)</code> / <code>scrollToNode(id, align?)</code></td><td>Focus a row or scroll to it. Alignment is <code>'start'</code>, <code>'center'</code>, <code>'end'</code> or <code>'nearest'</code>.</td></tr>
+          <tr><td><code>expandAll()</code> / <code>collapseAll()</code></td><td>Change expansion for the whole tree.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="columns">
+        <h2>Columns, sorting and themes</h2>
+        <p>Use <code>builtInColumns</code> or define columns with <code>id</code>, <code>label</code>, <code>width</code>, <code>minWidth</code>, <code>align</code>, <code>kind</code> and <code>sortable</code>. Kinds include <code>tree</code>, <code>status</code>, <code>value</code>, <code>progress</code>, <code>type</code>, <code>updated</code> and <code>text</code>. <code>value(node, state)</code> supplies the raw value; <code>format(value, node, state)</code> changes displayed text and tooltips without changing sort order. <code>render(ctx, cell)</code> draws custom Canvas2D content.</p>
+        <p>Sorting orders siblings within their parent, preserving the hierarchy. Click a heading to cycle ascending, descending and unsorted, or use <code>view.controller.sortBy(id, direction)</code>. The raw <code>value</code> is compared, so formatting a number as a string does not turn numeric sorting into lexical sorting.</p>
+        <div class="code-panel"><div class="code-panel-header"><span>JavaScript</span><span>Semantic value colours</span></div><pre><code><span class="code-keyword">import</span> { builtInColumns, lightTheme } <span class="code-keyword">from</span> <span class="code-string">'virtual-tree-canvas'</span>;
+
+view.setColumns([
+  builtInColumns.tree,
+  {
+    id: <span class="code-string">'change'</span>, label: <span class="code-string">'24h %'</span>, kind: <span class="code-string">'value'</span>, width: <span class="code-number">90</span>,
+    value: (_node, state) =&gt; state.change,
+    valueType: (value) =&gt; value &gt; <span class="code-number">0</span> ? <span class="code-string">'positive'</span> : value &lt; <span class="code-number">0</span> ? <span class="code-string">'negative'</span> : <span class="code-string">'neutral'</span>,
+    format: (value) =&gt; <span class="code-string">`${value.toFixed(2)}%`</span>
+  }
+]);
+view.setTheme({ ...lightTheme, valueColors: {
+  ...lightTheme.valueColors, positive: <span class="code-string">'#15803d'</span>, negative: <span class="code-string">'#be123c'</span>
+} });</code></pre></div>
+        <p><code>valueType</code> can be a fixed semantic name or a callback. Its colour comes from <code>theme.valueColors</code>; it does not change formatting or sorting. Built-in <code>darkTheme</code> and <code>lightTheme</code> are available, and <code>theme.statuses</code> customizes status pills.</p>
+        <p>Column helpers include <code>builtInColumns</code>, <code>defaultTreeTableColumns()</code> and <code>inspectorColumns()</code>. For icons, <code>builtinIconNames</code> lists bundled names. <code>registerIcon()</code> accepts a custom source; <code>iconsBaseUrl</code> points to a replacement SVG directory. Applications sharing icons across views can supply an <code>IconRegistry</code> and use its <code>register()</code>, <code>get()</code>, <code>prepare()</code> and <code>draw()</code> methods.</p>
+      </section>
+
+      <section id="inspector">
+        <h2>Object inspector metadata</h2>
+        <p><code>setModel(model, meta?)</code> makes property rows from an object or array. No IDs are required. Metadata keys are property paths such as <code>'sensor.range'</code> or wildcard paths such as <code>'tracks.*.speed'</code>. Use <code>presentation: 'pane'</code> for compact controls or <code>'table'</code> for Property / Value columns.</p>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Metadata</th><th>Purpose</th></tr></thead><tbody>
+          <tr><td><code>min</code>, <code>max</code>, <code>step</code>, <code>integer</code></td><td>Numeric editor and range bounds.</td></tr>
+          <tr><td><code>unit</code>, <code>precision</code></td><td>Display-only suffix and decimal places; the stored numeric value retains its precision.</td></tr>
+          <tr><td><code>readonly</code>, <code>disabled</code>, <code>updated</code></td><td>Editing state and changed-value indication.</td></tr>
+          <tr><td><code>options</code>, <code>color</code>, <code>button</code></td><td>Choice editor, colour editor or action button.</td></tr>
+          <tr><td><code>label</code>, <code>description</code>, <code>type</code>, <code>icon</code></td><td>Property text and visual identity.</td></tr>
+          <tr><td><code>itemType</code>, <code>itemTitle</code>, <code>itemFactory</code></td><td>Array item editor type, object summary and value used when adding an item.</td></tr>
+          <tr><td><code>fullWidthButton</code></td><td>Span the available inspector row for a button.</td></tr>
+        </tbody></table></div>
+        <p>Array items use compact indexed rows; primitive values edit in the row, while objects and nested arrays expand. The inspector emits <code>valuechange</code> for a value edit, <code>modelchange</code> for model changes and <code>action</code> for metadata buttons.</p>
+      </section>
+
+      <section id="interaction">
+        <h2>Selection, order, actions and data drag</h2>
+        <p>Selection is single row by default. With <code>multiSelect: true</code>, Ctrl/Command + click toggles rows, Shift + click selects a range, and Shift + drag selects a visible range. An ordinary click still selects one row.</p>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Method or option</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><code>getSelection()</code> / <code>setSelection(ids)</code> / <code>clearSelection()</code></td><td>Read, replace or clear selected IDs. Single-selection mode keeps at most one ID.</td></tr>
+          <tr><td><code>rowReorder: true</code></td><td>Add a dedicated handle to reorder siblings in <code>setData</code> trees. Sorting and filtering temporarily disable manual order.</td></tr>
+          <tr><td><code>getRowOrder(parentId?)</code> / <code>moveRow(id, index)</code> / <code>moveRowBy(id, offset)</code></td><td>Read or change sibling order programmatically. <code>moveRow</code> and <code>moveRowBy</code> return whether a move occurred.</td></tr>
+          <tr><td><code>rowActions</code></td><td>Accessible row buttons or checkboxes with <code>id</code>, <code>label</code>, optional <code>icon</code>, <code>visible</code>, <code>disabled</code>, <code>pressed</code> or <code>checked</code>.</td></tr>
+          <tr><td><code>rowDrag(node, state)</code></td><td>Return a data payload or <code>null</code> to disable dragging for a row. A plain drag exports the source row or the selected group.</td></tr>
+        </tbody></table></div>
+        <p>The component emits drag events with the selected <code>items</code>, <code>nodeIds</code> and pointer event. Your application decides where a drop is valid and updates its data. See the <a href="../examples/transfer-between-trees.html">two-tree transfer example</a>.</p>
+      </section>
+
+      <section id="events">
+        <h2>Events</h2>
+        <p>Subscribe with <code>view.on(type, listener)</code>. Each listener receives an event whose payload is <code>event.detail</code>. Unsubscribe with the function returned by <code>on</code>, or use <code>off</code>.</p>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Events</th><th>When they fire</th></tr></thead><tbody>
+          <tr><td><code>selectionchange</code>, <code>focuschange</code></td><td>Selected IDs or focused row changes.</td></tr>
+          <tr><td><code>filterchange</code>, <code>searchchange</code></td><td>Visible rows change due to filtering, or search results change.</td></tr>
+          <tr><td><code>expand</code>, <code>collapse</code>, <code>sortchange</code></td><td>Tree expansion or column sort changes.</td></tr>
+          <tr><td><code>nodeclick</code>, <code>nodedblclick</code>, <code>nodecontextmenu</code>, <code>nodehover</code></td><td>Pointer interaction with a row.</td></tr>
+          <tr><td><code>valuechange</code>, <code>modelchange</code>, <code>action</code></td><td>Inspector edit, model update or metadata action.</td></tr>
+          <tr><td><code>rowaction</code>, <code>rowreorder</code></td><td>Row button activation or sibling order change.</td></tr>
+          <tr><td><code>rowdragstart</code>, <code>rowdragmove</code>, <code>rowdragend</code>, <code>rowdragcancel</code></td><td>Data drag lifecycle. The host handles destination and drop.</td></tr>
+          <tr><td><code>columnschange</code>, <code>viewportchange</code>, <code>layoutchange</code></td><td>Column or viewport layout changes.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="controller">
+        <h2>Lower-level controller</h2>
+        <p>Use <code>TreeViewController</code> when your application already owns the canvas and render loop. <code>view.controller</code> exposes the same controller inside a <code>TreeView</code>. Methods shared with <code>TreeView</code> work on both; the controller also provides the operations below.</p>
+        <div class="code-panel"><div class="code-panel-header"><span>JavaScript</span><span>Canvas integration</span></div><pre><code><span class="code-keyword">import</span> { TreeViewController } <span class="code-keyword">from</span> <span class="code-string">'virtual-tree-canvas'</span>;
+
+<span class="code-keyword">const</span> tree = <span class="code-keyword">new</span> TreeViewController({ canvas, host, autoRender: <span class="code-keyword">true</span> });
+tree.setData(nodes);
+tree.sortBy(<span class="code-string">'value'</span>, <span class="code-string">'asc'</span>);
+<span class="code-muted">// On permanent unmount: tree.destroy();</span></code></pre></div>
+        <div class="api-table-wrap"><table class="api-table"><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><code>expand(id)</code> / <code>collapse(id)</code> / <code>toggle(id)</code></td><td>Change one branch; each returns whether its expansion state changed.</td></tr>
+          <tr><td><code>sortBy(id, direction?)</code> / <code>clearSort()</code></td><td>Sort siblings by a column or restore their original order. Direction is <code>'asc'</code>, <code>'desc'</code> or <code>'toggle'</code>.</td></tr>
+          <tr><td><code>resizeColumn(id, width)</code> / <code>moveColumn(id, index)</code></td><td>Change column geometry or order.</td></tr>
+          <tr><td><code>setRowActions(actions)</code> / <code>setRowDrag(resolver)</code></td><td>Replace row actions or data drag resolver without rebuilding rows.</td></tr>
+          <tr><td><code>setEditable(enabled)</code> / <code>setMultiSelect(enabled)</code> / <code>setRowReorder(enabled)</code></td><td>Change interaction modes directly on the controller.</td></tr>
+          <tr><td><code>setInitialExpandDepth(depth)</code> / <code>setIconResolver(resolver)</code></td><td>Set defaults for future data installations and map row icons without changing input rows.</td></tr>
+          <tr><td><code>setInspectorOptions(options)</code> / <code>setHeaderFilter(enabled)</code></td><td>Set inspector options or place its filter in the first column heading.</td></tr>
+          <tr><td><code>setModel(model, meta?, options?)</code></td><td>Controller form of model inspection; the third argument accepts presentation and inspector options.</td></tr>
+          <tr><td><code>updateInspectorValue(id, value)</code> / <code>closeEditor()</code></td><td>Update an inspector row by node ID or close its active editor. <code>setInspectorValue(path, value)</code> is easier when a property path is known.</td></tr>
+          <tr><td><code>enableWorkers(url?)</code> / <code>disableWorkers()</code></td><td>Enable or stop optional worker processing for search and filtering. Enabling returns a promise.</td></tr>
+          <tr><td><code>searchAsync(query, options?)</code> / <code>setFilterAsync(query, options?)</code></td><td>Use a worker when enabled; otherwise use the synchronous implementation.</td></tr>
+          <tr><td><code>render()</code> / <code>requestRender()</code> / <code>getStats()</code></td><td>Draw immediately, schedule a draw or inspect component metrics. <code>renderMeasured()</code> returns timing details.</td></tr>
+          <tr><td><code>resize(width, height)</code> / <code>setLayoutMetrics(options)</code></td><td>Update canvas size or row, indent and heading metrics.</td></tr>
+          <tr><td><code>scrollTo(x, y)</code> / <code>hitTest(x, y)</code></td><td>Control scrolling or find the canvas element at client coordinates. <code>getViewportState()</code> reads current dimensions and offsets.</td></tr>
+          <tr><td><code>initialize(canvas)</code> / <code>attachInput()</code> / <code>attachCellEditor()</code> / <code>attachTooltip()</code></td><td>Attach controller facilities when assembling a custom host.</td></tr>
+        </tbody></table></div>
+        <p class="guide-note api-note">The <a href="../demo/index.html">large-tree demo</a> exercises asynchronous filtering and exposes live render metrics. The <a href="../demo/inspector.html">inspector demo</a> shows the pane and table presentations.</p>
+      </section>
+    </main>
+    <footer class="site-footer"><div class="container footer-inner"><span>virtual-tree-canvas · MIT licensed</span><div><a href="./guide.html">Guide</a><a href="../index.html">Live views</a><a href="#main">Back to top ↑</a></div></div></footer>
+  </body>
+</html>

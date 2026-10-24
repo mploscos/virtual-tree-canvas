@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../site/styles.css">
+<style>
+  body { margin: 0; }
+  .live-tree { width: 520px; height: 285px; }
+  #hero-tree { height: 356px; }
+</style>
+<div id="market-tree" class="live-tree"></div>
+<span id="market-status"></span><button id="market-toggle" aria-pressed="false">Pause feed</button>
+<div id="hero-tree" class="live-tree"></div>
+<div id="inspector-tree" class="live-tree"></div>
+<div id="units-tree" class="live-tree"></div>
+<div id="reorder-tree" class="live-tree"></div>
+<script>
+  window.marketSockets = [];
+  window.WebSocket = class {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      window.marketSockets.push(this);
+      queueMicrotask(() => {
+        this.readyState = 1;
+        this.onopen?.();
+      });
+    }
+    send(message) { this.subscription = JSON.parse(message); }
+    close() {
+      this.readyState = 3;
+      this.onclose?.();
+    }
+    emit(message) { this.onmessage?.({ data: JSON.stringify(message) }); }
+  };
+</script>
+<script type="module">
+  import { market } from '../../site/demos.js';
+  const results = [];
+  const wait = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const check = (name, passed) => results.push({ name, passed });
+  try {
+    await wait();
+    const table = document.querySelector('#market-tree');
+    const socket = window.marketSockets[0];
+    check('market demo subscribes to public delayed feed', socket?.url === 'wss://crypto-ai-prices.fly.dev/ws' &&
+      socket.subscription.type === 'subscribe' && socket.subscription.symbols.includes('BTC'));
+    socket.emit({ type: 'snapshot', prices: {
+      BTC: { price: 68000.25, change24h: 1.5, volume24h: 68000250 },
+      ETH: { price: 3100.50, change24h: -2.3, volume24h: 42000000 },
+      SOL: { price: 150, change24h: 0, volume24h: 12000000 }
+    } });
+    await wait();
+    const quote = market.view.controller.model.dynamicState.get('BTC');
+    check('market demo patches existing rows', quote.price === 68000.25 && quote.change === 1.5 &&
+      market.view.controller.model.nodes.length === 7);
+    const changeColumn = market.view.controller.columnModel.getColumn('change');
+    const marketState = market.view.controller.model.dynamicState;
+    check('market change uses semantic colors and a neutral zero',
+      changeColumn.valueType(marketState.get('BTC').change) === 'positive' &&
+      changeColumn.valueType(marketState.get('ETH').change) === 'negative' &&
+      changeColumn.valueType(marketState.get('SOL').change) === 'neutral' &&
+      changeColumn.format(0) === '0.00%');
+    const darkColors = market.view.controller.themeManager.get().valueColors;
+    window.dispatchEvent(new CustomEvent('site-theme-change', { detail: { theme: 'light' } }));
+    const lightColors = market.view.controller.themeManager.get().valueColors;
+    check('market indicators follow the site theme',
+      darkColors.positive !== lightColors.positive &&
+      darkColors.negative !== lightColors.negative &&
+      lightColors.positive === '#15803d' && lightColors.negative === '#be123c');
+    const horizontal = table.querySelector('.virtual-tree-canvas-scrollbar-x');
+    check('market table fits its card', getComputedStyle(horizontal).display === 'none');
+    table.style.width = '350px';
+    await wait();
+    check('market table fits narrow cards', getComputedStyle(horizontal).display === 'none');
+    check('market change remains visible in narrow cards',
+      market.view.controller.columnModel.getColumn('change') !== null);
+    document.querySelector('#market-toggle').click();
+    check('pause closes the market feed', socket.readyState === 3 &&
+      document.querySelector('#market-toggle').getAttribute('aria-pressed') === 'true');
+    document.querySelector('#market-toggle').click();
+    await wait();
+    check('resume opens a fresh market feed', window.marketSockets.length === 2 &&
+      window.marketSockets[1].subscription.symbols.includes('BTC'));
+
+    const hero = document.querySelector('#hero-tree');
+    const heroHorizontal = hero.querySelector('.virtual-tree-canvas-scrollbar-x');
+    check('hero table fits without horizontal scrolling', getComputedStyle(heroHorizontal).display === 'none');
+    hero.style.width = '350px';
+    await wait();
+    check('hero table fits at narrow widths', getComputedStyle(heroHorizontal).display === 'none');
+
+    const canvas = document.querySelector('#inspector-tree canvas');
+    const context = canvas.getContext('2d');
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await wait();
+    check('returning to a visible tab redraws inactive tables', context.getImageData(4, 4, 1, 1).data[3] > 0);
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    check('back-forward cache keeps mounted tables', document.querySelector('#inspector-tree canvas') === canvas);
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    await wait();
+    check('restored tables remain rendered', context.getImageData(4, 4, 1, 1).data[3] > 0);
+  } catch (error) {
+    results.push({ name: 'live documentation', passed: false, error: String(error) });
+  }
+  window.testResult = results;
+</script>
+</html>

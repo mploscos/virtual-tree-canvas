@@ -22,8 +22,9 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
   text instead of relying on color alone.
 - To add a custom icon, call `view.registerIcon('custom', svgStringOrUrl)` and
   assign `icon: 'custom'` to the node.
-- Set `iconsBaseUrl` when creating the view if assets are served from another URL.
-  SVGs are loaded when drawn or through `view.controller.iconRegistry.prepare()`.
+- Built-in icons need no asset path. Set `iconsBaseUrl` only to serve replacement
+  SVGs from another URL. Icons are rasterized when drawn or through
+  `view.controller.iconRegistry.prepare()`.
 
 ## Available icons
 

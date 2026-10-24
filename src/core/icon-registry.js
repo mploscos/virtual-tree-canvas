@@ -1,4 +1,5 @@
 import { createBuiltinIconUrls } from '../assets/icons.js';
+import { builtinIconSources } from '../assets/icon-sources.js';
 
 /**
  * Icon source registry for the Canvas2D tree renderer.
@@ -174,7 +175,10 @@ export class IconRegistry {
   }
 
   #registerBuiltIns(iconsBaseUrl) {
-    for (const [name, url] of Object.entries(createBuiltinIconUrls(iconsBaseUrl))) this.register(name, url);
+    const icons = iconsBaseUrl === undefined
+      ? builtinIconSources
+      : createBuiltinIconUrls(iconsBaseUrl);
+    for (const [name, source] of Object.entries(icons)) this.register(name, source);
   }
 }
 

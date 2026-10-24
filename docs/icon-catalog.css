@@ -1,0 +1,19 @@
+.icon-page { padding-block: 70px 100px; }
+.icon-intro { max-width: 720px; margin-bottom: 32px; }
+.icon-intro h1 { margin-bottom: 15px; }
+.icon-intro > p:last-child { max-width: 680px; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+.icon-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.icon-controls input, .icon-controls select { min-height: 42px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.icon-controls input { width: min(360px, 100%); padding: 0 13px; }
+.icon-controls select { padding: 0 12px; }
+.icon-controls label { color: var(--muted); font-size: 13px; font-weight: 650; }
+.icon-controls output { margin-left: auto; color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+.icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; }
+.icon-grid article { display: flex; flex-direction: column; gap: 3px; min-height: 154px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.icon-grid article[hidden] { display: none; }
+.icon-grid .glyph { display: flex; align-items: center; height: 44px; margin-bottom: 7px; color: var(--cyan); }
+.icon-grid svg { width: var(--icon-size, 24px); height: var(--icon-size, 24px); }
+.icon-grid strong { font-size: 14px; line-height: 1.3; }
+.icon-grid code { color: var(--cyan); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.icon-grid small { color: var(--muted); font-size: 11px; }
+@media (max-width: 700px) { .icon-page { padding-block: 50px 75px; }.icon-controls { flex-wrap: wrap; }.icon-controls input { flex-basis: 100%; width: 100%; }.icon-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); } }

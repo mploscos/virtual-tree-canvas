@@ -206,7 +206,7 @@ test('keyboard navigation moves focus through visible rows', () => {
 });
 
 test('shift selection selects a visible row range', () => {
-  const controller = createController();
+  const controller = createController({ multiSelect: true });
   controller.expand('a');
   controller.selectRow(1);
   controller.selectRow(3, {
@@ -217,7 +217,7 @@ test('shift selection selects a visible row range', () => {
 });
 
 test('ctrl and cmd toggle individual row selection', () => {
-  const controller = createController();
+  const controller = createController({ multiSelect: true });
   controller.selectRow(1);
   controller.selectRow(2, {
     ctrlKey: true
@@ -227,6 +227,27 @@ test('ctrl and cmd toggle individual row selection', () => {
   controller.selectRow(1, {
     metaKey: true
   });
+  assert.deepEqual(controller.getSelection(), ['b']);
+});
+
+test('single selection is the default and disabling multi-select keeps one row', () => {
+  const controller = createController();
+  controller.selectRow(1);
+  controller.selectRow(2, { ctrlKey: true });
+  assert.deepEqual(controller.getSelection(), ['b']);
+  controller.selectRow(3, { shiftKey: true });
+  assert.deepEqual(controller.getSelection(), ['c']);
+  controller.setSelection(['a', 'b']);
+  assert.deepEqual(controller.getSelection(), ['b']);
+  assert.equal(controller.handleKey({ key: 'a', ctrlKey: true }), true);
+  assert.deepEqual(controller.getSelection(), ['b']);
+
+  controller.setMultiSelect(true);
+  controller.setSelection(['a', 'b']);
+  controller.selectRow(3);
+  assert.deepEqual(controller.getSelection(), ['c']);
+  controller.setSelection(['a', 'b']);
+  controller.setMultiSelect(false);
   assert.deepEqual(controller.getSelection(), ['b']);
 });
 
@@ -304,6 +325,16 @@ test('search supports match case and whole word options', () => {
     }),
     ['lower']
   );
+});
+
+test('search uses the latest tree after data changes', () => {
+  const controller = new TreeViewController();
+  controller.setData([{ id: 'old', label: 'Old node' }]);
+  assert.deepEqual(controller.search('Old'), ['old']);
+
+  controller.setData([{ id: 'new', label: 'New node' }]);
+  assert.deepEqual(controller.search('Old'), []);
+  assert.deepEqual(controller.search('New'), ['new']);
 });
 
 test('filter supports match case and whole word options', () => {
@@ -524,7 +555,7 @@ test('sticky ancestor rows are truncated by leaf siblings entering the sticky ar
 });
 
 test('ctrl+a selects all visible rows', () => {
-  const controller = createController();
+  const controller = createController({ multiSelect: true });
 
   assert.equal(
     controller.handleKey({

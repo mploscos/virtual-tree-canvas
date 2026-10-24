@@ -462,11 +462,16 @@ export class TreeRowRenderer {
     ctx.globalAlpha = data.disabled ? DISABLED_ALPHA : 1;
     ctx.fillStyle =
       data.valueType === 'object' || data.valueType === 'array' ? colors.text : colors.textMuted;
+    if (Number.isInteger(data.arrayIndex)) {
+      labelX += this.#drawArrayIndexBadge(ctx, data.arrayIndex, labelX, cy, theme) + 7;
+      ctx.fillStyle = colors.text;
+    }
+    const label = Number.isInteger(data.arrayIndex) ? data.arrayItemTitle : node.label ?? node.id;
 
     if (data.valueType === 'object') {
       drawTruncatedText(
         ctx,
-        node.label ?? node.id,
+        label,
         labelX,
         cy,
         Math.max(20, rect.x + rect.width - labelX - 8)
@@ -485,7 +490,7 @@ export class TreeRowRenderer {
     );
     drawTruncatedText(
       ctx,
-      node.label ?? node.id,
+      label,
       labelX,
       cy,
       Math.max(20, rect.x + layout.editorLeft - labelX - 8)
@@ -494,8 +499,10 @@ export class TreeRowRenderer {
     const editorX = rect.x + layout.editorLeft;
     const editorWidth = layout.editorWidth;
     if (data.valueType === 'array') {
-      ctx.fillStyle = colors.textMuted;
-      drawTruncatedText(ctx, data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
+      if (!Number.isInteger(data.arrayIndex)) {
+        ctx.fillStyle = colors.textMuted;
+        drawTruncatedText(ctx, data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
+      }
       this.#drawSmallButton(
         ctx,
         rect.x + rect.width - 54,
@@ -587,7 +594,9 @@ export class TreeRowRenderer {
       ctx.font = theme.font;
     }
 
-    if (data.editorType === 'checkbox') {
+    if (data.valueType === 'array' && Number.isInteger(data.arrayIndex)) {
+      // The nested array count is already shown beside its index in the tree column.
+    } else if (data.editorType === 'checkbox') {
       drawCheckbox(ctx, x, rect.y + rect.height / 2 - 8, Boolean(data.value), theme);
     } else if (data.editorType === 'range') {
       this.#drawInspectorRange(ctx, x, rect.y + rect.height / 2 - 4, width, data, theme, {
@@ -647,25 +656,34 @@ export class TreeRowRenderer {
       );
       this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
     } else {
-      if (isEmptyEditableControl(data)) {
-        this.#drawEmptyEditorFrame(ctx, x, y, width, height, theme, {
+      const editableText = this.scene.editable && !readonly && !disabled &&
+        (data.editorType === 'text' || data.editorType === 'number');
+      if (editableText) {
+        this.#drawEditorFrame(ctx, x, y, width, height, theme, {
           hovered: hovered && hoverPart === 'editor',
           active: activePart === 'editor'
         });
       }
+      const inset = editableText ? 8 : 0;
       if (numeric.unit) {
         ctx.font = theme.monoFont ?? theme.font;
         ctx.fillStyle = valueColor;
         ctx.textAlign = 'right';
-        drawTruncatedText(ctx, data.valueText, x + width, rect.y + rect.height / 2, width);
+        drawTruncatedText(
+          ctx,
+          data.valueText,
+          x + width - inset,
+          rect.y + rect.height / 2,
+          Math.max(10, width - inset * 2)
+        );
         ctx.textAlign = 'left';
       } else {
         this.#drawMutedText(
           ctx,
           data.valueText,
-          x,
+          x + inset,
           rect.y + rect.height / 2,
-          width,
+          Math.max(10, width - inset * 2),
           theme,
           false,
           null,
@@ -778,7 +796,7 @@ export class TreeRowRenderer {
     ctx.stroke();
   }
 
-  #drawEmptyEditorFrame(ctx, x, y, width, height, theme, state = {}) {
+  #drawEditorFrame(ctx, x, y, width, height, theme, state = {}) {
     const colors = theme.colors;
     roundRect(ctx, x, y, width, height, 5);
     ctx.strokeStyle = state.active
@@ -817,6 +835,28 @@ export class TreeRowRenderer {
     );
     const cy = rect.y + rect.height / 2;
     if (row.hasChildren) this.#drawChevron(ctx, rect.x + layout.chevronX, cy, row, colors);
+    if (Number.isInteger(node.data?.arrayIndex)) {
+      ctx.font = theme.font;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      const badgeWidth = this.#drawArrayIndexBadge(
+        ctx,
+        node.data.arrayIndex,
+        rect.x + layout.iconX,
+        cy,
+        theme
+      );
+      const labelX = Math.max(layout.labelX, layout.iconX + badgeWidth + 8);
+      ctx.fillStyle = colors.text;
+      drawTruncatedText(
+        ctx,
+        node.data.arrayItemTitle,
+        rect.x + labelX,
+        cy,
+        Math.max(0, rect.width - labelX - 6)
+      );
+      return;
+    }
     this.iconRegistry.draw(
       ctx,
       style.icon,
@@ -971,15 +1011,23 @@ export class TreeRowRenderer {
     ctx.fill();
   }
 
-}
+  #drawArrayIndexBadge(ctx, index, x, cy, theme) {
+    const text = String(index);
+    ctx.save();
+    ctx.font = theme.monoFont ?? theme.font;
+    const width = Math.max(20, Math.ceil(ctx.measureText(text).width) + 10);
+    const height = 16;
+    ctx.fillStyle = theme.colors.progressTrack;
+    roundRect(ctx, x, cy - height / 2, width, height, 4);
+    ctx.fill();
+    ctx.fillStyle = theme.colors.textMuted;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + width / 2, cy + 0.5);
+    ctx.restore();
+    return width;
+  }
 
-function isEmptyEditableControl(data) {
-  return (
-    !data.readonly &&
-    !data.disabled &&
-    (data.editorType === 'text' || data.editorType === 'number') &&
-    String(data.valueText ?? '').trim() === ''
-  );
 }
 
 function resolveNodeStyle(theme, node, state = {}) {

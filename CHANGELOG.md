@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.0 — 2026-10-24
+
+### Added
+
+- Arrays in the inspector use compact indexed value rows, with readable summaries for objects, simple values and nested arrays.
+- TypeScript declarations for every public entry point, type checks and a declaration generator.
+- Shift + drag range selection, leaving an ordinary drag available for data dragging.
+
+### Fixed
+
+- Live column sorting compares cached values by node ID to avoid repeated node lookups, and reuses one numeric-aware collator in the controller and worker.
+- Double-clicking an inspector array’s add or remove control no longer toggles its expansion.
+- Inspector selects open on the first completed click without immediately closing.
+- An open range number editor now follows slider changes immediately.
+
+### Changed
+
+- Single selection is the default. `multiSelect: true` enables range and additive selection; data dragging follows the active selection mode without application-specific gesture checks.
+- Keep Dark and Light as the two built-in themes; remove the redundant Tactical preset.
+- Package exports now expose declarations for subpaths and the bundled icon resources.
+- Built-in SVG icons are included in the ESM package, so bundled applications need no icon asset path or additional HTTP requests. `iconsBaseUrl` remains available for externally hosted replacements.
+- Inspector selects now keep the canvas control dimensions, font, colors and dropdown indicator while editing.
+- Build the local search index on first use and stop expansion traversal at the configured depth, reducing initial mount work.
+
+
 ## 0.7.11 — 2026-10-18
 
 ### Changed

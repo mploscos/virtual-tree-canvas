@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b111c" />
+    <meta name="description" content="Explore virtual-tree-canvas: fast tree tables, editable inspectors, units, row ordering, and SVG icons." />
+    <title>virtual-tree-canvas · demos and documentation</title>
+    <script src="./site/theme.js"></script>
+    <link rel="stylesheet" href="./site/styles.css" />
+    <link rel="stylesheet" href="./examples/transfer-between-trees.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="./" aria-label="virtual-tree-canvas home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>virtual-tree-canvas</span>
+        </a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <a href="#demos">Demos</a>
+          <a href="#quick-start">Quick start</a>
+          <a href="./docs/guide.html">Guide</a>
+          <a href="./docs/api.html">API reference</a>
+          <a href="./docs/icon-catalog.html">Icons</a>
+        </nav>
+        <span class="version">v0.8.0</span>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode">
+          <span class="theme-icon theme-icon-sun" aria-hidden="true"></span>
+          <span class="theme-icon theme-icon-moon" aria-hidden="true"></span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero container" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-line"></span> CANVAS2D · FRAMEWORK AGNOSTIC</p>
+          <h1 id="hero-title">A tree view built for <em>living data.</em></h1>
+          <p class="hero-description">Explore large hierarchies, inspect nested models and edit values in a compact canvas interface. Start with a complete DOM view or bring your own host.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#demos">Try the live views <span aria-hidden="true">↗</span></a>
+            <a class="button button-secondary" href="#quick-start">Get started</a>
+          </div>
+          <div class="hero-points" aria-label="Highlights">
+            <span><b>01</b> Virtual rows</span>
+            <span><b>02</b> Live updates</span>
+            <span><b>03</b> Typed API</span>
+          </div>
+        </div>
+        <div class="hero-preview" aria-label="Interactive live tree table">
+          <div class="preview-bar"><span class="preview-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>operations / 2,400 nodes</span><span class="preview-live">● LIVE DATA</span></div>
+          <div id="hero-tree" class="live-tree live-tree-hero"></div>
+          <p class="preview-caption">Use the filter bar on 2,400 rows, expand a branch or sort a column. Values update in place.</p>
+        </div>
+      </section>
+
+      <section class="demos-section" id="demos" aria-labelledby="demos-title">
+        <div class="container">
+          <div class="section-heading">
+            <div><p class="eyebrow">INTERACTIVE DOCUMENTATION</p><h2 id="demos-title">The component is the demo.</h2></div>
+            <p>These are live instances of virtual-tree-canvas. Change values, move rows and explore the hierarchy here.</p>
+          </div>
+          <div class="showcase-grid">
+            <section class="showcase-card" aria-labelledby="inspector-title">
+              <div class="showcase-copy"><span class="card-kicker">01 · MODEL INSPECTOR · setModel</span><h3 id="inspector-title">Edit the object itself.</h3><p>Filter properties, expand arrays and use the native editors created from model metadata.</p></div>
+              <div id="inspector-tree" class="live-tree live-tree-card"></div>
+            </section>
+            <section class="showcase-card" aria-labelledby="units-title">
+              <div class="showcase-copy"><span class="card-kicker">02 · VALUES · HEADER FILTER</span><h3 id="units-title">Units stay with the value.</h3><p>Filter properties in the first column header, then edit a numeric field. Display precision does not change the stored value.</p></div>
+              <div id="units-tree" class="live-tree live-tree-card"></div>
+            </section>
+            <section class="showcase-card" aria-labelledby="reorder-title">
+              <div class="showcase-copy"><span class="card-kicker">03 · INTERACTION</span><h3 id="reorder-title">Move rows in place.</h3><p>Drag a row handle or use Alt + ↑/↓ while values keep updating.</p></div>
+              <div id="reorder-tree" class="live-tree live-tree-card"></div>
+            </section>
+            <section class="showcase-card showcase-market" aria-labelledby="market-title">
+              <div class="showcase-copy"><span class="card-kicker">04 · REAL DATA</span><h3 id="market-title">Markets that actually move.</h3><p>Streaming cryptocurrency prices, approximately 15 seconds delayed. Sort the columns or pause the stream; the table updates without rebuilding its rows.</p></div>
+              <div id="market-tree" class="live-tree live-tree-market"></div>
+              <div class="market-meta"><span id="market-status" role="status" aria-live="polite">Feed connects when the table is visible.</span><span>Source: <a href="https://crypto-ai.dev/docs">crypto-ai.dev</a> · multi-exchange USD prices · ~15s delay</span><button id="market-toggle" class="button button-secondary market-toggle" type="button" aria-pressed="false">Pause feed</button></div>
+            </section>
+            <section class="showcase-card showcase-icons" aria-labelledby="icons-title">
+              <div class="showcase-copy"><span class="card-kicker">05 · ASSETS</span><h3 id="icons-title">One icon language.</h3><p>The same SVG symbols used by the live views adapt to light and dark surfaces.</p></div>
+              <div class="icon-samples" aria-hidden="true"><span><i style="--icon:url('./resources/icons/radar.svg')"></i>Radar</span><span><i style="--icon:url('./resources/icons/aircraft.svg')"></i>Aircraft</span><span><i style="--icon:url('./resources/icons/folder.svg')"></i>Folder</span><span><i style="--icon:url('./resources/icons/compass.svg')"></i>Compass</span><span><i style="--icon:url('./resources/icons/sensor.svg')"></i>Sensor</span><span><i style="--icon:url('./resources/icons/data-bus.svg')"></i>Data bus</span></div>
+              <a class="icon-catalog-link" href="./docs/icon-catalog.html">Browse all 95 icons <span aria-hidden="true">↗</span></a>
+            </section>
+            <section class="showcase-card showcase-transfer" aria-labelledby="transfer-title">
+              <div class="showcase-copy"><span class="card-kicker">06 · MULTI-SELECTION</span><h3 id="transfer-title">Move whole branches.</h3><p>Hold Shift and drag to select a range. Then drag a selected row into either tree.</p></div>
+              <div class="transfer-workspace">
+                <div class="tree-pane" id="pane-a"><div class="pane-heading"><div><span class="pane-index">01</span><h4>Projects</h4></div><span class="pane-count" id="count-a"></span></div><div class="tree-host" id="tree-a"></div><div class="drop-marker" hidden></div><div class="drop-hint">Drop here</div></div>
+                <span class="transfer-arrow" aria-hidden="true">↔</span>
+                <div class="tree-pane" id="pane-b"><div class="pane-heading"><div><span class="pane-index">02</span><h4>Archive</h4></div><span class="pane-count" id="count-b"></span></div><div class="tree-host" id="tree-b"></div><div class="drop-marker" hidden></div><div class="drop-hint">Drop here</div></div>
+              </div>
+              <p id="status" class="showcase-status" role="status" aria-live="polite">Select rows, then drag them within or between trees.</p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="quick-start container" id="quick-start" aria-labelledby="quick-start-title">
+        <div class="quick-copy"><p class="eyebrow">START BUILDING</p><h2 id="quick-start-title">A tree in a few lines.</h2><p>Install the package, give the host a height and pass in rows. The view creates the canvas and manages rendering.</p><a href="./docs/guide.html">Read the full guide <span aria-hidden="true">↗</span></a></div>
+        <div class="code-panel"><div class="code-panel-header"><span>JavaScript · ES modules</span><span>virtual-tree-canvas</span></div><pre><code><span class="code-muted">// npm install virtual-tree-canvas</span>
+<span class="code-keyword">import</span> { TreeView } <span class="code-keyword">from</span> <span class="code-string">'virtual-tree-canvas'</span>;
+
+<span class="code-keyword">const</span> view = <span class="code-keyword">new</span> TreeView(host, {
+  initialExpandDepth: <span class="code-number">2</span>
+});
+
+view.setData([
+  { id: <span class="code-string">'fleet'</span>, label: <span class="code-string">'Fleet'</span> },
+  { id: <span class="code-string">'radar'</span>, parentId: <span class="code-string">'fleet'</span>, label: <span class="code-string">'Radar'</span> }
+]);</code></pre></div>
+      </section>
+    </main>
+
+    <footer class="site-footer"><div class="container footer-inner"><span>virtual-tree-canvas <span class="footer-dot">·</span> MIT licensed</span><div><a href="./docs/guide.html">Guide</a><a href="./docs/api.html">API reference</a><a href="#main">Back to top ↑</a></div></div></footer>
+    <script type="module" src="./site/demos.js"></script>
+    <script type="module" src="./examples/transfer-between-trees.js"></script>
+  </body>
+</html>

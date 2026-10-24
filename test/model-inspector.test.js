@@ -28,6 +28,43 @@ test('model inspector builder can flatten root object', () => {
   assert.equal(nodes.find((node) => node.data.path === 'sensor.range').parentId, 'model:sensor');
 });
 
+test('array elements keep direct paths and show useful item summaries', () => {
+  const model = {
+    tracks: [{ id: 'T-100', speed: 430 }, { speed: 285, active: true }, {}],
+    tags: ['radar', 'air'],
+    matrix: [[1, 2], [3]],
+  };
+  const nodes = new ModelInspectorBuilder().build(model, {}, { flatRoot: true });
+  const first = nodes.find((node) => node.data.path === 'tracks.0');
+  const second = nodes.find((node) => node.data.path === 'tracks.1');
+  const tag = nodes.find((node) => node.data.path === 'tags.0');
+
+  assert.equal(first.parentId, 'model:tracks');
+  assert.equal(first.data.arrayIndex, 0);
+  assert.equal(first.data.arrayItemTitle, 'T-100');
+  assert.equal(second.data.arrayItemTitle, 'speed: 285 · active: true');
+  assert.equal(nodes.find((node) => node.data.path === 'tracks.2').data.arrayItemTitle, 'Empty object');
+  assert.equal(tag.parentId, 'model:tags');
+  assert.equal(tag.data.arrayItemTitle, '');
+  assert.equal(tag.data.valueText, 'radar');
+  const nestedArray = nodes.find((node) => node.data.path === 'matrix.0');
+  assert.equal(nestedArray.parentId, 'model:matrix');
+  assert.equal(nestedArray.data.arrayItemTitle, 'Array(2)');
+  assert.equal(nodes.find((node) => node.data.path === 'matrix.0.0').parentId, nestedArray.id);
+  assert.equal(nodes.find((node) => node.data.path === 'matrix.0.0').data.valueText, '1');
+  assert.equal(nodes.find((node) => node.data.path === 'tracks.0.speed').parentId, first.id);
+
+  const titled = new ModelInspectorBuilder().build(model, {
+    tracks: { itemTitle: (index) => `Track ${index + 1}` },
+  }, { flatRoot: true });
+  assert.equal(titled.find((node) => node.data.path === 'tracks.0').data.arrayItemTitle, 'Track 1');
+
+  const controller = new TreeViewController();
+  controller.setModel(model, {}, { presentation: 'pane', flatRoot: true });
+  controller.setInspectorValue('tracks.0.id', 'T-200');
+  assert.equal(controller.model.index.getNode('model:tracks.0').data.arrayItemTitle, 'T-200');
+});
+
 test('model inspector builder can enforce explicit metadata for editable fields', () => {
   const model = { sensor: { range: 10, gain: 0.5 }, tracks: [{ speed: 5 }] };
   const nodes = new ModelInspectorBuilder().build(model, {

@@ -18,6 +18,15 @@ const model = {
     color: '#38bdf8',
     mode: 'track',
   },
+  tags: ['radar', 'navigation', 'tracking'],
+  detections: [
+    { name: 'North contact', bearing: 45, distance: 12 },
+    { bearing: 130, distance: 8, active: true },
+  ],
+  scanLines: [
+    [12, 18, 25],
+    [31, 42],
+  ],
   tracks: [
     { id: 'T-100', speed: 430, quality: 0.82, active: true },
     { id: 'T-101', speed: 285, quality: 0.55, active: false },
@@ -34,8 +43,20 @@ const meta = {
   'sensor.gain': { min: 0, max: 1, step: 0.01, description: 'Signal gain' },
   'sensor.color': { color: true, description: 'Display color' },
   'sensor.mode': { options: { Search: 'search', Track: 'track', Standby: 'standby' } },
-  tracks: { itemFactory: () => ({ id: `T-${100 + model.tracks.length}`, speed: 0, quality: 0.5, active: false }) },
-  'tracks.*': { itemTitle: (i, item) => item.id || `Track ${i}` },
+  tags: { itemType: 'string' },
+  'tags.*': {},
+  detections: { itemFactory: () => ({ bearing: 0, distance: 0, active: false }) },
+  'detections.*.name': {},
+  'detections.*.bearing': { min: 0, max: 360, step: 1, integer: true },
+  'detections.*.distance': { min: 0, max: 100, step: 1, integer: true },
+  'detections.*.active': {},
+  scanLines: { itemFactory: () => [0, 0] },
+  'scanLines.*': { itemType: 'number' },
+  'scanLines.*.*': { min: 0, max: 100, step: 1, integer: true },
+  tracks: {
+    itemFactory: () => ({ id: `T-${100 + model.tracks.length}`, speed: 0, quality: 0.5, active: false }),
+    itemTitle: (i, item) => item.id || `Track ${i + 1}`,
+  },
   'tracks.*.speed': { min: 0, max: 900, step: 5, integer: true },
   'tracks.*.quality': { min: 0, max: 1, step: 0.01 },
   'tracks.*.active': { description: 'Track active state' },
@@ -49,8 +70,8 @@ setInspectorModel();
 
 controller.on('valuechange', (event) => {
   message.textContent = `${event.detail.path}: ${event.detail.oldValue} -> ${event.detail.newValue}`;
-  updateJson();
 });
+controller.on('modelchange', updateJson);
 controller.on('action', (event) => {
   message.textContent = `Action: ${event.detail.label} (${event.detail.path})`;
 });

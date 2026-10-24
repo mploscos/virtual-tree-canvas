@@ -29,6 +29,110 @@ export async function runViewContract(create) {
     }
   }
 
+  await check('array buttons never toggle expansion on a double click', async (a) => {
+    const model = { tags: ['radar'] };
+    a.configure({ mode: 'inspector', presentation: 'pane', model, meta: { tags: { itemType: 'string' } }, editable: true });
+    await wait();
+    const c = a.widget.controller;
+    const canvas = c.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const point = (part) => {
+      const row = c.rowModel.getRowById('model:tags');
+      const y = c.viewport.renderInsetY + c.viewport.headerHeight + row.y - c.viewport.scrollY + row.height / 2;
+      for (let x = 0; x < c.viewport.contentViewportWidth; x++) {
+        const hit = c.hitTest(x, y);
+        if (hit?.row?.nodeId === row.nodeId && hit.part === part)
+          return { clientX: rect.left + x, clientY: rect.top + y };
+      }
+      throw new Error(`Missing ${part} control`);
+    };
+    const doubleClickButton = (part) => {
+      const p = point(part);
+      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, ...p }));
+      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2, ...p }));
+      canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2, ...p }));
+    };
+    same(c.rowModel.getRowById('model:tags').expanded, true, 'initially expanded');
+    doubleClickButton('arrayAdd');
+    same(model.tags.length, 3, 'two items added');
+    same(c.rowModel.getRowById('model:tags').expanded, true, 'add keeps expansion');
+    c.collapse('model:tags');
+    doubleClickButton('arrayRemove');
+    same(model.tags.length, 1, 'two items removed');
+    same(c.rowModel.getRowById('model:tags').expanded, false, 'remove keeps collapsed state');
+  });
+
+  for (const presentation of ['pane', 'table'])
+    await check(`select editor keeps canvas control geometry (${presentation})`, async (a) => {
+      a.configure({ mode: 'inspector', presentation, flatRoot: true, editable: true });
+      a.widget.setModel({ mode: 'track' }, { mode: { options: { Track: 'track', Search: 'search' } } });
+      await wait();
+      const c = a.widget.controller;
+      const row = c.rowModel.getRowById('model:mode');
+      const column = c.columnModel.columns.find((item) => item.kind === (presentation === 'pane' ? 'inspectorPane' : 'inspectorValue'));
+      const hit = { area: 'row', part: 'editor', row, column };
+      const cell = c.getCellClientRect(hit);
+      const layout = presentation === 'pane' ? c.getInspectorPaneLayout(cell.width, row, 'select') : null;
+      const expectedX = cell.x + (layout?.editorLeft ?? 0) + 10;
+      const expectedWidth = Math.min(180, Math.max(24, (layout?.editorWidth ?? cell.width) - 20));
+      same(c.cellEditor.handlePointerDown({}, hit), false, 'select waits for click completion');
+      same(c.cellEditor.handleClick({}, hit), true, 'select opens');
+      const select = c.cellEditor.overlay;
+      const actual = select.getBoundingClientRect();
+      same(select.tagName, 'SELECT', 'native select');
+      same(Math.abs(actual.left - expectedX) < 1, true, 'left edge matches canvas');
+      same(Math.abs(actual.top - (cell.y + 5)) < 1, true, 'top edge matches canvas');
+      same(Math.abs(actual.width - expectedWidth) < 1, true, 'width matches canvas');
+      same(Math.abs(actual.height - (cell.height - 10)) < 1, true, 'height matches canvas');
+      same(getComputedStyle(select).backgroundImage === 'none', false, 'dropdown indicator remains visible');
+      const darkArrow = select.style.backgroundImage;
+      a.widget.setTheme('light');
+      same(select.style.backgroundImage === darkArrow, false, 'dropdown indicator follows theme');
+      c.closeEditor();
+    });
+
+  await check('inspector select opens on the first click across the whole control', async (a) => {
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true });
+    a.widget.setModel({ mode: 'track' }, { mode: { options: { Track: 'track', Search: 'search' } } });
+    await wait();
+    const c = a.widget.controller;
+    const row = c.rowModel.getRowById('model:mode');
+    const column = c.columnModel.columns.find((item) => item.kind === 'inspectorPane');
+    const cell = c.getCellClientRect({ area: 'row', part: 'editor', row, column });
+    const layout = c.getInspectorPaneLayout(cell.width, row, 'select');
+    const x = cell.x + layout.editorLeft + 10;
+    const width = Math.min(180, Math.max(24, layout.editorWidth - 20));
+    for (const offset of [10, width - 10]) {
+      const point = { x: x + offset, y: cell.y + cell.height / 2, button: 'left', clickCount: 1 };
+      await window.testMouse({ type: 'mousePressed', ...point });
+      same(c.cellEditor.overlay, null, 'picker is not inserted before mouseup');
+      await window.testMouse({ type: 'mouseReleased', ...point });
+      const select = c.cellEditor.overlay;
+      same(select?.tagName, 'SELECT', 'first click creates select');
+      same(select.matches(':open'), true, 'picker remains open');
+      c.closeEditor();
+    }
+  });
+
+  await check('inspector pane labels allow mouse range selection without opening editors', async (a) => {
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true, multiSelect: true });
+    a.widget.setModel({ first: 'Alpha', second: 'Bravo' });
+    await wait();
+    const c = a.widget.controller;
+    const box = c.canvas.getBoundingClientRect();
+    const x = box.left + 75;
+    const y = (id) => {
+      const row = c.rowModel.getRowById(id);
+      return box.top + c.viewport.headerHeight + row.y - c.viewport.scrollY + row.height / 2;
+    };
+    same(c.hitTest(75, y('model:first') - box.top)?.part, 'label', 'gesture starts on label');
+    await window.testMouse({ type: 'mousePressed', x, y: y('model:first'), button: 'left', clickCount: 1, modifiers: 8 });
+    same(c.cellEditor.overlay, null, 'label does not open an editor');
+    await window.testMouse({ type: 'mouseMoved', x, y: y('model:second'), button: 'left', buttons: 1, modifiers: 8 });
+    same(a.widget.getSelection(), ['model:first', 'model:second'], 'labels select a range');
+    await window.testMouse({ type: 'mouseReleased', x, y: y('model:second'), button: 'left', clickCount: 1, modifiers: 8 });
+  });
+
   for (const presentation of ['pane', 'table'])
     await check(`editors survive live refreshes (${presentation})`, async (a) => {
       const w = a.widget;
@@ -163,6 +267,45 @@ export async function runViewContract(create) {
       );
       same(c.cellEditor.overlay, null, 'readonly changes cancel editing');
       stop();
+    });
+  for (const presentation of ['pane', 'table'])
+    await check(`open range number follows slider changes (${presentation})`, async (a) => {
+      a.configure({ mode: 'inspector', presentation, flatRoot: true, editable: true });
+      a.widget.setModel({ level: 20 }, { level: { min: 0, max: 100, step: 1, integer: true } });
+      await wait();
+      const c = a.widget.controller;
+      const point = (part, fraction = 0.5) => {
+        const row = c.rowModel.getRowById('model:level');
+        const box = c.canvas.getBoundingClientRect();
+        const y = c.viewport.renderInsetY + c.viewport.headerHeight +
+          row.y - c.viewport.scrollY + row.height / 2;
+        const xs = [];
+        for (let x = 0; x < c.viewport.contentViewportWidth; x++) {
+          const hit = c.hitTest(x, y);
+          if (hit?.row === row && hit.part === part) xs.push(x);
+        }
+        if (!xs.length) throw new Error(`Missing ${part} control`);
+        return { x: box.left + xs[Math.floor((xs.length - 1) * fraction)], y: box.top + y };
+      };
+      const mouse = (type, p, buttons = 0) => window.testMouse({
+        type, ...p, button: 'left', buttons, clickCount: 1
+      });
+      const number = point('number');
+      await mouse('mousePressed', number, 1);
+      await mouse('mouseReleased', number);
+      const input = c.cellEditor.overlay;
+      same(input?.value, '20', 'number editor opens with current value');
+      input.value = '41';
+      const start = point('range', 0.75);
+      await mouse('mousePressed', start, 1);
+      same(c.cellEditor.overlay === input, true, 'number editor stays open on range press');
+      same(input.value, String(c.inspector.model.level), 'range press replaces stale draft');
+      const end = point('range', 0.25);
+      await mouse('mouseMoved', end, 1);
+      same(input.value, String(c.inspector.model.level), 'number follows range drag immediately');
+      await mouse('mouseReleased', end);
+      same(c.cellEditor.overlay === input, true, 'number editor stays open after range drag');
+      same(input.value, String(c.inspector.model.level), 'number remains synchronized');
     });
   await check('flat lists reclaim chevron space and trees keep sibling alignment', async (a) => {
     const w = a.widget;
@@ -440,6 +583,94 @@ export async function runViewContract(create) {
     same(events.length, 2, 'one keyboard event');
     same(events[1].source, 'keyboard', 'keyboard source');
     stop();
+  });
+  await check('Shift drag selects a visible range without reordering', async (a) => {
+    await wait();
+    const c = a.widget.controller;
+    const box = c.canvas.getBoundingClientRect();
+    const x = box.left + 125;
+    const y = box.top + c.viewport.headerHeight + c.rowModel.rowHeight / 2;
+    const endY = y + c.rowModel.rowHeight * 2;
+    const order = a.widget.getRowOrder();
+    await window.testMouse({ type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await window.testMouse({ type: 'mouseMoved', x, y: endY, button: 'left', buttons: 1 });
+    same(a.widget.getSelection(), [], 'plain drag does not select a range');
+    await window.testMouse({ type: 'mouseReleased', x, y: endY, button: 'left', clickCount: 1 });
+    a.widget.clearSelection();
+    await window.testMouse({ type: 'mousePressed', x, y, button: 'left', clickCount: 1, modifiers: 8 });
+    await window.testMouse({ type: 'mouseMoved', x, y: endY, button: 'left', buttons: 1, modifiers: 8 });
+    same(a.widget.getSelection(), ['a', 'b', 'c'], 'all crossed rows selected');
+    await window.testMouse({ type: 'mouseReleased', x, y: endY, button: 'left', clickCount: 1, modifiers: 8 });
+    same(a.widget.getSelection(), ['a', 'b', 'c'], 'release keeps selection');
+    same(a.widget.getRowOrder(), order, 'row order untouched');
+  });
+  await check('single-select mode allows direct data dragging but never keeps a range', async (a) => {
+    a.configure({ multiSelect: false, rowDrag: (node) => ({ id: node.id }) });
+    await wait();
+    const c = a.widget.controller;
+    a.widget.setSelection(['a', 'b']);
+    same(a.widget.getSelection(), ['b'], 'programmatic selection is limited to one row');
+    const box = c.canvas.getBoundingClientRect();
+    const x = box.left + 125;
+    const y = box.top + c.viewport.headerHeight + c.rowModel.rowHeight / 2;
+    const events = [];
+    c.on('rowdragstart', (event) => events.push(event.detail));
+    await window.testMouse({ type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await window.testMouse({ type: 'mouseMoved', x: x + 30, y: y + c.rowModel.rowHeight * 2, button: 'left', buttons: 1 });
+    same(a.widget.getSelection(), ['a'], 'drag selects only its source row');
+    same(events[0].nodeIds, ['a'], 'drag exports one row');
+    await window.testMouse({ type: 'mouseReleased', x: x + 30, y: y + c.rowModel.rowHeight * 2, button: 'left', clickCount: 1 });
+  });
+  await check('plain drag exports an unselected row without selecting a range', async (a) => {
+    a.configure({ rowDrag: (node) => ({ id: node.id }) });
+    await wait();
+    const c = a.widget.controller;
+    const box = c.canvas.getBoundingClientRect();
+    const x = box.left + 125;
+    const y = box.top + c.viewport.headerHeight + c.rowModel.rowHeight / 2;
+    const endY = y + c.rowModel.rowHeight * 2;
+    const events = [];
+    c.on('rowdragstart', (event) => events.push(event.detail));
+    c.setSelection(['b', 'c']);
+    await window.testMouse({ type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await window.testMouse({ type: 'mouseMoved', x, y: endY, button: 'left', buttons: 1 });
+    same(a.widget.getSelection(), ['a'], 'source row replaces the old selection');
+    same(events[0].nodeIds, ['a'], 'plain drag exports its source');
+    await window.testMouse({ type: 'mouseReleased', x, y: endY, button: 'left', clickCount: 1 });
+  });
+  await check('Shift drag selects rows while external row dragging remains available', async (a) => {
+    a.configure({ rowDrag: (node) => ({ id: node.id }) });
+    await wait();
+    const c = a.widget.controller;
+    const box = c.canvas.getBoundingClientRect();
+    const x = box.left + 125;
+    const y = box.top + c.viewport.headerHeight + c.rowModel.rowHeight / 2;
+    const endY = y + c.rowModel.rowHeight * 2;
+    const events = [];
+    const stop = a.subscribe('rowdrag', (event) => events.push(event));
+    await window.testMouse({ type: 'mousePressed', x, y, button: 'left', clickCount: 1, modifiers: 8 });
+    await window.testMouse({ type: 'mouseMoved', x, y: endY, button: 'left', buttons: 1, modifiers: 8 });
+    await window.testMouse({ type: 'mouseReleased', x, y: endY, button: 'left', clickCount: 1, modifiers: 8 });
+    same(a.widget.getSelection(), ['a', 'b', 'c'], 'Shift drag selects range');
+    same(events.length, 0, 'Shift drag does not start external drag');
+    stop();
+  });
+  await check('Ctrl drag exports a selected draggable row without selecting a range', async (a) => {
+    a.configure({ rowDrag: (node) => ({ id: node.id }) });
+    await wait();
+    const c = a.widget.controller;
+    c.setSelection(['a']);
+    const box = c.canvas.getBoundingClientRect();
+    const x = box.left + 125;
+    const y = box.top + c.viewport.headerHeight + c.rowModel.rowHeight / 2;
+    const endY = y + c.rowModel.rowHeight * 2;
+    const events = [];
+    c.on('rowdragstart', (event) => events.push(event.detail));
+    await window.testMouse({ type: 'mousePressed', x, y, button: 'left', clickCount: 1, modifiers: 2 });
+    await window.testMouse({ type: 'mouseMoved', x, y: endY, button: 'left', buttons: 1, modifiers: 2 });
+    await window.testMouse({ type: 'mouseReleased', x, y: endY, button: 'left', clickCount: 1, modifiers: 2 });
+    same(a.widget.getSelection(), ['a'], 'Ctrl drag keeps the selected row');
+    same(events[0].nodeIds, ['a'], 'Ctrl drag exports the selected row');
   });
   await check('the reorder gutter offsets hierarchy guides', async (a) => {
     a.configure({
@@ -750,9 +981,16 @@ export async function runViewContract(create) {
     });
     await wait();
     const c = a.widget.controller;
+    const actionCanvas = a.root.querySelector('[data-node-id="a"][data-action="live"] canvas');
+    await c.iconRegistry.prepare({
+      icons: ['star', 'item'],
+      size: 16,
+      color: c.themeManager.get().colors.textMuted,
+      pixelRatio: window.devicePixelRatio
+    });
+    await wait();
     const full = c.actionOverlay.fullUpdates;
     const incremental = c.actionOverlay.incrementalUpdates;
-    const actionCanvas = a.root.querySelector('[data-node-id="a"][data-action="live"] canvas');
     const drawKey = actionCanvas._vtcDrawKey;
     evaluatedRows.length = 0;
     const focused = a.root.querySelector('[data-node-id="b"][data-action="live"]');
@@ -1130,6 +1368,60 @@ export async function runViewContract(create) {
     same(getComputedStyle(input).color, 'rgb(232, 237, 244)', 'dark editor text');
     c.closeEditor();
   });
+  for (const presentation of ['pane', 'table'])
+    await check(`filled editable values and read-only values are distinct (${presentation})`, async (a) => {
+      a.configure({ mode: 'inspector', presentation, flatRoot: true, editable: true });
+      a.widget.setModel(
+        { altitude: 1250.25, acceleration: -9.80665 },
+        { altitude: { unit: 'm' }, acceleration: { unit: 'm/s²', readonly: true } }
+      );
+      await wait();
+      const c = a.widget.controller;
+      c.render();
+      const canvas = c.canvas;
+      const canvasBox = canvas.getBoundingClientRect();
+      const context = canvas.getContext('2d');
+      const column = c.columnModel.columns.find((item) =>
+        item.kind === (presentation === 'pane' ? 'inspectorPane' : 'inspectorValue')
+      );
+      const dpr = canvas.width / c.viewport.viewportWidth;
+      const valuePoint = (name) => {
+        const row = c.rowModel.getRowById(`model:${name}`);
+        const cell = c.getCellClientRect({ area: 'row', part: 'editor', row, column });
+        const editorLeft = presentation === 'pane'
+          ? c.getInspectorPaneLayout(cell.width, row, 'number').editorLeft
+          : 0;
+        return {
+          x: cell.x - canvasBox.left + editorLeft + 40,
+          y: cell.y - canvasBox.top + 5,
+          row
+        };
+      };
+      const hasFrame = ({ x, y }) => {
+        const top = context.getImageData(Math.floor(x * dpr), Math.floor(y * dpr), 1, 1).data;
+        const above = context.getImageData(Math.floor(x * dpr), Math.floor((y - 2) * dpr), 1, 1).data;
+        return Array.from(top).some((channel, index) => channel !== above[index]);
+      };
+      const altitude = valuePoint('altitude');
+      const acceleration = valuePoint('acceleration');
+      same(hasFrame(altitude), true, 'filled editable value has a frame');
+      same(hasFrame(acceleration), false, 'read-only value has no frame');
+      const hover = (point) => canvas.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true,
+        clientX: canvasBox.left + point.x,
+        clientY: canvasBox.top + point.y + 8
+      }));
+      hover(altitude);
+      same(canvas.style.cursor, 'text', 'editable cursor');
+      hover(acceleration);
+      same(canvas.style.cursor, '', 'read-only cursor');
+      const hit = c.hitTest(acceleration.x, acceleration.y + 8);
+      same(c.cellEditor.handlePointerDown({}, hit), false, 'read-only editor does not open');
+      a.configure({ editable: false });
+      await wait();
+      c.render();
+      same(hasFrame(altitude), false, 'global read-only mode removes the frame');
+    });
   await check('same reference data and model refresh explicitly', async (a) => {
     const nodes = [
       {
