@@ -80,6 +80,12 @@ h1 em { color: var(--cyan); font-style: normal; }
 .icon-samples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-height: 228px; padding: 18px 24px; border-top: 1px solid var(--border); }
 .icon-samples span { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 12px; }
 .icon-samples i { flex: none; width: 24px; height: 24px; background: var(--cyan); mask: var(--icon) center / contain no-repeat; -webkit-mask: var(--icon) center / contain no-repeat; }
+.icon-samples [data-icon='radar'] { --icon: url('../resources/icons/radar.svg'); }
+.icon-samples [data-icon='aircraft'] { --icon: url('../resources/icons/aircraft.svg'); }
+.icon-samples [data-icon='folder'] { --icon: url('../resources/icons/folder.svg'); }
+.icon-samples [data-icon='compass'] { --icon: url('../resources/icons/compass.svg'); }
+.icon-samples [data-icon='sensor'] { --icon: url('../resources/icons/sensor.svg'); }
+.icon-samples [data-icon='data-bus'] { --icon: url('../resources/icons/data-bus.svg'); }
 .icon-catalog-link { display: flex; justify-content: space-between; margin: 0 24px 18px; color: var(--cyan); font-size: 12px; font-weight: 700; }
 .icon-catalog-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .showcase-transfer { grid-column: 1 / -1; }
