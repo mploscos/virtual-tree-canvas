@@ -169,6 +169,11 @@ export class CellEditorManager {
     if (data.editorType === 'select') {
       element.addEventListener('change', commit);
     }
+    if (data.editorType === 'color') {
+      element.addEventListener('input', () => {
+        this.controller.updateInspectorValue(node.id, element.value, data.editorType);
+      });
+    }
     element.addEventListener('blur', commit);
     ensureOverlayHost(this.host);
     this.host.append(element);

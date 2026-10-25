@@ -53,6 +53,7 @@ export async function runBrowser(root, entry = '/test/browser/view.html') {
       });
     }
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+    await send('Target.activateTarget', { targetId });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);
     await send('Page.enable', {}, sessionId);

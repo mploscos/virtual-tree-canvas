@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 — 2026-10-25
+
+### Fixed
+
+- Inspector color edits update the model and emit value changes as the native color picker moves, without closing the editor or emitting a duplicate change on blur.
+
 ## 0.8.0 — 2026-10-24
 
 ### Added
