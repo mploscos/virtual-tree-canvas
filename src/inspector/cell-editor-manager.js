@@ -3,12 +3,18 @@ import { numericLayout } from './numeric-layout.js';
 let selectMenuId = 0;
 
 export class CellEditorManager {
+  /** @type {null | (() => void)} */
+  #commitOverlay = null;
+  #tabNodeId = null;
+  #canvasAriaLabel = 'Tree table';
+
   constructor({ controller, host = null }) {
     if (!controller) throw new TypeError('CellEditorManager requires a TreeViewController');
     if (!controller.canvas)
       throw new Error('CellEditorManager requires an initialized TreeViewController canvas');
     this.controller = controller;
     this.canvas = controller.canvas;
+    this.#canvasAriaLabel = this.canvas.getAttribute('aria-label') ?? 'Tree table';
     this.view = this.canvas.ownerDocument.defaultView;
     this.host = host ?? controller.canvas.parentElement ?? document.body;
     this.editable = true;
@@ -23,11 +29,23 @@ export class CellEditorManager {
     this.stopTheme = controller.on('themechange', () => this.#syncOverlayTheme());
     this.onMouseMove = this.#onMouseMove.bind(this);
     this.onMouseUp = this.#onMouseUp.bind(this);
+    this.onCanvasBlur = () => {
+      if (this.overlay) return;
+      this.#tabNodeId = null;
+      this.canvas.setAttribute('aria-label', this.#canvasAriaLabel);
+    };
+    this.canvas.addEventListener('blur', this.onCanvasBlur);
     this.onOutsidePointerDown = (event) => {
-      if (!this.overlay?.classList.contains('vtc-editor-select')) return;
+      if (!this.overlay || this.overlayKind !== 'value') return;
       const path = event.composedPath?.();
-      if (!(path ? path.includes(this.overlay) : this.overlay.contains(event.target)))
-        this.#removeOverlay();
+      if (path ? path.includes(this.overlay) : this.overlay.contains(event.target)) return;
+      if (this.overlayNode?.data?.editorType === 'range' && path?.includes(this.canvas)) {
+        const rect = this.canvas.getBoundingClientRect();
+        const hit = this.controller.hitTest(event.clientX - rect.left, event.clientY - rect.top);
+        if (hit?.row?.nodeId === this.overlayNode.id && hit.part === 'range') return;
+      }
+      if (this.overlay.classList.contains('vtc-editor-select')) this.#removeOverlay();
+      else this.#commitOverlay?.();
     };
   }
 
@@ -40,6 +58,7 @@ export class CellEditorManager {
     this.stopFilter();
     this.stopTheme();
     this.#removeOverlay();
+    this.canvas.removeEventListener('blur', this.onCanvasBlur);
     this.view.removeEventListener('mousemove', this.onMouseMove);
     this.view.removeEventListener('mouseup', this.onMouseUp);
   }
@@ -49,6 +68,11 @@ export class CellEditorManager {
     this.rangeDrag = null;
     this.view.removeEventListener('mousemove', this.onMouseMove);
     this.view.removeEventListener('mouseup', this.onMouseUp);
+  }
+
+  commitPending() {
+    this.#commitOverlay?.();
+    this.close();
   }
 
   /**
@@ -102,6 +126,7 @@ export class CellEditorManager {
     if (data.readonly) return false;
     if (data.editorType === 'checkbox') {
       this.controller.updateInspectorValue(node.id, !data.value, 'checkbox');
+      this.#focusCheckbox(node.id);
       return true;
     }
     if (data.editorType === 'range') {
@@ -125,8 +150,73 @@ export class CellEditorManager {
     return true;
   }
 
-  #showOverlay(node, hit) {
+  handleCanvasKey(event) {
+    if (!this.editable || !this.controller.inspector) return false;
+    if (event.key === 'Tab')
+      return this.#moveByTab(this.#tabNodeId ?? this.controller.focusedId,
+        event.shiftKey ? -1 : 1);
+    if ((event.key === ' ' || event.key === 'Enter') && this.#tabNodeId === this.controller.focusedId) {
+      const node = this.controller.model.index.getNode(this.#tabNodeId);
+      if (node?.data?.editorType !== 'checkbox' || node.data.readonly || node.data.disabled)
+        return false;
+      this.controller.updateInspectorValue(node.id, !node.data.value, 'checkbox');
+      this.#focusCheckbox(node.id);
+      return true;
+    }
+    return false;
+  }
+
+  #moveByTab(currentId, direction) {
+    const rows = this.controller.rowModel.rows;
+    const currentIndex = rows.findIndex((row) => row.nodeId === currentId);
+    const start = currentIndex < 0 ? (direction > 0 ? -1 : rows.length) : currentIndex;
+    let targetId = null;
+    for (let i = start + direction; i >= 0 && i < rows.length; i += direction) {
+      const data = this.controller.model.nodes[rows[i].nodeIndex]?.data;
+      if (!data?.inspector || data.readonly || data.disabled ||
+          !['text', 'number', 'range', 'select', 'checkbox', 'color'].includes(data.editorType))
+        continue;
+      targetId = rows[i].nodeId;
+      break;
+    }
+    if (!targetId) return false;
+    this.#commitOverlay?.();
     this.#removeOverlay();
+    const target = this.controller.model.index.getNode(targetId);
+    if (target?.data?.editorType === 'checkbox') return this.#focusCheckbox(targetId);
+    if (!this.controller.focusNode(targetId, { select: false })) return false;
+    const row = this.controller.rowModel.getRowById(targetId);
+    const node = this.controller.model.index.getNode(targetId);
+    const column = this.controller.columnModel.columns.find((item) =>
+      item.kind === (this.controller.inspector.presentation === 'pane'
+        ? 'inspectorPane' : 'inspectorValue'));
+    if (!row || !node || !column) return false;
+    this.#showOverlay(node, {
+      area: 'row',
+      part: node.data.editorType === 'range' ? 'number' : 'editor',
+      row,
+      column
+    });
+    return true;
+  }
+
+  #focusCheckbox(nodeId) {
+    const node = this.controller.model.index.getNode(nodeId);
+    if (!node || node.data?.editorType !== 'checkbox') return false;
+    this.#removeOverlay();
+    if (!this.controller.focusNode(nodeId, { select: false })) return false;
+    this.#tabNodeId = nodeId;
+    this.canvas.setAttribute('aria-label',
+      `${node.label}, checkbox, ${node.data.value ? 'checked' : 'unchecked'}`);
+    this.canvas.focus({ preventScroll: true });
+    return true;
+  }
+
+  #showOverlay(node, hit) {
+    this.#commitOverlay?.();
+    this.#removeOverlay();
+    this.#tabNodeId = null;
+    this.canvas.setAttribute('aria-label', this.#canvasAriaLabel);
     const data = node.data;
     const rect = this.#clampRectToHost(this.#overlayRect(hit), 4);
     const hostRect = this.host.getBoundingClientRect();
@@ -170,6 +260,8 @@ export class CellEditorManager {
     element.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') commit();
       else if (event.key === 'Escape') this.#removeOverlay();
+      else if (event.key === 'Tab' && this.#moveByTab(node.id, event.shiftKey ? -1 : 1))
+        event.preventDefault();
     });
     if (data.editorType === 'color') {
       element.addEventListener('input', () => {
@@ -182,6 +274,9 @@ export class CellEditorManager {
     this.overlay = element;
     this.overlayKind = 'value';
     this.overlayNode = node;
+    this.#commitOverlay = commit;
+    if (data.editorType !== 'color')
+      this.canvas.ownerDocument.addEventListener('pointerdown', this.onOutsidePointerDown, true);
     element.focus({
       preventScroll: true
     });
@@ -250,6 +345,7 @@ export class CellEditorManager {
     control.setAttribute('aria-controls', listId);
     let search = null;
     if (entries.length > 8) {
+      control.tabIndex = -1;
       search = doc.createElement('input');
       search.type = 'search';
       search.placeholder = 'Filter options';
@@ -377,7 +473,7 @@ export class CellEditorManager {
         event.preventDefault();
         commit(active);
       } else if (event.key === 'Tab') {
-        this.#removeOverlay();
+        if (this.#moveByTab(node.id, event.shiftKey ? -1 : 1)) event.preventDefault();
       }
     });
     control.addEventListener('pointerdown', (event) => {
@@ -573,6 +669,7 @@ export class CellEditorManager {
     this.overlay = null;
     this.overlayKind = null;
     this.overlayNode = null;
+    this.#commitOverlay = null;
     overlay?.remove();
   }
 

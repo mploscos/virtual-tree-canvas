@@ -18,6 +18,7 @@ export declare class CellEditorManager {
     stopTheme: any;
     onMouseMove: (event: any) => void;
     onMouseUp: () => void;
+    onCanvasBlur: () => void;
     onOutsidePointerDown: (event: any) => void;
     constructor({ controller, host }: {
         controller: any;
@@ -26,6 +27,7 @@ export declare class CellEditorManager {
     setEditable(enabled: any): void;
     destroy(): void;
     close(): void;
+    commitPending(): void;
     /**
      * Keep an in-progress edit while values refresh; cancel if its editor changes.
      */
@@ -33,4 +35,5 @@ export declare class CellEditorManager {
     handlePointerDown(event: any, hit: any): boolean;
     handleClick(event: any, hit: any): any;
     handleHeaderClick(_event: any, hit: any): boolean;
+    handleCanvasKey(event: any): boolean;
 }

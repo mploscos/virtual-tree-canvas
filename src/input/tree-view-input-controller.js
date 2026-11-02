@@ -51,7 +51,7 @@ export class TreeViewInputController {
   }
 
   #onWheel = (event) => {
-    this.cellEditor?.close?.();
+    this.cellEditor?.commitPending?.();
     const viewport = this.controller.viewport;
     const { scrollX, scrollY } = viewport;
     const deltaX = event.shiftKey ? event.deltaY : event.deltaX;
@@ -256,6 +256,10 @@ export class TreeViewInputController {
   }
 
   #onKeyDown = (event) => {
+    if (this.cellEditor?.handleCanvasKey(event)) {
+      event.preventDefault();
+      return;
+    }
     if (this.controller.handleKey(event)) {
       event.preventDefault();
     }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.3 — 2026-11-02
+
+### Added
+
+- Tab and Shift+Tab move between editable inspector fields, including checkboxes and rows outside the visible area.
+
+### Fixed
+
+- Text and number edits commit when clicking another field, clicking outside a Shadow DOM host, or scrolling the tree.
+- Escape still cancels an unfinished edit.
+
 ## 0.8.2 — 2026-11-02
 
 ### Added

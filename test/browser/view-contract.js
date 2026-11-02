@@ -187,6 +187,143 @@ export async function runViewContract(create) {
     }
   });
 
+  await check('text edits commit when clicking another field or leaving a Shadow DOM host', async (a) => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const shadow = mount.attachShadow({ mode: 'open' });
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '500px', height: '220px' });
+    shadow.append(host);
+    const outside = document.createElement('button');
+    Object.assign(outside.style, { position: 'fixed', left: '5px', top: '5px', zIndex: '9999' });
+    outside.textContent = 'Outside';
+    document.body.append(outside);
+    const widget = new a.widget.constructor(host, {
+      mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true
+    });
+    try {
+      widget.setModel({ first: 'old', second: 'two' });
+      await wait();
+      const c = widget.controller;
+      const column = c.columnModel.columns.find((item) => item.kind === 'inspectorPane');
+      const hit = (id) => ({ area: 'row', part: 'editor',
+        row: c.rowModel.getRowById(`model:${id}`), column });
+      c.cellEditor.handlePointerDown({}, hit('first'));
+      c.cellEditor.overlay.value = 'saved';
+      const secondRect = c.getCellClientRect(hit('second'));
+      const layout = c.getInspectorPaneLayout(secondRect.width, hit('second').row, 'text');
+      const point = { x: secondRect.x + layout.editorLeft + 20,
+        y: secondRect.y + secondRect.height / 2, button: 'left', clickCount: 1 };
+      await window.testMouse({ type: 'mousePressed', ...point });
+      same(c.inspector.model.first, 'saved', 'first input commits on next press');
+      same(c.cellEditor.overlayNode?.id, 'model:second', 'next input opens on one press');
+      await window.testMouse({ type: 'mouseReleased', ...point });
+      c.cellEditor.overlay.value = 'changed';
+      const box = outside.getBoundingClientRect();
+      const leave = { x: box.left + box.width / 2, y: box.top + box.height / 2,
+        button: 'left', clickCount: 1 };
+      await window.testMouse({ type: 'mousePressed', ...leave });
+      same(c.inspector.model.second, 'changed', 'outside press commits through shadow boundary');
+      await window.testMouse({ type: 'mouseReleased', ...leave });
+      same(c.cellEditor.overlay, null, 'outside press closes editor');
+      c.cellEditor.handlePointerDown({}, hit('first'));
+      c.cellEditor.overlay.value = 'wheel';
+      c.canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 40, bubbles: true,
+        cancelable: true }));
+      same(c.inspector.model.first, 'wheel', 'wheel navigation keeps typed value');
+      c.cellEditor.handlePointerDown({}, hit('first'));
+      c.cellEditor.overlay.value = 'tabbed';
+      c.cellEditor.overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab',
+        bubbles: true, cancelable: true }));
+      same(c.inspector.model.first, 'tabbed', 'Tab commits inside Shadow DOM');
+      same(c.cellEditor.overlayNode?.id, 'model:second', 'Tab opens the next shadow field');
+    } finally {
+      widget.destroy();
+      mount.remove();
+      outside.remove();
+    }
+  });
+
+  for (const presentation of ['pane', 'table'])
+    await check(`Tab visits editable inspector fields (${presentation})`, async (a) => {
+      a.configure({ mode: 'inspector', presentation, flatRoot: true, editable: true });
+      a.widget.setModel({ first: 'old', readonly: 'skip', mode: 'one',
+        enabled: false, disabled: 'skip', count: 3 }, {
+        readonly: { readonly: true },
+        mode: { options: { One: 'one', Two: 'two' } },
+        disabled: { disabled: true }
+      });
+      await wait();
+      const c = a.widget.controller;
+      const column = c.columnModel.columns.find((item) =>
+        item.kind === (presentation === 'pane' ? 'inspectorPane' : 'inspectorValue'));
+      c.cellEditor.handlePointerDown({}, { area: 'row', part: 'editor',
+        row: c.rowModel.getRowById('model:first'), column });
+      const tab = (element, shiftKey = false) => {
+        const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey,
+          bubbles: true, cancelable: true });
+        element.dispatchEvent(event);
+        same(event.defaultPrevented, true, 'Tab stays inside editable fields');
+      };
+      c.cellEditor.overlay.value = 'edited';
+      tab(c.cellEditor.overlay);
+      same(c.inspector.model.first, 'edited', 'Tab commits draft');
+      same(c.cellEditor.overlayNode?.id, 'model:mode', 'readonly row is skipped');
+      tab(c.cellEditor.overlay);
+      same(c.cellEditor.overlay, null, 'checkbox uses canvas focus');
+      same(c.focusedId, 'model:enabled', 'Tab reaches checkbox');
+      same(document.activeElement, c.canvas, 'canvas receives checkbox focus');
+      c.canvas.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true,
+        cancelable: true }));
+      same(c.inspector.model.enabled, true, 'Space toggles checkbox');
+      tab(c.canvas);
+      same(c.cellEditor.overlayNode?.id, 'model:count', 'disabled row is skipped');
+      tab(c.cellEditor.overlay, true);
+      same(c.focusedId, 'model:enabled', 'Shift Tab moves back to checkbox');
+      tab(c.canvas, true);
+      same(c.cellEditor.overlayNode?.id, 'model:mode', 'Shift Tab reaches select');
+      tab(c.cellEditor.overlay, true);
+      same(c.cellEditor.overlayNode?.id, 'model:first', 'Shift Tab reaches first input');
+      const boundary = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true,
+        bubbles: true, cancelable: true });
+      c.cellEditor.overlay.dispatchEvent(boundary);
+      same(boundary.defaultPrevented, false, 'Tab can leave at the first field');
+      c.cellEditor.overlay.value = 'discard';
+      c.cellEditor.overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape',
+        bubbles: true, cancelable: true }));
+      same(c.inspector.model.first, 'edited', 'Escape still cancels a draft');
+    });
+
+  await check('Tab scrolls to the next editable field beyond the viewport', async (a) => {
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true });
+    const model = { first: 'one' };
+    const meta = {};
+    for (let i = 0; i < 24; i++) {
+      model[`readonly${i}`] = `value${i}`;
+      meta[`readonly${i}`] = { readonly: true };
+    }
+    model.last = 'two';
+    a.widget.setModel(model, meta);
+    await wait();
+    const c = a.widget.controller;
+    c.canvas.focus({ preventScroll: true });
+    const tab = (element, shiftKey = false) => {
+      const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey,
+        bubbles: true, cancelable: true });
+      element.dispatchEvent(event);
+      same(event.defaultPrevented, true, 'Tab moves to an editable field');
+    };
+    tab(c.canvas);
+    same(c.cellEditor.overlayNode?.id, 'model:first', 'canvas Tab enters first field');
+    tab(c.cellEditor.overlay);
+    same(c.cellEditor.overlayNode?.id, 'model:last', 'Tab skips readonly fields');
+    same(c.viewport.scrollY > 0, true, 'last field scrolls into view');
+    same(document.activeElement, c.cellEditor.overlay, 'last field receives focus');
+    tab(c.cellEditor.overlay, true);
+    same(c.cellEditor.overlayNode?.id, 'model:first', 'Shift Tab returns to first field');
+    same(c.viewport.scrollY, 0, 'first field scrolls into view');
+  });
+
   await check('long inspector selects filter and commit with the keyboard', async (a) => {
     const options = Object.fromEntries(
       ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliet']
