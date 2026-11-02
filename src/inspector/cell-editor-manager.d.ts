@@ -5,7 +5,8 @@ export declare class CellEditorManager {
     view: any;
     host: any;
     editable: boolean;
-    overlay: HTMLInputElement | HTMLSelectElement | null;
+    /** @type {HTMLInputElement | HTMLDivElement | null} */
+    overlay: HTMLInputElement | HTMLDivElement | null;
     rangeDrag: {
         hit: any;
         data: any;
@@ -17,6 +18,7 @@ export declare class CellEditorManager {
     stopTheme: any;
     onMouseMove: (event: any) => void;
     onMouseUp: () => void;
+    onOutsidePointerDown: (event: any) => void;
     constructor({ controller, host }: {
         controller: any;
         host?: null | undefined;

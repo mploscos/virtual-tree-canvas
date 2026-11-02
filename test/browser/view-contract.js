@@ -75,15 +75,23 @@ export async function runViewContract(create) {
       const layout = presentation === 'pane' ? c.getInspectorPaneLayout(cell.width, row, 'select') : null;
       const expectedX = cell.x + (layout?.editorLeft ?? 0) + 10;
       const expectedWidth = Math.min(180, Math.max(24, (layout?.editorWidth ?? cell.width) - 20));
-      same(c.cellEditor.handlePointerDown({}, hit), false, 'select waits for click completion');
-      same(c.cellEditor.handleClick({}, hit), true, 'select opens');
+      same(c.cellEditor.handlePointerDown({}, hit), true, 'select opens on pointer down');
       const select = c.cellEditor.overlay;
       const actual = select.getBoundingClientRect();
-      same(select.tagName, 'SELECT', 'native select');
+      same(select.getAttribute('role'), 'combobox', 'custom select');
+      same(!!select.querySelector('[role="listbox"]'), true, 'option list is visible');
       same(Math.abs(actual.left - expectedX) < 1, true, 'left edge matches canvas');
       same(Math.abs(actual.top - (cell.y + 5)) < 1, true, 'top edge matches canvas');
       same(Math.abs(actual.width - expectedWidth) < 1, true, 'width matches canvas');
       same(Math.abs(actual.height - (cell.height - 10)) < 1, true, 'height matches canvas');
+      const menu = select.querySelector('.vtc-editor-menu').getBoundingClientRect();
+      same(Math.abs(menu.width - actual.width) < 1, true, 'menu matches select width');
+      same(Math.abs(menu.left - actual.left) < 2, true, 'menu aligns with select');
+      same(menu.top >= actual.bottom || menu.bottom <= actual.top, true,
+        'menu opens below or above select');
+      same([...select.querySelectorAll('[role="option"]')].every((option) =>
+        option.getBoundingClientRect().right <= menu.right + 1), true,
+      'options stay inside menu');
       same(getComputedStyle(select).backgroundImage === 'none', false, 'dropdown indicator remains visible');
       const darkArrow = select.style.backgroundImage;
       a.widget.setTheme('light');
@@ -105,13 +113,121 @@ export async function runViewContract(create) {
     for (const offset of [10, width - 10]) {
       const point = { x: x + offset, y: cell.y + cell.height / 2, button: 'left', clickCount: 1 };
       await window.testMouse({ type: 'mousePressed', ...point });
-      same(c.cellEditor.overlay, null, 'picker is not inserted before mouseup');
-      await window.testMouse({ type: 'mouseReleased', ...point });
       const select = c.cellEditor.overlay;
-      same(select?.tagName, 'SELECT', 'first click creates select');
-      same(select.matches(':open'), true, 'picker remains open');
+      same(select?.getAttribute('role'), 'combobox', 'picker opens on mouse down');
+      await window.testMouse({ type: 'mouseReleased', ...point });
+      same(c.cellEditor.overlay, select, 'picker remains open after click');
+      same(select.getAttribute('aria-expanded'), 'true', 'option list remains expanded');
       c.closeEditor();
     }
+  });
+
+  await check('inspector selects switch with one click while a menu is open', async (a) => {
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true });
+    a.widget.setModel({ first: 'one', second: 'two', third: 'one', fourth: 'two' }, {
+      first: { options: { One: 'one', Two: 'two' } },
+      second: { options: { One: 'one', Two: 'two' } },
+      third: { options: { One: 'one', Two: 'two' } },
+      fourth: { options: { One: 'one', Two: 'two' } }
+    });
+    await wait();
+    const c = a.widget.controller;
+    const box = c.canvas.getBoundingClientRect();
+    const point = (id) => {
+      const row = c.rowModel.getRowById(`model:${id}`);
+      const y = c.viewport.renderInsetY + c.viewport.headerHeight + row.y - c.viewport.scrollY + row.height / 2;
+      for (let x = 0; x < c.viewport.contentViewportWidth; x++) {
+        const hit = c.hitTest(x, y);
+        if (hit?.row === row && hit.part === 'editor')
+          return { x: box.left + x, y: box.top + y, button: 'left', clickCount: 1 };
+      }
+      throw new Error(`Missing ${id} select`);
+    };
+    const first = point('first');
+    const fourth = point('fourth');
+    await window.testMouse({ type: 'mousePressed', ...first });
+    await window.testMouse({ type: 'mouseReleased', ...first });
+    same(c.cellEditor.overlayNode?.id, 'model:first', 'first menu opens');
+    await window.testMouse({ type: 'mousePressed', ...fourth });
+    same(c.cellEditor.overlayNode?.id, 'model:fourth', 'next visible menu opens on first press');
+    await window.testMouse({ type: 'mouseReleased', ...fourth });
+    same(c.cellEditor.overlayNode?.id, 'model:fourth', 'next visible menu remains open');
+  });
+
+  await check('select options work inside a Shadow DOM host', async (a) => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const shadow = mount.attachShadow({ mode: 'open' });
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '500px', height: '220px' });
+    shadow.append(host);
+    const widget = new a.widget.constructor(host, {
+      mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true
+    });
+    try {
+      widget.setModel({ mode: '' }, {
+        mode: { options: { 'Not mapped': '', 'Constant 0': 0 } }
+      });
+      await wait();
+      const c = widget.controller;
+      const row = c.rowModel.getRowById('model:mode');
+      const column = c.columnModel.columns.find((item) => item.kind === 'inspectorPane');
+      c.cellEditor.handlePointerDown({}, { area: 'row', part: 'editor', row, column });
+      const option = c.cellEditor.overlay.querySelector('[role="option"][data-value="0"]');
+      const box = option.getBoundingClientRect();
+      const point = { x: box.left + box.width / 2, y: box.top + box.height / 2,
+        button: 'left', clickCount: 1 };
+      await window.testMouse({ type: 'mousePressed', ...point });
+      same(c.inspector.model.mode, 0, 'pointer press selects option across shadow boundary');
+      await window.testMouse({ type: 'mouseReleased', ...point });
+      same(c.cellEditor.overlay, null, 'selection closes the menu');
+    } finally {
+      widget.destroy();
+      mount.remove();
+    }
+  });
+
+  await check('long inspector selects filter and commit with the keyboard', async (a) => {
+    const options = Object.fromEntries(
+      ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliet']
+        .map((name) => [name, name.toLowerCase()])
+    );
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true });
+    a.widget.setModel({ mode: 'alpha' }, { mode: { options } });
+    await wait();
+    const c = a.widget.controller;
+    const row = c.rowModel.getRowById('model:mode');
+    const column = c.columnModel.columns.find((item) => item.kind === 'inspectorPane');
+    const hit = { area: 'row', part: 'editor', row, column };
+    c.cellEditor.handlePointerDown({}, hit);
+    const select = c.cellEditor.overlay;
+    const search = select.querySelector('input[type="search"]');
+    same(!!search, true, 'long list has a filter');
+    same(document.activeElement, search, 'filter is ready to type');
+    search.value = 'DEL';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    same([...select.querySelectorAll('[role="option"]')].map((item) => item.textContent),
+      ['Delta'], 'filter narrows options');
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    same(c.inspector.model.mode, 'delta', 'Enter commits filtered option');
+    same(c.cellEditor.overlay, null, 'menu closes after selection');
+    c.cellEditor.handlePointerDown({}, hit);
+    const reopened = c.cellEditor.overlay;
+    reopened.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    same(c.inspector.model.mode, 'delta', 'Escape leaves value unchanged');
+    same(c.cellEditor.overlay, null, 'Escape closes menu');
+    c.cellEditor.handlePointerDown({}, hit);
+    const option = [...c.cellEditor.overlay.querySelectorAll('[role="option"]')]
+      .find((item) => item.textContent === 'Bravo');
+    option.scrollIntoView({ block: 'nearest' });
+    const box = option.getBoundingClientRect();
+    const point = { x: box.left + box.width / 2, y: box.top + box.height / 2,
+      button: 'left', clickCount: 1 };
+    await window.testMouse({ type: 'mousePressed', ...point });
+    same(c.inspector.model.mode, 'bravo', 'pointer press commits before focus can change');
+    await window.testMouse({ type: 'mouseReleased', ...point });
+    same(c.inspector.model.mode, 'bravo', 'pointer selection commits');
+    same(c.cellEditor.overlay, null, 'pointer selection closes menu');
   });
 
   await check('inspector pane labels allow mouse range selection without opening editors', async (a) => {
@@ -232,7 +348,7 @@ export async function runViewContract(create) {
       await mouse('mousePressed', selectPoint, 1);
       await mouse('mouseReleased', selectPoint);
       const select = c.cellEditor.overlay;
-      same(select?.tagName, 'SELECT', 'select opens');
+      same(select?.getAttribute('role'), 'combobox', 'select opens');
       for (let i = 0; i < 3; i++) {
         w.setModel(
           {
@@ -244,12 +360,7 @@ export async function runViewContract(create) {
         await wait();
       }
       same(c.cellEditor.overlay === select, true, 'select survives repeated live updates');
-      select.value = '2';
-      select.dispatchEvent(
-        new Event('change', {
-          bubbles: true
-        })
-      );
+      select.querySelector('[role="option"][data-value="2"]').click();
       same(c.inspector.model.mode, 2, 'selection commits after refreshes');
       await mouse('mousePressed', point('level', 'number'), 1);
       await mouse('mouseReleased', point('level', 'number'));

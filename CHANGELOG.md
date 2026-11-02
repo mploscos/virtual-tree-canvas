@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.2 — 2026-11-02
+
+### Added
+
+- Inspector selects use a theme-matched option menu with filtering for long lists and keyboard navigation.
+
+### Fixed
+
+- Select options respond to the first mouse press inside Shadow DOM hosts, including the DEP Custom Views editor.
+- The option menu matches the select width, opens below or above it, and lets users switch to another visible field with one click.
+
 ## 0.8.1 — 2026-10-25
 
 ### Fixed
