@@ -1,6 +1,6 @@
 # Icon catalog
 
-The 95 bundled icons are available in `resources/icons/`. Open the
+The 123 bundled icons are available in `resources/icons/`. Open the
 [rendered visual catalog](https://htmlpreview.github.io/?https://github.com/mploscos/virtual-tree-canvas/blob/main/docs/icon-catalog.html)
 to compare them at different sizes on light and dark backgrounds. The
 [HTML source](./icon-catalog.html) is also available. `builtinIconNames` lists
@@ -27,6 +27,43 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
   `view.controller.iconRegistry.prepare()`.
 
 ## Available icons
+
+### Interface layouts
+
+| ID | Meaning |
+| --- | --- |
+| `layout-row` | Horizontal row |
+| `layout-column` | Vertical column |
+| `layout-grid` | Grid layout |
+| `layout-split` | Split panel |
+| `layout-bar` | Bar and content |
+| `layout-tabs` | Tab group |
+| `layout-overlay` | Layered layout |
+
+### Interface widgets and assets
+
+| ID | Meaning |
+| --- | --- |
+| `widget-label` | Text label |
+| `widget-card` | Information card |
+| `widget-button` | Button |
+| `widget-input` | Text input |
+| `widget-textarea` | Multiline text input |
+| `widget-number` | Number input |
+| `widget-checkbox` | Checkbox |
+| `widget-switch` | Switch |
+| `widget-radio` | Radio button |
+| `widget-select` | Dropdown selector |
+| `widget-slider` | Slider |
+| `widget-progress` | Progress bar |
+| `widget-list` | List |
+| `widget-table` | Data table |
+| `widget-tree` | Hierarchical tree |
+| `component` | Reusable component |
+| `library` | Component library |
+| `monitor` | Display monitor |
+| `image` | Image resource |
+| `symbol` | Vector symbol |
 
 ### People and organization
 
@@ -139,6 +176,7 @@ view.setData([{ id: 'operator-1', label: 'Operator', icon: 'person' }]);
 | `track` | Track |
 | `map` | Map |
 | `layers` | Map or data layers |
+| `group-exit` | Remove an item from a group |
 | `location` | Location |
 | `waypoint` | Route waypoint |
 | `route` | Route |

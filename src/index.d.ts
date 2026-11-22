@@ -93,6 +93,14 @@ export type MetaRule = {
   updated?: boolean;
   description?: string;
   color?: boolean;
+  /** Show the opacity control for a colour field. Enabled by default. */
+  alpha?: boolean;
+  /** Opt into a date input that edits a YYYY-MM-DD string. */
+  date?: boolean;
+  /** Earliest allowed date in YYYY-MM-DD format. */
+  minDate?: string;
+  /** Latest allowed date in YYYY-MM-DD format. */
+  maxDate?: string;
   options?: Record<string, string | number | boolean>;
   button?: string;
   label?: string;

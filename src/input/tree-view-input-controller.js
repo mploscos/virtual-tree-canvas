@@ -1,4 +1,5 @@
 export class TreeViewInputController {
+  #arrayRemoveClick = false;
 
   #wheelTargets;
 
@@ -95,6 +96,8 @@ export class TreeViewInputController {
   };
 
   #onClick = (event) => {
+    if (event.detail > 1 && this.#arrayRemoveClick) return;
+    this.#arrayRemoveClick = false;
     if (this.suppressSelectionClick) {
       this.suppressSelectionClick = false;
       event.preventDefault();
@@ -118,7 +121,10 @@ export class TreeViewInputController {
       this.controller.toggle(hit.row.nodeId);
       return;
     }
-    if (this.cellEditor?.handleClick(event, hit)) return;
+    if (this.cellEditor?.handleClick(event, hit)) {
+      this.#arrayRemoveClick = hit.part === 'arrayRemove';
+      return;
+    }
     this.canvas.focus({
       preventScroll: true
     });
@@ -132,6 +138,7 @@ export class TreeViewInputController {
   };
 
   #onDoubleClick = (event) => {
+    if (this.#arrayRemoveClick) return;
     const hit = this.#hitTest(event);
     if (hit?.area !== 'row') return;
     if ([
@@ -283,7 +290,8 @@ function cursorForHit(hit, controller) {
   const data = controller.model.nodes[hit.row.nodeIndex]?.data;
   const editable = controller.editable && !data?.readonly && !data?.disabled;
   if (hit.part === 'chevron') return 'pointer';
-  if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove' || hit.part === 'button')
+  if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove') return 'pointer';
+  if (hit.part === 'button')
     return controller.editable && !data?.disabled ? 'pointer' : '';
   if (hit.part === 'checkbox') return editable ? 'pointer' : '';
   if (hit.part === 'editor' || hit.part === 'number') return editable ? 'text' : '';

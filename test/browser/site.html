@@ -39,7 +39,7 @@
   const wait = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const check = (name, passed) => results.push({ name, passed });
   try {
-    await wait();
+    for (let frame = 0; frame < 30 && !window.marketSockets[0]?.subscription; frame++) await wait();
     const table = document.querySelector('#market-tree');
     const socket = window.marketSockets[0];
     check('market demo subscribes to public delayed feed', socket?.url === 'wss://crypto-ai-prices.fly.dev/ws' &&

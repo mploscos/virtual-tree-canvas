@@ -22,7 +22,10 @@ export class ModelInspectorBuilder {
     return nodes;
   }
 
-  #visit({ nodes, value, key, path, parentId, context, arrayIndex = null, arrayItemTitle = '' }) {
+  #visit({
+    nodes, value, key, path, parentId, context,
+    arrayIndex = null, arrayItemTitle = '', arrayRemovable = false
+  }) {
     const { rule, hasMeta } = resolveMetaForPath(context.meta, path);
     const valueType = valueTypeOf(value);
     const editorType = resolveEditorType(value, rule);
@@ -42,6 +45,7 @@ export class ModelInspectorBuilder {
         key,
         arrayIndex,
         arrayItemTitle,
+        arrayRemovable: arrayRemovable && !rule.readonly && !rule.disabled,
         value,
         valueText: formatInspectorValue(value, rule),
         valueType,
@@ -66,6 +70,7 @@ export class ModelInspectorBuilder {
           context,
           arrayIndex: index,
           arrayItemTitle: itemTitle ? String(itemTitle) : '',
+          arrayRemovable: !rule.readonly && !rule.disabled,
         });
       });
     } else if (value && typeof value === 'object') {

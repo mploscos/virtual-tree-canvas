@@ -300,14 +300,25 @@ test('table inspector hit testing identifies editable control parts', () => {
 });
 
 test('inspector can add and remove array items', () => {
-  const model = { tracks: [] };
+  const model = { tracks: [{ name: 'Alpha' }, { name: 'Bravo' }, { name: 'Charlie' }] };
   const controller = new TreeViewController();
   controller.setModel(model, { tracks: { itemType: 'object' } }, { presentation: 'pane' });
+  const changes = [];
+  controller.on('modelchange', ({ detail }) => changes.push(detail));
 
+  assert.equal(controller.removeInspectorArrayItem('model:tracks', 1), true);
+  assert.deepEqual(model.tracks, [{ name: 'Alpha' }, { name: 'Charlie' }]);
+  assert.equal(controller.model.index.getNode('model:tracks.1.name').data.value, 'Charlie');
+  assert.deepEqual(changes, [{
+    model, path: 'tracks', structural: true, action: 'array-remove', value: { name: 'Bravo' }
+  }]);
+  assert.equal(controller.removeInspectorArrayItem('model:tracks', -1), false);
+  assert.equal(controller.removeInspectorArrayItem('model:tracks', 2), false);
+  assert.equal(changes.length, 1);
   assert.equal(controller.addInspectorArrayItem('model:tracks'), true);
-  assert.deepEqual(model.tracks, [{}]);
+  assert.deepEqual(model.tracks, [{ name: 'Alpha' }, { name: 'Charlie' }, {}]);
   assert.equal(controller.removeInspectorArrayItem('model:tracks'), true);
-  assert.deepEqual(model.tracks, []);
+  assert.deepEqual(model.tracks, [{ name: 'Alpha' }, { name: 'Charlie' }]);
 });
 
 test('numeric units and precision are display metadata, including live updates', () => {

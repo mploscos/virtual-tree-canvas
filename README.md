@@ -317,7 +317,17 @@ tree.setModel(
 Choose `presentation: 'pane'` for a compact folder-and-controls view, or
 `presentation: 'table'` for Property / Value / Type / Description columns.
 Editors are inferred from data and metadata: checkbox, range, number, text,
-select, colour, button, object and array.
+select, colour, date, button, object and array.
+
+Set `{ color: true }` to open the inspector's colour picker with one click.
+It updates the model live and writes `#RRGGBB` for opaque colours or CSS
+`#RRGGBBAA` for colours with transparency. Set `alpha: false` on a colour
+field that only accepts opaque values.
+
+Set `{ date: true }` for a date field. The browser displays the editor using
+the local date format. The model stores a `YYYY-MM-DD` string or an empty
+string when cleared, with no time or time zone. Optional `minDate` and
+`maxDate` use the same format and constrain user edits.
 
 Array elements occupy one row each. Their index is shown quietly in the tree
 gutter; primitive values are edited on that row. Object elements expand to their
@@ -458,7 +468,7 @@ Open [the reorder demo](https://mploscos.github.io/virtual-tree-canvas/examples/
 
 ## Icon catalogue
 
-95 SVGs are included, with a
+123 SVGs are included, with a
 [rendered visual sheet](https://mploscos.github.io/virtual-tree-canvas/docs/icon-catalog.html), and a
 [reference of available icons](./docs/icon-catalog.md). `builtinIconNames`
 exposes available IDs.

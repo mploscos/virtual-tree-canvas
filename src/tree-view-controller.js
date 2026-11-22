@@ -1,5 +1,5 @@
 import { treeCellLayout } from './core/tree-cell-layout.js';
-import { inspectorPaneLayout } from './inspector/pane-layout.js';
+import { inspectorArrayButtonWidth, inspectorPaneLayout } from './inspector/pane-layout.js';
 import { RowActions } from './input/row-actions.js';
 import { validateTreeViewOptions } from './core/view-options.js';
 import { RowReorderInput } from './input/row-reorder-input.js';
@@ -659,12 +659,20 @@ export class TreeViewController {
     return true;
   }
 
-  removeInspectorArrayItem(nodeId) {
+  /**
+   * Remove an item from an inspector array. Omit the index to remove the last item.
+   * @param {string} nodeId Array node ID.
+   * @param {number} [index]
+   */
+  removeInspectorArrayItem(nodeId, index) {
     const node = this.model.index.getNode(nodeId);
     if (!node?.data?.inspector || node.data.valueType !== 'array' || !this.inspector) return false;
     const array = getAtPath(this.inspector.model, node.data.path);
-    if (!Array.isArray(array) || !array.length) return false;
-    const value = array.pop();
+    if (!Array.isArray(array)) return false;
+    const itemIndex = index === undefined ? array.length - 1 : index;
+    if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= array.length) return false;
+    this.closeEditor();
+    const [value] = array.splice(itemIndex, 1);
     this.#rebuildInspectorModel(node.data.path);
     this.events.emit('modelchange', {
       model: this.inspector.model,
@@ -1617,56 +1625,22 @@ export class TreeViewController {
     let part = 'cell';
     if (column.kind === 'inspectorPane') {
       const localX = x - column.x;
-      const node = this.model.nodes[row.nodeIndex];
+      const data = this.model.nodes[row.nodeIndex].data;
       const paneWidth = this.#visibleInspectorPaneWidth(column, row);
-      if (node?.data?.valueType === 'object') {
-        const treeX = row.depth * this.rowModel.indentWidth;
-        part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
-        return {
-          area: 'row',
-          part,
-          row,
-          column,
-          x,
-          y: rowY
-        };
-      }
-      if (node?.data?.valueType === 'array') {
-        if (localX >= paneWidth - 54 && localX <= paneWidth - 32) part = 'arrayAdd';
-        else if (localX >= paneWidth - 28 && localX <= paneWidth - 6) part = 'arrayRemove';
-        else {
-          const editorLeft = this.getInspectorPaneLayout(
-            paneWidth,
-            row,
-            node?.data?.editorType
-          ).editorLeft;
-          if (localX >= editorLeft) part = 'editor';
-          else {
-            const treeX = row.depth * this.rowModel.indentWidth;
-            part = localX >= treeX + 4 && localX <= treeX + 22 ? 'chevron' : 'label';
-          }
-        }
-        return {
-          area: 'row',
-          part,
-          row,
-          column,
-          x,
-          y: rowY
-        };
-      }
-      const layout = this.getInspectorPaneLayout(
-        paneWidth,
-        row,
-        node?.data?.editorType
-      );
-      if (localX >= layout.editorLeft)
-        part = this.#inspectorEditorPart(row, localX - layout.editorLeft, layout.editorWidth);
-      else {
-        const treeX = row.depth * this.rowModel.indentWidth;
-        if (localX >= treeX + 4 && localX <= treeX + 22) part = 'chevron';
-        else part = 'label';
-      }
+      const { arrayAddX, arrayRemoveX, editorLeft, editorWidth } =
+        this.getInspectorPaneLayout(paneWidth, row, data?.editorType);
+      const treeX = row.depth * this.rowModel.indentWidth;
+      if (arrayAddX !== null && localX >= arrayAddX && localX < arrayAddX + inspectorArrayButtonWidth)
+        part = 'arrayAdd';
+      else if (arrayRemoveX !== null && localX >= arrayRemoveX && localX < arrayRemoveX + inspectorArrayButtonWidth)
+        part = 'arrayRemove';
+      else if (row.hasChildren && localX >= treeX + 4 && localX <= treeX + 22)
+        part = 'chevron';
+      else if (data?.valueType === 'object' || localX < editorLeft)
+        part = 'label';
+      else if (data?.valueType === 'array')
+        part = 'editor';
+      else part = this.#inspectorEditorPart(row, localX - editorLeft, editorWidth);
     } else if (column.kind === 'tree') {
       const localX = x - column.x;
       const iconSize = this.themeManager.get().iconSize;
@@ -1726,13 +1700,16 @@ export class TreeViewController {
     return node ? leadingHiddenRowActionWidth(this.rowActions, node, state) : 0;
   }
 
+  /** @returns {ReturnType<typeof inspectorPaneLayout>} */
   getInspectorPaneLayout(width, row = null, editorType = '') {
     return inspectorPaneLayout(
       width,
       row?.depth ?? 0,
       this.rowModel.indentWidth,
       editorType,
-      this.#computeInspectorPaneLabelEnd(this.rowModel.getVisibleRange(this.viewport, 4))
+      this.#computeInspectorPaneLabelEnd(this.rowModel.getVisibleRange(this.viewport, 4)),
+      row ? this.model.nodes[row.nodeIndex].data : null,
+      this.editable
     );
   }
 
@@ -1804,7 +1781,7 @@ export class TreeViewController {
           : node.label ?? node.id;
         width =
           data.valueType === 'object'
-            ? Math.max(0, visibleWidth - labelX - 8)
+            ? Math.max(0, layout.contentWidth - labelX - 8)
             : Math.max(0, layout.editorLeft - labelX - 8);
       } else if (hit.part === 'arrayAdd' || hit.part === 'arrayRemove') {
         return null;

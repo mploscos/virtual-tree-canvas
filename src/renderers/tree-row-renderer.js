@@ -1,7 +1,7 @@
 import { drawCheckbox } from './checkbox.js';
 import { treeCellLayout } from '../core/tree-cell-layout.js';
 import { formatInspectorValue } from '../inspector/editor-resolver.js';
-import { inspectorPaneLayout } from '../inspector/pane-layout.js';
+import { inspectorArrayButtonWidth, inspectorPaneLayout } from '../inspector/pane-layout.js';
 import { numericLayout } from '../inspector/numeric-layout.js';
 import { IconRegistry } from '../core/icon-registry.js';
 import { leadingHiddenRowActionWidth } from '../core/row-action-layout.js';
@@ -429,16 +429,15 @@ export class TreeRowRenderer {
   }
 
   #drawInspectorPaneCell(ctx, { node, row, rect, theme, style, hovered, hoverPart, activePart }) {
-    const visibleRight =
-      this.scene.viewport.scrollX +
-      (this.scene.viewport.contentViewportWidth ?? this.scene.viewport.viewportWidth);
+    const { viewport } = this.scene;
+    const visibleRight = viewport.scrollX + (viewport.contentViewportWidth ?? viewport.viewportWidth);
     rect = {
       ...rect,
       width: Math.max(1, Math.min(rect.x + rect.width, visibleRight) - rect.x)
     };
     const data = node.data ?? {};
     const colors = theme.colors;
-    const indentX = rect.x + row.depth * theme.indentWidth;
+    const indentX = rect.x + row.depth * viewport.indentWidth;
     const cy = rect.y + rect.height / 2;
     let labelX = indentX + 28;
     if (!row.hasChildren && node.icon) {
@@ -468,68 +467,26 @@ export class TreeRowRenderer {
     }
     const label = Number.isInteger(data.arrayIndex) ? data.arrayItemTitle : node.label ?? node.id;
 
-    if (data.valueType === 'object') {
-      drawTruncatedText(
-        ctx,
-        label,
-        labelX,
-        cy,
-        Math.max(20, rect.x + rect.width - labelX - 8)
-      );
-      if (data.meta?.updated) this.#drawUpdatedMarker(ctx, row, theme);
-      ctx.globalAlpha = 1;
-      return;
-    }
-
     const layout = inspectorPaneLayout(
       rect.width,
       row.depth,
-      theme.indentWidth,
+      viewport.indentWidth,
       data.editorType,
-      this.scene.inspectorPaneLabelEnd
+      this.scene.inspectorPaneLabelEnd,
+      data,
+      this.scene.editable
     );
-    drawTruncatedText(
-      ctx,
-      label,
-      labelX,
-      cy,
-      Math.max(20, rect.x + layout.editorLeft - labelX - 8)
-    );
+    const labelEnd = data.valueType === 'object' ? layout.contentWidth : layout.editorLeft;
+    drawTruncatedText(ctx, label, labelX, cy, rect.x + labelEnd - labelX - 8);
 
     const editorX = rect.x + layout.editorLeft;
     const editorWidth = layout.editorWidth;
     if (data.valueType === 'array') {
       if (!Number.isInteger(data.arrayIndex)) {
         ctx.fillStyle = colors.textMuted;
-        drawTruncatedText(ctx, data.valueText, editorX, cy, Math.max(20, editorWidth - 58));
+        drawTruncatedText(ctx, data.valueText, editorX, cy, editorWidth);
       }
-      this.#drawSmallButton(
-        ctx,
-        rect.x + rect.width - 54,
-        rect.y + 5,
-        22,
-        rect.height - 10,
-        '+',
-        theme,
-        {
-          hovered: hovered && hoverPart === 'arrayAdd',
-          active: activePart === 'arrayAdd'
-        }
-      );
-      this.#drawSmallButton(
-        ctx,
-        rect.x + rect.width - 28,
-        rect.y + 5,
-        22,
-        rect.height - 10,
-        '-',
-        theme,
-        {
-          hovered: hovered && hoverPart === 'arrayRemove',
-          active: activePart === 'arrayRemove'
-        }
-      );
-    } else {
+    } else if (data.valueType !== 'object') {
       this.#drawInspectorValueCell(ctx, {
         node,
         rect: {
@@ -547,6 +504,15 @@ export class TreeRowRenderer {
     }
     if (data.meta?.updated) this.#drawUpdatedMarker(ctx, row, theme);
     ctx.globalAlpha = 1;
+    if (layout.arrayAddX !== null || layout.arrayRemoveX !== null) {
+      for (const [part, offset] of [['arrayAdd', layout.arrayAddX], ['arrayRemove', layout.arrayRemoveX]]) {
+        if (offset === null) continue;
+        this.#drawInspectorArrayButton(ctx, rect.x + offset, rect.y + 5, rect.height - 10, part, theme, {
+          hovered: hovered && hoverPart === part,
+          active: activePart === part
+        });
+      }
+    }
   }
 
   #drawInspectorValueCell(
@@ -604,8 +570,7 @@ export class TreeRowRenderer {
         activeNumber: activePart === 'number'
       });
     } else if (data.editorType === 'color') {
-      ctx.fillStyle = String(data.value || '#000000');
-      ctx.fillRect(x, y + 2, 28, height - 4);
+      drawColorSwatch(ctx, x, y + 2, 28, height - 4, data.value);
       ctx.strokeStyle = theme.colors.border;
       ctx.strokeRect(x + 0.5, y + 2.5, 28, height - 4);
       this.#drawMutedText(
@@ -636,7 +601,8 @@ export class TreeRowRenderer {
         Math.max(10, buttonWidth - 12)
       );
       ctx.textAlign = 'left';
-    } else if (data.editorType === 'select') {
+    } else if (data.editorType === 'select' || data.editorType === 'date') {
+      const date = data.editorType === 'date';
       const selectWidth = Math.min(width, 180);
       this.#drawControlSurface(ctx, x, y, selectWidth, height, theme, {
         hovered: hovered && hoverPart === 'editor',
@@ -645,7 +611,7 @@ export class TreeRowRenderer {
       });
       this.#drawMutedText(
         ctx,
-        data.valueText,
+        date && !data.value ? 'YYYY-MM-DD' : data.valueText,
         x + 8,
         rect.y + rect.height / 2,
         selectWidth - 30,
@@ -654,7 +620,11 @@ export class TreeRowRenderer {
         null,
         valueColor
       );
-      this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
+      if (date)
+        this.iconRegistry.draw(ctx, 'calendar', x + selectWidth - 21, y + (height - 14) / 2,
+          14, theme.colors.chevron);
+      else
+        this.#drawSelectChevron(ctx, x + selectWidth - 18, rect.y + rect.height / 2, theme, disabled);
     } else {
       const editableText = this.scene.editable && !readonly && !disabled &&
         (data.editorType === 'text' || data.editorType === 'number');
@@ -702,7 +672,7 @@ export class TreeRowRenderer {
   }
 
   #drawUpdatedMarker(ctx, row, theme) {
-    const x = Math.max(6, row.depth * theme.indentWidth - 8);
+    const x = Math.max(6, row.depth * this.scene.viewport.indentWidth - 8);
     const y = row.y + row.height / 2;
     ctx.fillStyle = theme.colors.focus;
     ctx.beginPath();
@@ -760,12 +730,21 @@ export class TreeRowRenderer {
     ctx.font = theme.font;
   }
 
-  #drawSmallButton(ctx, x, y, width, height, label, theme, state = {}) {
+  #drawInspectorArrayButton(ctx, x, y, height, part, theme, state) {
+    const width = inspectorArrayButtonWidth;
     this.#drawControlSurface(ctx, x, y, width, height, theme, state);
+    if (part === 'arrayRemove') {
+      const size = 14;
+      this.iconRegistry.draw(
+        ctx, 'trash', x + (width - size) / 2, y + (height - size) / 2, size, theme.colors.text
+      );
+      return;
+    }
     ctx.fillStyle = theme.colors.text;
+    ctx.font = theme.font;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    drawTruncatedText(ctx, label, x + width / 2, y + height / 2, width - 4);
+    ctx.fillText('+', x + width / 2, y + height / 2);
     ctx.textAlign = 'left';
   }
 
@@ -829,7 +808,7 @@ export class TreeRowRenderer {
     const colors = theme.colors;
     const layout = treeCellLayout(
       row.depth,
-      theme.indentWidth,
+      this.scene.viewport.indentWidth,
       this.scene.childrenByParent.size > 1,
       theme.iconSize
     );
@@ -987,7 +966,7 @@ export class TreeRowRenderer {
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let depth = 0; depth < row.depth; depth++) {
-      const guideX = treeColumn.x + depth * this.scene.theme.indentWidth + 10.5;
+      const guideX = treeColumn.x + depth * this.scene.viewport.indentWidth + 10.5;
       ctx.moveTo(guideX, row.y);
       ctx.lineTo(guideX, row.y + row.height);
     }
@@ -1028,6 +1007,21 @@ export class TreeRowRenderer {
     return width;
   }
 
+}
+
+function drawColorSwatch(ctx, x, y, width, height, color) {
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = '#c0c0c0';
+  const tile = 4;
+  for (let top = 0; top < height; top += tile) {
+    for (let left = top % (tile * 2); left < width; left += tile * 2) {
+      ctx.fillRect(x + left, y + top, Math.min(tile, width - left), Math.min(tile, height - top));
+    }
+  }
+  ctx.fillStyle = 'transparent';
+  ctx.fillStyle = color || 'transparent';
+  ctx.fillRect(x, y, width, height);
 }
 
 function resolveNodeStyle(theme, node, state = {}) {

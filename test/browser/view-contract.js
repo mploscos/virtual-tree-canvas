@@ -5,6 +5,17 @@ const same = (actual, expected, message) => {
     throw new Error(`${message}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
 };
 
+function inspectorEditorPoint(controller, id, presentation) {
+  const row = controller.rowModel.getRowById('model:' + id);
+  const column = controller.columnModel.columns.find((item) =>
+    item.kind === (presentation === 'pane' ? 'inspectorPane' : 'inspectorValue'));
+  const cell = controller.getCellClientRect({ area: 'row', part: 'editor', row, column });
+  const offset = presentation === 'pane'
+    ? controller.getInspectorPaneLayout(cell.width, row).editorLeft
+    : 0;
+  return { x: cell.x + offset + 20, y: cell.y + cell.height / 2, button: 'left', clickCount: 1 };
+}
+
 /**
  * The same user-visible contract runs against TreeView and the DEP adapter.
  */
@@ -29,37 +40,162 @@ export async function runViewContract(create) {
     }
   }
 
-  await check('array buttons never toggle expansion on a double click', async (a) => {
-    const model = { tags: ['radar'] };
-    a.configure({ mode: 'inspector', presentation: 'pane', model, meta: { tags: { itemType: 'string' } }, editable: true });
+  await check('pane array actions add items and remove only the row clicked', async (a) => {
+    const model = { tags: ['radar', 'obsolete', 'air'], tracks: [{ name: 'obsolete' }, { name: 'R1' }],
+      matrix: [[1], [2]], locked: ['fixed'] };
+    const meta = { tags: { itemType: 'string' }, 'matrix.*': { itemType: 'number' },
+      locked: { readonly: true } };
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true,
+      initialExpandDepth: Number.MAX_SAFE_INTEGER, model, meta, editable: true,
+      rowHeight: 20, showHeader: false, filter: false });
     await wait();
     const c = a.widget.controller;
     const canvas = c.canvas;
     const rect = canvas.getBoundingClientRect();
-    const point = (part) => {
-      const row = c.rowModel.getRowById('model:tags');
+    const point = (id, part) => {
+      const row = c.rowModel.getRowById(`model:${id}`);
       const y = c.viewport.renderInsetY + c.viewport.headerHeight + row.y - c.viewport.scrollY + row.height / 2;
+      same(c.hitTest(c.viewport.renderInsetX + 1, y)?.row?.nodeId, row.nodeId, `${id} is visible`);
       for (let x = 0; x < c.viewport.contentViewportWidth; x++) {
         const hit = c.hitTest(x, y);
         if (hit?.row?.nodeId === row.nodeId && hit.part === part)
           return { clientX: rect.left + x, clientY: rect.top + y };
       }
-      throw new Error(`Missing ${part} control`);
+      return null;
     };
-    const doubleClickButton = (part) => {
-      const p = point(part);
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, ...p }));
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2, ...p }));
-      canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2, ...p }));
+    const clickButton = (id, part, clicks = 1) => {
+      const p = point(id, part);
+      if (!p) throw new Error(`Missing ${part} control for ${id}`);
+      for (let detail = 1; detail <= clicks; detail++)
+        canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, detail, ...p }));
+      if (clicks === 2)
+        canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2, ...p }));
     };
-    same(c.rowModel.getRowById('model:tags').expanded, true, 'initially expanded');
-    doubleClickButton('arrayAdd');
-    same(model.tags.length, 3, 'two items added');
-    same(c.rowModel.getRowById('model:tags').expanded, true, 'add keeps expansion');
-    c.collapse('model:tags');
-    doubleClickButton('arrayRemove');
-    same(model.tags.length, 1, 'two items removed');
-    same(c.rowModel.getRowById('model:tags').expanded, false, 'remove keeps collapsed state');
+    same(point('tags', 'arrayRemove'), null, 'array header has no remove button');
+    same(point('locked', 'arrayAdd'), null, 'readonly array has no add button');
+    same(point('locked.0', 'arrayRemove'), null, 'readonly array item has no remove button');
+    clickButton('tags', 'arrayAdd', 2);
+    same(model.tags, ['radar', 'obsolete', 'air', '', ''], 'two items added');
+    const remove = point('tags.1', 'arrayRemove');
+    if (!remove) throw new Error('Missing remove button for middle item');
+    canvas.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...remove }));
+    same(c.cellEditor.overlay, null, 'pressing trash does not open the text editor');
+    clickButton('tags.1', 'arrayRemove', 2);
+    same(model.tags, ['radar', 'air', '', ''], 'double click removes only the middle item');
+    same(c.rowModel.getRowById('model:tags').expanded, true, 'array stays expanded');
+    clickButton('tracks.0', 'arrayRemove');
+    same(model.tracks, [{ name: 'R1' }], 'object items can be removed');
+    clickButton('matrix.0', 'arrayAdd');
+    same(model.matrix, [[1, 0], [2]], 'nested array has its own add button');
+    clickButton('matrix.0', 'arrayRemove');
+    same(model.matrix, [[2]], 'nested array row removes that array from its parent');
+  });
+
+  for (const presentation of ['pane', 'table']) {
+    await check('inspector opens a live colour picker in one click (' + presentation + ')', async (a) => {
+      const fill = presentation === 'pane' ? '#33669980' : 'rgba(51, 102, 153, 0.5)';
+      const model = { fill, opaque: '#fc6' };
+      const meta = { fill: { color: true }, opaque: { color: true, alpha: false } };
+      a.configure({ mode: 'inspector', presentation, flatRoot: true, editable: true, model, meta });
+      const edits = [];
+      a.subscribe('valuechange', ({ detail }) => edits.push([detail.path, detail.newValue]));
+      await wait();
+      const c = a.widget.controller;
+      const click = async (id) => {
+        const point = inspectorEditorPoint(c, id, presentation);
+        await window.testMouse({ type: 'mousePressed', ...point });
+        same(c.cellEditor.overlay?.getAttribute('role'), 'dialog', 'picker opens on press');
+        await window.testMouse({ type: 'mouseReleased', ...point });
+        return c.cellEditor.overlay;
+      };
+      let picker = await click('fill');
+      const hex = picker.querySelector('input[type=text]');
+      const field = hex.getBoundingClientRect();
+      const swatch = picker.querySelector('.vtc-color-swatch').getBoundingClientRect();
+      same(swatch.left > field.left && swatch.right < field.right &&
+        swatch.top > field.top && swatch.bottom < field.bottom, true,
+        'colour swatch fits fully inside the hex field');
+      const opacity = picker.querySelector('label:nth-of-type(2) input');
+      same(hex.value, '#33669980', 'existing CSS HEX alpha loads');
+      same(edits, [], 'opening unchanged colour does not publish');
+      opacity.value = '25';
+      opacity.dispatchEvent(new Event('input', { bubbles: true }));
+      same(model.fill, '#33669940', 'opacity applies to CSS HEX immediately');
+      same(c.cellEditor.overlay, picker, 'picker stays open during live edits');
+      opacity.value = '100';
+      opacity.dispatchEvent(new Event('input', { bubbles: true }));
+      same(model.fill, '#336699', 'opaque value keeps six digits');
+      hex.focus();
+      hex.value = '#bad!';
+      hex.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      same(model.fill, '#336699', 'invalid hex does not publish');
+      same(c.cellEditor.overlay, picker, 'invalid hex remains open for correction');
+      hex.value = '#ace8';
+      hex.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      same(model.fill, '#aaccee88', 'short CSS HEX expands on commit');
+      same(c.cellEditor.overlay, null, 'valid hex closes on Enter');
+      same(edits, [['fill', '#33669940'], ['fill', '#336699'], ['fill', '#aaccee88']],
+        'only actual changes publish');
+      picker = await click('opaque');
+      same(picker.querySelectorAll('input[type=range]').length, 1, 'opacity disabled for an opaque field');
+      const oldBackground = getComputedStyle(picker).backgroundColor;
+      a.widget.setTheme('light');
+      same(getComputedStyle(picker).backgroundColor === oldBackground, false, 'picker follows active theme');
+      picker.querySelector('[role=slider]').dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', bubbles: true
+      }));
+      same(c.cellEditor.overlay, null, 'Escape closes picker');
+      same(model.opaque, '#fc6', 'untouched short hex stays in model');
+      picker = await click('fill');
+      const colorPlane = picker.querySelector('[role=slider]');
+      const plane = colorPlane.getBoundingClientRect();
+      const start = { x: plane.left + plane.width * 0.8, y: plane.top + plane.height * 0.3 };
+      await window.testMouse({ type: 'mousePressed', ...start, button: 'left', clickCount: 1 });
+      same(model.fill === '#aaccee88', false, 'colour plane applies immediately on press');
+      const afterPress = model.fill;
+      const end = { x: plane.left - 2, y: plane.bottom + 2 };
+      await window.testMouse({ type: 'mouseMoved', ...end, button: 'left', buttons: 1 });
+      await wait();
+      await window.testMouse({ type: 'mouseReleased', ...end, button: 'left', clickCount: 1 });
+      same(model.fill === afterPress, false, 'dragging outside the plane keeps changing the colour');
+      same(model.fill, '#00000088', 'dragging clamps brightness and retains opacity');
+      const marker = colorPlane.firstElementChild.getBoundingClientRect();
+      same(marker.left > plane.left && marker.bottom < plane.bottom, true,
+        'selection marker remains fully inside the plane at its limits');
+    });
+  }
+
+  await check('inspector date editor commits ISO strings within bounds', async (a) => {
+    const model = { name: 'Next calibration', date: '2026-02-02', locked: '2026-12-31' };
+    const meta = { date: { date: true, minDate: '2026-01-01', maxDate: '2026-12-31' },
+      locked: { date: true, readonly: true } };
+    a.configure({ mode: 'inspector', presentation: 'pane', flatRoot: true, editable: true, model, meta });
+    const edits = [];
+    a.subscribe('valuechange', ({ detail }) => edits.push([detail.editorType, detail.newValue]));
+    const c = a.widget.controller;
+    await wait();
+    const press = async (id) => {
+      const point = inspectorEditorPoint(c, id, 'pane');
+      await window.testMouse({ type: 'mousePressed', ...point });
+      await window.testMouse({ type: 'mouseReleased', ...point });
+      return c.cellEditor.overlay;
+    };
+    let date = await press('date');
+    same(date.type, 'date', 'first press opens a native date input');
+    same(date.min, '2026-01-01', 'lower bound');
+    same(date.max, '2026-12-31', 'upper bound');
+    date.value = '2027-02-03';
+    await press('locked');
+    same(model.date, '2026-02-02', 'outside press rejects an out-of-range date');
+    same(c.cellEditor.overlay, null, 'readonly date has no editor');
+    date = await press('date');
+    date.value = '2026-11-22';
+    date.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    same(model.date, '2026-11-22', 'date stored without time or offset');
+    date = await press('date');
+    date.value = '';
+    await press('locked');
+    same(edits, [['date', '2026-11-22'], ['date', '']], 'clearing a date publishes exactly once');
   });
 
   for (const presentation of ['pane', 'table'])
@@ -607,6 +743,50 @@ export async function runViewContract(create) {
     same(c.hitTest(34, leafY).part, 'icon', 'leaf icon aligns with its branch sibling');
     same(c.hitTest(10, leafY).part, 'cell', 'leaf has no expansion target');
   });
+  for (const [mode, indentWidth] of [['tree', 11], ['inspector', 12]]) {
+    await check(`nested chevrons match the configured indentation (${mode})`, async (a) => {
+      a.configure({
+        mode,
+        nodes: [
+          { id: 'root' },
+          { id: 'group', parentId: 'root' },
+          { id: 'branch', parentId: 'group' },
+          { id: 'leaf', parentId: 'branch' }
+        ],
+        model: { root: { group: { branch: { leaf: 1 } } } },
+        presentation: 'pane',
+        flatRoot: true,
+        rowReorder: false,
+        initialExpandDepth: 2,
+        indentWidth,
+        theme: { colors: { chevron: '#ff00ff' } }
+      });
+      await wait();
+      const c = a.widget.controller;
+      const id = mode === 'tree' ? 'branch' : 'model:root.group.branch';
+      const row = c.rowModel.getRowById(id);
+      same(row.depth, 2, 'nested branch depth');
+      same(row.expanded, false, 'branch starts collapsed');
+      const { renderInsetX, renderInsetY, headerHeight, scrollX, scrollY, viewportWidth } = c.viewport;
+      const column = c.columnModel.columns.find(({ kind }) => kind === 'tree' || kind === 'inspectorPane');
+      const x = renderInsetX + column.x + row.depth * indentWidth + 10 - scrollX;
+      const y = renderInsetY + headerHeight + row.y + row.height / 2 - scrollY;
+      const canvas = c.canvas;
+      const dpr = canvas.width / viewportWidth;
+      const pixel = canvas.getContext('2d').getImageData(x * dpr, y * dpr, 1, 1);
+      same(Array.from(pixel.data), [255, 0, 255, 255], 'triangle drawn at the expansion target');
+      const rect = canvas.getBoundingClientRect();
+      const click = () => canvas.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y
+      }));
+      click();
+      same(c.rowModel.getRowById(id).expanded, true, 'click expands the branch');
+      click();
+      same(c.rowModel.getRowById(id).expanded, false, 'second click collapses the branch');
+    });
+  }
   await check('header visibility preserves its height and keeps filtering available', async (a) => {
     a.configure({
       headerHeight: 36,

@@ -1,4 +1,5 @@
 import { numericLayout } from './numeric-layout.js';
+import { colorSchemeFor, createColorEditor } from './color-editor.js';
 
 let selectMenuId = 0;
 
@@ -87,13 +88,15 @@ export class CellEditorManager {
         data.editorType,
         data.readonly,
         data.disabled,
-        ...['min', 'max', 'step', 'integer', 'options', 'unit'].map((key) => data.meta?.[key])
+        ...['min', 'max', 'step', 'integer', 'options', 'unit', 'alpha', 'minDate', 'maxDate']
+          .map((key) => data.meta?.[key])
       ]);
     if (!next || signature(previous.data) !== signature(next.data)) this.close();
   }
 
   handlePointerDown(event, hit) {
     if (!this.editable || !this.#isEditableHit(hit)) return false;
+    if (hit.part === 'arrayRemove') return false;
     const data = hit.row ? this.controller.model.nodes[hit.row.nodeIndex]?.data : null;
     if (!data || data.readonly || data.disabled) return false;
     if (data.editorType === 'range' && hit.part === 'range') {
@@ -119,9 +122,10 @@ export class CellEditorManager {
     if (!this.editable || !this.#isEditableHit(hit)) return false;
     const node = this.controller.model.nodes[hit.row.nodeIndex];
     const data = node?.data;
+    if (hit.part === 'arrayRemove')
+      return data.arrayRemovable && this.controller.removeInspectorArrayItem(node.parentId, data.arrayIndex);
     if (!data || data.disabled) return false;
     if (hit.part === 'arrayAdd') return this.controller.addInspectorArrayItem(node.id);
-    if (hit.part === 'arrayRemove') return this.controller.removeInspectorArrayItem(node.id);
     if (data.editorType === 'button') return this.controller.triggerInspectorAction(node.id);
     if (data.readonly) return false;
     if (data.editorType === 'checkbox') {
@@ -174,7 +178,7 @@ export class CellEditorManager {
     for (let i = start + direction; i >= 0 && i < rows.length; i += direction) {
       const data = this.controller.model.nodes[rows[i].nodeIndex]?.data;
       if (!data?.inspector || data.readonly || data.disabled ||
-          !['text', 'number', 'range', 'select', 'checkbox', 'color'].includes(data.editorType))
+          !['text', 'number', 'range', 'select', 'checkbox', 'color', 'date'].includes(data.editorType))
         continue;
       targetId = rows[i].nodeId;
       break;
@@ -224,6 +228,10 @@ export class CellEditorManager {
       this.#showSelectOverlay(node, rect, hostRect);
       return;
     }
+    if (data.editorType === 'color') {
+      this.#showColorOverlay(node, rect, hostRect);
+      return;
+    }
     const element = createEditorElement(data);
     element.className = `vtc-editor vtc-editor-${data.editorType}`;
     element.setAttribute(
@@ -245,29 +253,29 @@ export class CellEditorManager {
       appearance: 'none',
       borderRadius: '5px',
       font: editorFont(data),
-      padding: data.editorType === 'color' ? '0 2px' : '0 8px',
+      padding: data.editorType === 'date' ? '0 4px 0 8px' : '0 8px',
       textAlign: data.editorType === 'number' || data.editorType === 'range' ? 'right' : 'left'
     });
     applyEditorTheme(element, this.controller.themeManager.get());
+    const initialValue = element.value;
     let committed = false;
     const commit = () => {
       if (committed || this.overlay !== element) return;
       committed = true;
-      const nextValue = parseEditorValue(element, data);
-      this.controller.updateInspectorValue(node.id, nextValue, data.editorType);
+      if (element.type !== 'date' || (element.value !== initialValue && element.validity.valid)) {
+        const nextValue = parseEditorValue(element, data);
+        this.controller.updateInspectorValue(node.id, nextValue, data.editorType);
+      }
       this.#removeOverlay();
     };
     element.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') commit();
+      if (event.key === 'Enter') {
+        if (element.type !== 'date' || element.reportValidity()) commit();
+      }
       else if (event.key === 'Escape') this.#removeOverlay();
       else if (event.key === 'Tab' && this.#moveByTab(node.id, event.shiftKey ? -1 : 1))
         event.preventDefault();
     });
-    if (data.editorType === 'color') {
-      element.addEventListener('input', () => {
-        this.controller.updateInspectorValue(node.id, element.value, data.editorType);
-      });
-    }
     element.addEventListener('blur', commit);
     ensureOverlayHost(this.host);
     this.host.append(element);
@@ -275,12 +283,67 @@ export class CellEditorManager {
     this.overlayKind = 'value';
     this.overlayNode = node;
     this.#commitOverlay = commit;
-    if (data.editorType !== 'color')
-      this.canvas.ownerDocument.addEventListener('pointerdown', this.onOutsidePointerDown, true);
+    this.canvas.ownerDocument.addEventListener('pointerdown', this.onOutsidePointerDown, true);
     element.focus({
       preventScroll: true
     });
-    element.select?.();
+    if (element.type === 'text') element.select();
+  }
+
+  #showColorOverlay(node, rect, hostRect) {
+    const document = this.canvas.ownerDocument;
+    const { panel, hex, commit } = createColorEditor({
+      document,
+      label: node.label,
+      value: node.data.value,
+      alpha: node.data.meta.alpha !== false,
+      onInput: (value) => {
+        if (this.overlay === panel) this.controller.updateInspectorValue(node.id, value, 'color');
+      }
+    });
+    const width = Math.min(240, hostRect.width - 8);
+    const left = Math.min(rect.x - hostRect.left, hostRect.width - width - 4);
+    Object.assign(panel.style, {
+      position: 'absolute', left: left + 'px', width: width + 'px',
+      maxHeight: Math.max(0, hostRect.height - 8) + 'px', zIndex: 21
+    });
+    applyEditorTheme(panel, this.controller.themeManager.get());
+    ensureOverlayHost(this.host);
+    this.host.append(panel);
+    const height = panel.getBoundingClientRect().height;
+    const below = rect.y - hostRect.top + rect.height + 4;
+    const above = rect.y - hostRect.top - height - 4;
+    const limit = hostRect.height - height - 4;
+    panel.style.top = Math.max(4, below <= limit ? below : above >= 4 ? above : limit) + 'px';
+    this.overlay = panel;
+    this.overlayKind = 'value';
+    this.overlayNode = node;
+    this.#commitOverlay = () => {
+      if (this.overlay !== panel) return;
+      commit();
+      this.#removeOverlay();
+    };
+    document.addEventListener('pointerdown', this.onOutsidePointerDown, true);
+    panel.addEventListener('focusout', (event) => {
+      if (this.overlay === panel && !panel.contains(event.relatedTarget)) this.#commitOverlay();
+    });
+    const controls = panel.querySelectorAll('[tabindex], input');
+    panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' || event.key === 'Enter') {
+        event.preventDefault();
+        if (event.key === 'Enter' && !commit()) {
+          hex.reportValidity();
+          return;
+        }
+        this.#removeOverlay();
+        this.canvas.focus({ preventScroll: true });
+      } else if (event.key === 'Tab') {
+        const edge = event.shiftKey ? controls[0] : controls[controls.length - 1];
+        if (event.target === edge && this.#moveByTab(node.id, event.shiftKey ? -1 : 1))
+          event.preventDefault();
+      }
+    });
+    controls[0].focus({ preventScroll: true });
   }
 
   #showSelectOverlay(node, rect, hostRect) {
@@ -614,7 +677,7 @@ export class CellEditorManager {
     const data = this.controller.model.nodes[hit.row.nodeIndex]?.data ?? {};
     const rect = this.#editorContentRect(hit);
     const layout = numericLayout(rect.width, data);
-    if (data.editorType === 'select') {
+    if (data.editorType === 'select' || data.editorType === 'date') {
       return { ...rect, width: Math.min(layout.contentWidth, 180) };
     }
     if (hit.part === 'number' && data.editorType === 'range') {
@@ -716,6 +779,12 @@ function applyEditorTheme(element, theme) {
     boxShadow: isSelect ? 'none'
       : `0 0 0 1px ${colors.borderStrong ?? colors.border}, 0 8px 20px ${colors.shadow ?? 'transparent'}`
   });
+  if (element.classList.contains('vtc-editor-color')) {
+    element.style.setProperty('--vtc-color-accent', colors.focus);
+    element.style.setProperty('--vtc-color-border', colors.borderStrong ?? colors.border);
+  }
+  if (element.classList.contains('vtc-editor-date'))
+    element.style.colorScheme = colorSchemeFor(element.ownerDocument, colors.control ?? colors.background);
   if (isSelect) {
     const chevron = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5"><path d="M0 0h8L4 5z" fill="${colors.chevron}"/></svg>`;
     Object.assign(element.style, {
@@ -756,7 +825,13 @@ function applySelectMenuTheme(control, theme) {
 
 function createEditorElement(data) {
   const input = document.createElement('input');
-  input.type = data.editorType === 'color' ? 'color' : 'text';
+  input.type = data.editorType === 'date' ? 'date' : 'text';
+  if (input.type === 'date') {
+    if (data.meta.minDate !== undefined) input.min = data.meta.minDate;
+    if (data.meta.maxDate !== undefined) input.max = data.meta.maxDate;
+    input.value = data.value ?? '';
+    return input;
+  }
   if (data.editorType === 'number' || data.editorType === 'range') {
     input.inputMode = data.meta.integer ? 'numeric' : 'decimal';
   }
@@ -774,7 +849,8 @@ function shouldOpenOverlayOnPointerDown(data, hit) {
     data.editorType === 'text' ||
     data.editorType === 'number' ||
     data.editorType === 'select' ||
-    data.editorType === 'color'
+    data.editorType === 'color' ||
+    data.editorType === 'date'
   );
 }
 

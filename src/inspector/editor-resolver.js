@@ -9,6 +9,7 @@ export function resolveEditorType(value, meta = {}) {
   if (meta.button) return 'button';
   if (meta.options) return 'select';
   if (meta.color) return 'color';
+  if (meta.date) return 'date';
   if (valueType === 'boolean') return 'checkbox';
   if (valueType === 'number' && (meta.min !== undefined || meta.max !== undefined)) return 'range';
   if (valueType === 'number') return 'number';
@@ -25,7 +26,7 @@ export function formatInspectorValue(value, meta = {}) {
     const match = Object.entries(meta.options).find(([, optionValue]) => optionValue === value);
     if (match) return match[0];
   }
-  if (value === null) return 'null';
+  if (value === null) return meta.date ? '' : 'null';
   if (value === undefined) return 'undefined';
   if (typeof value === 'object') return Array.isArray(value) ? `Array(${value.length})` : 'Object';
   if (typeof value === 'number') {

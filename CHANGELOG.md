@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.4 — 2026-11-22
+
+### Added
+
+- Add 28 built-in SVG icons for layouts, widgets, components, monitors and graphical resources, including `group-exit`.
+- Add a date editor with optional bounds. It stores a `YYYY-MM-DD` string.
+
+### Changed
+
+- Inspector colours open a themed picker on the first press, with live hue, saturation, brightness and opacity. Opaque colours keep the six-digit HEX format.
+- Inspector arrays have an add button on the array row and a remove button on each editable item.
+
 ## 0.8.3 — 2026-11-02
 
 ### Added

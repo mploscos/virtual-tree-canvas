@@ -1,3 +1,4 @@
+import { inspectorPaneLayout } from './inspector/pane-layout.js';
 import { RowActions } from './input/row-actions.js';
 import { RowReorderInput } from './input/row-reorder-input.js';
 import { TreeTooltip } from './input/tree-tooltip.js';
@@ -193,7 +194,12 @@ export declare class TreeViewController {
     setInspectorValue(path: any, value: any, options?: {}): boolean;
     triggerInspectorAction(nodeId: any): boolean;
     addInspectorArrayItem(nodeId: any): boolean;
-    removeInspectorArrayItem(nodeId: any): boolean;
+    /**
+     * Remove an item from an inspector array. Omit the index to remove the last item.
+     * @param {string} nodeId Array node ID.
+     * @param {number} [index]
+     */
+    removeInspectorArrayItem(nodeId: string, index?: number): boolean;
     /** @param {string | URL} [workerUrl] */
     enableWorkers(workerUrl?: string | URL): Promise<this>;
     disableWorkers(): void;
@@ -397,10 +403,8 @@ export declare class TreeViewController {
         x: number;
         y: any;
     } | null;
-    getInspectorPaneLayout(width: any, row?: null, editorType?: string): {
-        editorLeft: number;
-        editorWidth: number;
-    };
+    /** @returns {ReturnType<typeof inspectorPaneLayout>} */
+    getInspectorPaneLayout(width: any, row?: null, editorType?: string): ReturnType<typeof inspectorPaneLayout>;
     getCellClientRect(hit: any): {
         x: number;
         y: number;
